@@ -15,3 +15,9 @@ add_executable(TESTS run_tests.cpp)
 add_executable(SnapshotTester snapshot_tester.cpp)
 
 add_executable(test_iso_assignment tests/test_iso_assignment.cpp)
+
+add_executable(PaToH PaToH.cpp)
+target_link_libraries(PaToH ${CMAKE_SOURCE_DIR}/extern/libpatoh.a)
+
+add_executable(RecursiveBisection RecursiveBisection.cpp)
+target_link_libraries(RecursiveBisection ${CMAKE_SOURCE_DIR}/extern/libpatoh.a)
