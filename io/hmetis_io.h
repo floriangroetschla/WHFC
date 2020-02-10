@@ -4,6 +4,8 @@
 #include "../datastructure/flow_hypergraph.h"
 #include "../datastructure/flow_hypergraph_builder.h"
 
+#include "../recursive_bisection/hypergraph.h"
+
 namespace whfc {
 	class HMetisIO {
 	private:
@@ -39,6 +41,54 @@ namespace whfc {
 				}
 			}
 			return std::make_tuple(numNodes, numHEs, hg_type);
+		}
+		
+		static whfc_rb::CSRHypergraph readCSRHypergraph(const std::string& filename) {
+			std::ifstream f(filename);
+			if (!f)
+				throw std::runtime_error("File: " + filename + " not found.");
+			auto [numNodes, numHEs, hg_type] = readHeader(f);
+			std::string line;
+			bool hasHyperedgeWeights = hg_type == HGType::EdgeAndNodeWeights || hg_type == HGType ::EdgeWeights;
+			bool hasNodeWeights = hg_type == HGType::EdgeAndNodeWeights || hg_type == HGType::NodeWeights;
+			
+			whfc_rb::CSRHypergraph hg(numNodes, numHEs);
+			for (whfc_rb::CSRHypergraph::HyperedgeID e = 0; e < numHEs; ++e) {
+				mgetline(f, line);
+				std::istringstream iss(line);
+				uint32_t pin;
+				uint32_t he_weight = 1;
+				if (hasHyperedgeWeights)
+					iss >> he_weight;
+				
+				hg.hyperedgeWeight(e) = he_weight;
+				size_t he_size = 0;
+				while (iss >> pin) {
+					if (pin < 1)
+						throw std::runtime_error("File: " + filename + " has pin id < 1 (in one-based ids).");
+					if (pin > numNodes)
+						throw std::runtime_error("File: " + filename + " has pin id > number of nodes.");
+					
+					hg.pins().push_back(pin - 1);
+					he_size++;
+				}
+				if (he_size <= 1)
+					throw std::runtime_error("File: " + filename + " has hyperedge with zero or one pins.");
+				hg.finishHyperedge(e);
+			}
+			
+			for (Node u(0); u < numNodes; ++u) {
+				whfc_rb::CSRHypergraph::NodeWeight nw = 1;
+				if (hasNodeWeights) {
+					mgetline(f, line);
+					std::istringstream iss(line);
+					iss >> nw;
+				}
+				hg.nodeWeight(u) = nw;
+			}
+			
+			hg.computeXPins();
+			return hg;
 		}
 		
 		static FlowHypergraphBuilder readFlowHypergraphWithBuilder(const std::string& filename) {
@@ -80,7 +130,7 @@ namespace whfc {
 					he_size++;
 				}
 				if (he_size <= 1)
-					throw std::runtime_error("File: " + filename + " has pin with zero or one pins.");
+					throw std::runtime_error("File: " + filename + " has hyperedge with zero or one pins.");
 			}
 			
 			for (Node u(0); u < numNodes; ++u) {
