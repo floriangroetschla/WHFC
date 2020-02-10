@@ -3,6 +3,8 @@
 #include "../datastructure/flow_hypergraph.h"
 #include "patoh.h"
 
+
+// Note(Lars): this introduces whfc::FlowHypergraph into the global namespace --> bad
 using whfc::FlowHypergraph;
 
 class PaToHInterface {
@@ -25,7 +27,7 @@ public:
         p.use_target_weights = true;
         p.k = 2;
         p.epsilon = epsilon;
-        p.target_weights = { float(1), float(imbalanceFactor) };
+        p.target_weights = { float(1), float(imbalanceFactor) };	// Note(Lars): I think these might be just upper bounds on the part weights.
         return runPatoh(hg, seed, p, preset);
     }
 
@@ -57,11 +59,20 @@ public:
 		std::vector<int> vec_pins(hg.numPins());
 		std::vector<int> vec_xpins(hg.numHyperedges() + 1);
 
+		/*
+		 * Note(Lars): I think it makes sense to write your own hypergraph datastructure and hmetis file reader. Or I'll do it for you, really quick.
+		 * Then we can use fun new C++20 features such as std::span.
+		 * And we can expose the internals directly to PaToH, without the need to copy things.
+		 * Even if PaToH reorders some of the datastructures, they should still represent the original hypergraph, I hope.
+		 *
+		 * The FlowHypergraph datastructure was written explicitly for directly providing all data a flow algorithm might need.
+		 */
+		
         {
             for (whfc::Hyperedge e : hg.hyperedgeIDs()) {
                 vec_xpins[e.value()] = hg.beginIndexPins(e).value();
-                for (auto pin : hg.pinIndices(e)) {
-                    vec_pins[pin.value()] = hg.getPin(pin).pin.value();
+                for (auto pin : hg.pinIndices(e)) {	// Note(Lars): The interface also provides hg.pinsOf(e)
+                    vec_pins[pin.value()] = hg.getPin(pin).pin.value();	// Note(Lars): no need to call .value() I think. The cast should be automatic
                 }
                 vec_nwghts[e.value()] = hg.capacity(e);
             }
@@ -80,6 +91,10 @@ public:
 		else if (str_preset == "S") { preset = PATOH_SUGPARAM_SPEED; }
 		else { throw std::runtime_error("Unknown PaToH preset" + str_preset); }
 
+		/*
+		 * Note(Lars): I think we want to focus on PATOH_CONPART. For bisections it makes no difference in theory.
+		 * Just make sure to remember if we ever use PaToH for k > 2 -way initial partitioning.
+		 */
 		PaToH_Initialize_Parameters(&args, PATOH_CUTPART, preset);
 
 		args._k = params.k;
@@ -94,7 +109,7 @@ public:
 
 		int c, n, nconst, *cwghts, *nwghts, *xpins, *pins, *partvec, cut, *partweights;
 		float* targetweights;
-		n = hg.numHyperedges();
+		n = hg.numHyperedges();		// Note(Lars): Use static_cast<desired_type>( value )
 		c = hg.numNodes();
 		nconst = 1;
 		partvec = vec_partition.data();
@@ -107,10 +122,10 @@ public:
 			targetweights = params.target_weights.data();
 		}
 		else {
-			targetweights = NULL;
+			targetweights = NULL;	// Note(Lars): use nullptr
 		}
 
-		PaToH_Alloc(&args, c, n, nconst, cwghts, nwghts, xpins, pins);
+		PaToH_Alloc(&args, c, n, nconst, cwghts, nwghts, xpins, pins);	// Note(Lars): Test if we can get away with allocating once for all bisections (with the largest hypergraph)
 		args.seed = seed;
 		PaToH_Part(&args, c, n, nconst, 0, cwghts, nwghts, xpins, pins, targetweights, partvec, partweights, &cut);
 

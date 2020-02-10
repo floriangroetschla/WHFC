@@ -1,7 +1,10 @@
 #include <stdexcept>
-#include <math.h>
+#include <math.h>       // Note(Lars): I think this guy is outdated
 #include "extern/patoh_interface.h"
 #include "io/hmetis_io.h"
+
+// Note(Lars): Consider putting this into its own namespace / class so that it's easier to use from different binaries
+
 
 std::vector<int> partition_recursively(const whfc::FlowHypergraph& hg, int seed, double epsilon, std::string preset, uint n_partitions) {
     struct FlowHypergraphDescription {
@@ -11,11 +14,12 @@ std::vector<int> partition_recursively(const whfc::FlowHypergraph& hg, int seed,
         std::vector<whfc::PinIndex> hyperedgeSizes;
     };
 
+        // rename to n_parts. typically we just say k.
     if (n_partitions == 1) {
         return std::vector<int>(hg.numNodes(), 0);
     }
 
-    std::vector<int> numParts(2);
+    std::vector<int> numParts(2);   // Note(Lars): std::array<int, 2> will do the trick
     std::vector<int> partition;
 
     if (n_partitions % 2 == 0) {
@@ -28,6 +32,8 @@ std::vector<int> partition_recursively(const whfc::FlowHypergraph& hg, int seed,
         partition = PaToHInterface::bisectImbalancedWithPatoh(hg, seed, float(numParts[1]) / float(numParts[0]), epsilon, preset);
     }
 
+    // call WHFC here to improve the bisection
+    
     if (n_partitions == 2) {
         return partition;
     } else {
@@ -37,7 +43,7 @@ std::vector<int> partition_recursively(const whfc::FlowHypergraph& hg, int seed,
         int carry0 = 0, carry1 = 0;
         for (uint i = 0; i < partition.size(); ++i) {
             if (partition[i] == 0) {
-                new_ids[i] = carry0;
+                new_ids[i] = carry0;	// Note(Lars): can be one-liner
                 carry0++;
             } else {
                 new_ids[i] = carry1;
@@ -47,13 +53,16 @@ std::vector<int> partition_recursively(const whfc::FlowHypergraph& hg, int seed,
 
         for (whfc::Hyperedge e : hg.hyperedgeIDs()) {
             std::vector<whfc::Node> pins;
-            int partitionID = partition[hg.getPin(hg.beginIndexPins(e)).pin.value()];
+            int partitionID = partition[hg.getPin(hg.beginIndexPins(e)).pin.value()];	// Note(Lars): dangerous. the hyperedge may have zero pins
             for (auto pin : hg.pinIndices(e)) {
                 pins.push_back(hg.getPin(pin).pin);
                 if (partitionID != partition[hg.getPin(pin).pin.value()]) {
                     partitionID = -1;
+                    // Note(Lars): you could break here
                 }
             }
+            
+            // Note(Lars): We're going for the connectivity objective (not cut) --> throwing away split hyperedges is not okay.
             if (partitionID != -1) {
                 hgds[partitionID].hyperedgeSizes.push_back(hg.pinCount(e));
                 hgds[partitionID].hyperedgeWeights.push_back(whfc::HyperedgeWeight(hg.capacity(e)));
@@ -67,13 +76,14 @@ std::vector<int> partition_recursively(const whfc::FlowHypergraph& hg, int seed,
             hgds[partition[node.value()]].nodeWeights.push_back(hg.nodeWeight(node));
         }
 
-        std::vector<std::vector<int>> sub_partitions(2);
+        std::vector<std::vector<int>> sub_partitions(2);        // std::array< std::vector<int>, 2 > will do the trick as well, but put the member variables of the inner vector on the stack
         for (uint i = 0; i < 2; ++i) {
             whfc::FlowHypergraph flowHG = whfc::FlowHypergraph(hgds[i].nodeWeights, hgds[i].hyperedgeWeights, hgds[i].hyperedgeSizes, hgds[i].pins);
+            // Note(Lars): can't we relax the epsilon at each step?
             sub_partitions[i] = partition_recursively(flowHG, seed, epsilon, preset, numParts[i]);
         }
 
-        std::vector<int> result(hg.numNodes());
+        std::vector<int> result(hg.numNodes()); // Note(Lars): could reuse the partition vector used for PaToH
         for (uint i = 0; i < partition.size(); ++i) {
             result[i] = sub_partitions[partition[i]][new_ids[i]] + partition[i] * numParts[0];
         }
