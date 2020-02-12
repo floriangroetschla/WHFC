@@ -23,3 +23,4 @@ add_executable(RecursiveBisection RecursiveBisection.cpp)
 target_link_libraries(RecursiveBisection ${CMAKE_SOURCE_DIR}/extern/libpatoh.a)
 
 add_executable(TestCSR test_csr.cpp)
+target_link_libraries(TestCSR ${CMAKE_SOURCE_DIR}/extern/libpatoh.a)

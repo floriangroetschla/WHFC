@@ -9,7 +9,7 @@
 
 namespace whfc_rb {
 
-using Index = uint32_t;
+using Index = uint32_t ;
 
 template<typename RowID, typename ColumnID>
 class CSR {
@@ -57,6 +57,10 @@ public:
 	{
 		// this constructor only prepares the CSRHypergraph object for reading from a hMetis file
 	}
+
+	void initNodes(NodeID numNodes) {
+			    Vertices = CSR<NodeID, HyperedgeID>(numNodes + 1);
+			}
 	
 	const_range< std::vector<HyperedgeID> > hyperedgesOf(const NodeID u) const {
 		return Vertices.incidentElementsOf(u);
@@ -101,6 +105,10 @@ public:
 	std::vector<HyperedgeID>& xpins() {
 		return Vertices.incidence;
 	}
+
+	std::vector<Index>& indexPins() {
+			    return E.first_out;
+			}
 	
 	NodeWeight& nodeWeight(const NodeID u) {
 		return node_weights[u];
@@ -109,6 +117,14 @@ public:
 	HyperedgeWeight& hyperedgeWeight(const HyperedgeID u) {
 		return hyperedge_weights[u];
 	}
+
+	std::vector<NodeWeight>& nodeWeights() {
+			    return node_weights;
+			}
+
+			std::vector<HyperedgeWeight>& hyperedgeWeights() {
+			    return hyperedge_weights;
+			}
 	
 	void finishHyperedge(const HyperedgeID e) {
 		E.finishRow(e);
