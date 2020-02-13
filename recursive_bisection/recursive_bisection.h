@@ -32,6 +32,8 @@ namespace whfc_rb {
                 partition = PaToHInterface::bisectImbalancedWithPatoh(hg, seed, float(numParts[1]) / float(numParts[0]), epsilon, preset, alloc, false);
             }
 
+            // TODO: extract cut hyperedges to feed the FlowHyperGraphExtractor
+
             // call WHFC here to improve the bisection
 
             if (k == 2) {
