@@ -113,6 +113,7 @@ public:
 	NodeWeight& nodeWeight(const NodeID u) {
 		return node_weights[u];
 	}
+
 	
 	HyperedgeWeight& hyperedgeWeight(const HyperedgeID u) {
 		return hyperedge_weights[u];

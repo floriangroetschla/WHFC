@@ -1,3 +1,5 @@
+#pragma once
+
 #include "../datastructure/flow_hypergraph_builder.h"
 #include "hypergraph.h"
 #include <queue>
@@ -9,9 +11,14 @@ namespace whfc_rb {
         whfc::FlowHypergraphBuilder fhgb;
 
         FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins) :
-        fhgb(maxNumNodes, maxNumEdges, maxNumPins), globalToLocalID(maxNumNodes) { }
+            fhgb(maxNumNodes, maxNumEdges, maxNumPins), globalToLocalID(maxNumNodes) { }
 
-        void run(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const std::vector<int>& partition, uint distanceFromCut) {
+        struct ExtractorInfo {
+            whfc::Node source;
+            whfc::Node target;
+        };
+
+        ExtractorInfo run(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const std::vector<int>& partition, uint distanceFromCut) {
             initialize(hg.numNodes(), hg.numHyperedges());
 
             // shuffle cut edges?
@@ -63,6 +70,8 @@ namespace whfc_rb {
             fhgb.nodeWeight(targetNode) = totalWeights.second - w1;
 
             fhgb.finalize();
+
+            return {sourceNode, targetNode};
         }
 
 
@@ -138,7 +147,9 @@ namespace whfc_rb {
         void initialize(uint numNodes, uint numHyperedges) {
             fhgb.clear();
             queue.empty();
+            visitedNode.clear();
             visitedNode.resize(numNodes, false);
+            visitedHyperedge.clear();
             visitedHyperedge.resize(numHyperedges, false);
         }
 

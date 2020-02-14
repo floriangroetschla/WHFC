@@ -1,20 +1,33 @@
 #include <stdexcept>
-#include <cmath>       // Note(Lars): I think this guy is outdated
+#include <cmath>
 #include "../extern/patoh_wrapper.h"
 #include "../io/hmetis_io.h"
 #include "hypergraph.h"
+#include "fhgb_extraction.h"
+#include "../algorithm/hyperflowcutter.h"
+#include "../algorithm/dinic.h"
 
 
 namespace whfc_rb {
     class RecursiveBisector {
     public:
-        static std::vector<int> run(CSRHypergraph& hg, int seed, double epsilon, std::string preset, uint k) {
+        RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins) :
+            extractor(maxNumNodes, maxNumEdges, maxNumPins),
+            hfc(extractor.fhgb, 42) {
+
+        }
+
+        std::vector<int> run(CSRHypergraph& hg, int seed, double epsilon, std::string preset, uint k) {
             epsilon = std::pow(1.0 + epsilon, 1.0 / std::log2(k)) - 1.0;
 
             return partition_recursively(hg, seed, epsilon, preset, k, true);
         }
+
     private:
-        static std::vector<int> partition_recursively(CSRHypergraph& hg, int seed, double epsilon, std::string preset, uint k, bool alloc) {
+        FlowHypergraphBuilderExtractor extractor;
+        whfc::HyperFlowCutter<whfc::Dinic> hfc;
+
+        std::vector<int> partition_recursively(CSRHypergraph& hg, int seed, double epsilon, std::string preset, uint k, bool alloc) {
             if (k == 1) {
                 return std::vector<int>(hg.numNodes(), 0);
             }
@@ -32,9 +45,27 @@ namespace whfc_rb {
                 partition = PaToHInterface::bisectImbalancedWithPatoh(hg, seed, float(numParts[1]) / float(numParts[0]), epsilon, preset, alloc, false);
             }
 
-            // TODO: extract cut hyperedges to feed the FlowHyperGraphExtractor
+            // extract cut hyperedges to feed the FlowHyperGraphExtractor
+            std::vector<CSRHypergraph::HyperedgeID> cut_hes;
+            for (auto e : hg.hyperedges()) {
+                uint partitionID = partition[hg.pinsOf(e).begin()[0]];
+                for (auto v : hg.pinsOf(e)) {
+                    if (partitionID != partition[v]) {
+                        partitionID = -1;
+                    }
+                }
+                if (partitionID == -1) {
+                    cut_hes.push_back(e);
+                }
+            }
 
-            // call WHFC here to improve the bisection
+            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(hg, cut_hes, partition, 100);
+            extractor.fhgb.printHypergraph(std::cout);
+
+            // call WHFC to improve the bisection
+            if (!alloc) hfc.reset();
+            bool result = hfc.runUntilBalancedOrFlowBoundExceeded(extractor_info.source, extractor_info.target);
+            std::cout << "WHFC successful: " << result << std::endl;
 
             if (k == 2) {
                 if (alloc) {
