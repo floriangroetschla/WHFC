@@ -20,9 +20,7 @@ namespace whfc {
 		}
 		
 		//use to get rid of any allocations
-		FlowHypergraphBuilder(size_t maxNumNodes, size_t maxNumHyperedges, size_t maxNumPins) :
-				Base(maxNumNodes, maxNumHyperedges, maxNumPins)
-		{
+		FlowHypergraphBuilder(size_t maxNumNodes, size_t maxNumHyperedges, size_t maxNumPins) : Base(maxNumNodes, maxNumHyperedges, maxNumPins) {
 			//don't do clean-up here yet, so that we can use the numbers for allocating the remaining datastructures
 		}
 		
@@ -54,7 +52,6 @@ namespace whfc {
 		void addNode(const NodeWeight w) {
 			nodes.back().weight = w;
 			nodes.push_back({InHeIndex(0), NodeWeight(0)});
-			//return Node::fromOtherValueType(numNodes() - 1);
 		}
 		
 		void startHyperedge(const Flow capacity) {
@@ -65,7 +62,7 @@ namespace whfc {
 		}
 		
 		void addPin(const Node u) {
-			Assert(u < numNodes());
+			assert(u < numNodes());
 			pins.push_back({u, InHeIndex::Invalid()});
 			nodes[u+1].first_out++;
 		}
@@ -99,7 +96,7 @@ namespace whfc {
 				}
 			}
 			
-			for (NodeIndex u(numNodes()-1); u > 0; u--)
+			for (Node u(numNodes()-1); u > 0; u--)
 				nodes[u].first_out = nodes[u-1].first_out;	//reset temporarily destroyed first_out
 			nodes[0].first_out = InHeIndex(0);
 			

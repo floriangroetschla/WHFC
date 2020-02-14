@@ -84,7 +84,7 @@ namespace whfc {
 		
 		void growReachable(CutterState<Type>& cs) {
 			bool found_target = buildLayeredNetwork(cs, false);
-			Assert(!found_target); unused(found_target);
+			assert(!found_target); unused(found_target);
 			resetSourcePiercingNodeDistances(cs);
 		}
 		
@@ -105,7 +105,7 @@ namespace whfc {
 			
 			for (auto& sp : cs.sourcePiercingNodes) {
 				n.setPiercingNodeDistance(sp.node, false);
-				Assert(n.isSourceReachable(sp.node));
+				assert(n.isSourceReachable(sp.node));
 				queue.push(sp.node);
 				current_hyperedge[sp.node] = hg.beginIndexHyperedges(sp.node);
 			}
@@ -123,25 +123,25 @@ namespace whfc {
 							
 							if (scanAllPins) {
 								h.reachAllPins(e);
-								Assert(n.distance[u] + 1 == h.outDistance[e]);
+								assert(n.distance[u] + 1 == h.outDistance[e]);
 								current_pin[e] = hg.pinsNotSendingFlowIndices(e).begin();
 							}
 							
 							const bool scanFlowSending = !h.areFlowSendingPinsSourceReachable__unsafe__(e);
 							if (scanFlowSending) {
 								h.reachFlowSendingPins(e);
-								Assert(n.distance[u] + 1 == h.inDistance[e]);
+								assert(n.distance[u] + 1 == h.inDistance[e]);
 								current_flow_sending_pin[e] = hg.pinsSendingFlowIndices(e).begin();
 							}
 							
 							auto visit = [&](const Pin& pv) {
 								const Node v = pv.pin;
-								AssertMsg(augment_flow || !n.isTargetReachable(v), "Not augmenting flow but target side is reachable.");
-								Assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);	//checking distance, since the source piercing node is no longer a source at the moment
+								assert(augment_flow || !n.isTargetReachable(v));
+								assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);	//checking distance, since the source piercing node is no longer a source at the moment
 								found_target |= n.isTarget(v);
 								if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)) {
 									n.reach(v);
-									Assert(n.distance[u] + 1 == n.distance[v]);
+									assert(n.distance[u] + 1 == n.distance[v]);
 									queue.push(v);
 									current_hyperedge[v] = hg.beginIndexHyperedges(v);
 								}
@@ -174,7 +174,7 @@ namespace whfc {
 			Flow f = 0;
 			
 			for (auto& sp : cs.sourcePiercingNodes) {
-				Assert(stack.empty());
+				assert(stack.empty());
 				stack.push({ sp.node, InHeIndex::Invalid() });
 				
 				while (!stack.empty()) {
@@ -182,14 +182,14 @@ namespace whfc {
 					Node v = invalidNode;
 					InHeIndex inc_v_it = InHeIndex::Invalid();
 					DistanceT req_dist = n.distance[u] + 1;
-					Assert(!n.isDistanceStale(u));
-					Assert(stack.size() + n.sourceBaseDistance() == req_dist);
+					assert(!n.isDistanceStale(u));
+					assert(stack.size() + n.sourceBaseDistance() == req_dist);
 					InHeIndex& he_it = current_hyperedge[u];
 					for ( ; he_it < hg.endIndexHyperedges(u); he_it++) {
 						InHe& inc_u = hg.getInHe(he_it);
 						const Hyperedge e = inc_u.e;
 						const Flow residual = hg.residualCapacity(e) + hg.absoluteFlowReceived(inc_u);
-						Assert((residual > 0) == (!hg.isSaturated(e) || hg.absoluteFlowReceived(inc_u) > 0));
+						assert((residual > 0) == (!hg.isSaturated(e) || hg.absoluteFlowReceived(inc_u) > 0));
 						const bool scanAll = req_dist == h.outDistance[e] && residual > 0;
 						const bool scanFlowSending = req_dist == h.inDistance[e];
 						
@@ -220,7 +220,7 @@ namespace whfc {
 					}
 					
 					if (v == invalidNode) {
-						Assert(current_hyperedge[u] == hg.endIndexHyperedges(u));
+						assert(current_hyperedge[u] == hg.endIndexHyperedges(u));
 						stack.pop();
 						// Note: the iteration of u's predecessor on the stack still points to u. setting the distance to unreachable prevents the search from pushing u again.
 						// It is fine to destroy the reachability datastructures, since we know that this function increases the flow.
@@ -236,7 +236,7 @@ namespace whfc {
 					
 				}
 			}
-			Assert(f > 0);
+			assert(f > 0);
 			return f;
 		}
 		
@@ -255,7 +255,7 @@ namespace whfc {
 				}
 				inc_v_it = t.parent_he_it;
 			}
-			AssertMsg(bottleneckCapacity > 0, "Bottleneck capacity not positive");
+			assert(bottleneckCapacity > 0);
 			inc_v_it = inc_target_it;
 			for (int64_t stack_pointer = stack.size() - 1; stack_pointer >= 0; --stack_pointer) {
 				const StackFrame& t = stack.at(stack_pointer);
@@ -307,6 +307,7 @@ namespace whfc {
 		}
 		
 		void reset() {
+			// TODO maybe don't reset to full capacity after piercing. maybe something less
 			scaling.initialize(hg.maxHyperedgeCapacity);
 		}
 		
@@ -332,25 +333,32 @@ namespace whfc {
 		
 		Flow growFlowOrSourceReachable(CutterState<Type>& cs) {
 			Flow f = 0;
+			
 			while (scaling.use()) {
-				if (buildLayeredNetwork<true>(cs))
+				if (buildLayeredNetwork<true>(cs)) {
 					f += augmentFlowInLayeredNetwork(cs);
-				else
+					break;
+				}
+				else {
 					scaling.reduceCapacity();
+				}
 			}
+			
 			if (f == 0) {
 				if (buildLayeredNetwork<true>(cs))
 					f += augmentFlowInLayeredNetwork(cs);
 				else
 					scaling.reset();
 			}
+			
 			resetSourcePiercingNodeDistances(cs);
 			return f;
 		}
 		
 		Flow recycleDatastructuresFromGrowReachablePhase(CutterState<Type> &cs) {
-			if (!cs.augmentingPathAvailableFromPiercing || std::none_of(cs.sourcePiercingNodes.begin(), cs.sourcePiercingNodes.end(),
-																		[](const auto& sp) { return sp.isReachableFromOppositeSide; })) {
+			if (!cs.augmentingPathAvailableFromPiercing
+				|| std::none_of(cs.sourcePiercingNodes.begin(), cs.sourcePiercingNodes.end(),
+								[](const auto& sp) { return sp.isReachableFromOppositeSide; })) {
 				return 0;
 			}
 			cs.flipViewDirection();
@@ -367,7 +375,7 @@ namespace whfc {
 			scaling.disable();
 			bool found_target = buildLayeredNetwork<false>(cs);
 			scaling.enable();
-			Assert(!found_target); unused(found_target);
+			assert(!found_target); unused(found_target);
 			resetSourcePiercingNodeDistances(cs);
 		}
 	
@@ -389,7 +397,7 @@ namespace whfc {
 			
 			for (auto& sp : cs.sourcePiercingNodes) {
 				n.setPiercingNodeDistance(sp.node, false);
-				Assert(n.isSourceReachable(sp.node));
+				assert(n.isSourceReachable(sp.node));
 				queue.push(sp.node);
 				current_hyperedge[sp.node] = hg.beginIndexHyperedges(sp.node);
 			}
@@ -401,18 +409,17 @@ namespace whfc {
 					for (InHe& inc_u : hg.hyperedgesOf(u)) {
 						const Hyperedge e = inc_u.e;
 						if (hg.capacity(e) >= scaling_capacity && !h.areAllPinsSourceReachable__unsafe__(e)) {
-							auto visit = [&](const Pin& pv, Flow resCap) {
-								if (resCap >= scaling_capacity) {
-									const Node v = pv.pin;
-									AssertMsg(augment_flow || !n.isTargetReachable(v), "Not augmenting flow but target side is reachable.");
-									Assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);    //checking distance, since the source piercing node is no longer a source at the moment
-									found_target |= n.isTarget(v);
-									if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)) {
-										n.reach(v);
-										Assert(n.distance[u] + 1 == n.distance[v]);
-										queue.push(v);
-										current_hyperedge[v] = hg.beginIndexHyperedges(v);
-									}
+							
+							auto visit = [&](const Pin& pv) {
+								const Node v = pv.pin;
+								assert(augment_flow || !n.isTargetReachable(v));
+								assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);    //checking distance, since the source piercing node is no longer a source at the moment
+								found_target |= n.isTarget(v);
+								if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)) {
+									n.reach(v);
+									assert(n.distance[u] + 1 == n.distance[v]);
+									queue.push(v);
+									current_hyperedge[v] = hg.beginIndexHyperedges(v);
 								}
 							};
 							
@@ -420,18 +427,23 @@ namespace whfc {
 							
 							if (!h.areFlowSendingPinsSourceReachable__unsafe__(e)) { /* scan flow sending pins */
 								h.reachFlowSendingPins(e);
-								Assert(n.distance[u] + 1 == h.inDistance[e]);
+								assert(n.distance[u] + 1 == h.inDistance[e]);
 								current_flow_sending_pin[e] = hg.pinsSendingFlowIndices(e).begin();
-								for (const Pin& pv : hg.pinsSendingFlowInto(e))
-									visit(pv, residual + hg.absoluteFlowSent(pv));
+								for (const Pin& pv : hg.pinsSendingFlowInto(e)) {
+									const Flow residual_at_v = residual + hg.absoluteFlowSent(pv);
+									if (residual_at_v >= scaling_capacity) {
+										visit(pv);
+									}
+								}
 							}
 							
 							if (residual >= scaling_capacity) { /* scan all pins */
 								h.reachAllPins(e);
-								Assert(n.distance[u] + 1 == h.outDistance[e]);
+								assert(n.distance[u] + 1 == h.outDistance[e]);
 								current_pin[e] = hg.pinsNotSendingFlowIndices(e).begin();
-								for (const Pin& pv : hg.pinsNotSendingFlowInto(e))
-									visit(pv, residual);
+								for (const Pin& pv : hg.pinsNotSendingFlowInto(e)) {
+									visit(pv);
+								}
 							}
 						}
 					}
@@ -451,7 +463,7 @@ namespace whfc {
 			const Flow scaling_capacity = scaling.getCapacity();
 			
 			for (auto& sp : cs.sourcePiercingNodes) {
-				Assert(stack.empty());
+				assert(stack.empty());
 				stack.push({ sp.node, InHeIndex::Invalid() });
 				
 				while (!stack.empty()) {
@@ -459,8 +471,8 @@ namespace whfc {
 					Node v = invalidNode;
 					InHeIndex inc_v_it = InHeIndex::Invalid();
 					DistanceT req_dist = n.distance[u] + 1;
-					Assert(!n.isDistanceStale(u));
-					Assert(stack.size() + n.sourceBaseDistance() == req_dist);
+					assert(!n.isDistanceStale(u));
+					assert(stack.size() + n.sourceBaseDistance() == req_dist);
 					InHeIndex& he_it = current_hyperedge[u];
 					for ( ; he_it < hg.endIndexHyperedges(u); he_it++) {
 						InHe& inc_u = hg.getInHe(he_it);
@@ -481,7 +493,7 @@ namespace whfc {
 							}
 						}
 						
-						if (v == invalidNode && /* scan all pins */ req_dist == h.outDistance[e] && residual >= scaling_capacity) {
+						if (v == invalidNode && residual >= scaling_capacity && /* scan all pins */ req_dist == h.outDistance[e]) {
 							for (const PinIndex firstInvalid = hg.pinsNotSendingFlowIndices(e).end(); current_pin[e] < firstInvalid; current_pin[e]++) {
 								const Pin& pv = hg.getPin(current_pin[e]);
 								if (n.isTarget(pv.pin) || n.distance[pv.pin] == req_dist) {
@@ -497,7 +509,7 @@ namespace whfc {
 					}
 					
 					if (v == invalidNode) {
-						Assert(current_hyperedge[u] == hg.endIndexHyperedges(u));
+						assert(current_hyperedge[u] == hg.endIndexHyperedges(u));
 						stack.pop();
 						// Note: the iteration of u's predecessor on the stack still points to u. setting the distance to unreachable prevents the search from pushing u again.
 						// It is fine to destroy the reachability datastructures, since we know that this function increases the flow.
@@ -513,7 +525,7 @@ namespace whfc {
 					
 				}
 			}
-			Assert(f >= scaling_capacity);
+			assert(f >= scaling_capacity);
 			return f;
 		}
 		
@@ -530,7 +542,7 @@ namespace whfc {
 				}
 				inc_v_it = t.parent_he_it;
 			}
-			AssertMsg(bottleneckCapacity > 0, "Bottleneck capacity not positive");
+			assert(bottleneckCapacity > 0);
 			inc_v_it = inc_target_it;
 			for (int64_t stack_pointer = stack.size() - 1; stack_pointer >= 0; --stack_pointer) {
 				const StackFrame& t = stack.at(stack_pointer);
