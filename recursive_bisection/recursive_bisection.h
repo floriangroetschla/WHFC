@@ -34,7 +34,7 @@ namespace whfc_rb {
         whfc::HyperFlowCutter<whfc::Dinic> hfc;
 
         std::vector<int> partition_recursively(CSRHypergraph& hg, int seed, double epsilon, std::string preset, uint k, bool alloc) {
-            if (k == 1) {
+        	if (k == 1) {
                 return std::vector<int>(hg.numNodes(), 0);
             }
 
@@ -50,7 +50,7 @@ namespace whfc_rb {
                 numParts[1] = numParts[0] + 1;
                 partition = PaToHInterface::bisectImbalancedWithPatoh(hg, seed, float(numParts[1]) / float(numParts[0]), epsilon, preset, alloc, false);
             }
-
+            
             // extract cut hyperedges to feed the FlowHyperGraphExtractor
             std::vector<CSRHypergraph::HyperedgeID> cut_hes;
             for (HyperedgeID e : hg.hyperedges()) {
@@ -65,20 +65,17 @@ namespace whfc_rb {
                 }
             }
 
-            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(hg, cut_hes, partition, 100);
+            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(hg, cut_hes, partition, 5);
             extractor.fhgb.printHypergraph(std::cout);
 
             // call WHFC to improve the bisection
-            if (!alloc) hfc.reset();
+            hfc.reset();
+            hfc.cs.setMaxBlockWeight(0, 15);
+            hfc.cs.setMaxBlockWeight(1, 15);
             bool result = hfc.runUntilBalancedOrFlowBoundExceeded(extractor_info.source, extractor_info.target);
             std::cout << "WHFC successful: " << result << std::endl;
 
-            if (k == 2) {
-                if (alloc) {
-                    PaToHInterface::freePatoh();
-                }
-                return partition;
-            } else {
+            if (k > 2) {
                 std::vector<int> new_ids(partition.size());
                 std::vector<int> carries(2, 0);
                 for (uint i = 0; i < partition.size(); ++i) {
@@ -122,13 +119,12 @@ namespace whfc_rb {
                 for (uint i = 0; i < partition.size(); ++i) {
                     partition[i] = sub_partitions[partition[i]][new_ids[i]] + partition[i] * numParts[0];
                 }
-
-                if (alloc) {
-                    PaToHInterface::freePatoh();
-                }
-
-                return partition;
             }
+            
+			if (alloc) {
+				PaToHInterface::freePatoh();
+			}
+			return partition;
         }
     };
 }
