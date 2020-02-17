@@ -59,11 +59,14 @@ namespace whfc_rb {
                 }
             }
 
-            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(hg, cut_hes, partition, 100);
+            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(hg, cut_hes, partition, 5);
             extractor.fhgb.printHypergraph(std::cout);
 
             // call WHFC to improve the bisection
             if (!alloc) hfc.reset();
+            hfc.cs.setMaxBlockWeight(0, 15);
+            hfc.cs.setMaxBlockWeight(1, 15);
+            hfc.upperFlowBound = 10;
             bool result = hfc.runUntilBalancedOrFlowBoundExceeded(extractor_info.source, extractor_info.target);
             std::cout << "WHFC successful: " << result << std::endl;
 

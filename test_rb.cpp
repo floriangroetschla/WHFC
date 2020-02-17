@@ -7,6 +7,7 @@
 
 int main() {
     whfc_rb::CSRHypergraph hg = whfc::HMetisIO::readCSRHypergraph("../test_hypergraphs/testhg.hgr");
+    //whfc_rb::CSRHypergraph hg = whfc::HMetisIO::readCSRHypergraph("../../benchmark_set/192bit.mtx.hgr");
 
     std::vector<int> partition = PaToHInterface::bisectWithPatoh(hg, 42, 0.1, "D", true, true);
     /*
