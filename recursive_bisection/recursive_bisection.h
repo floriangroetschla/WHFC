@@ -11,6 +11,12 @@
 namespace whfc_rb {
     class RecursiveBisector {
     public:
+        using PartitionID = int;
+        static constexpr PartitionID invalidPartition = std::numeric_limits<PartitionID>::max();
+        
+        using NodeID = CSRHypergraph::NodeID;
+        using HyperedgeID = CSRHypergraph::HyperedgeID;
+        
         RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins) :
             extractor(maxNumNodes, maxNumEdges, maxNumPins),
             hfc(extractor.fhgb, 42) {
@@ -47,15 +53,15 @@ namespace whfc_rb {
 
             // extract cut hyperedges to feed the FlowHyperGraphExtractor
             std::vector<CSRHypergraph::HyperedgeID> cut_hes;
-            for (auto e : hg.hyperedges()) {
-                uint partitionID = partition[hg.pinsOf(e).begin()[0]];
-                for (auto v : hg.pinsOf(e)) {
-                    if (partitionID != partition[v]) {
-                        partitionID = -1;
+            for (HyperedgeID e : hg.hyperedges()) {
+                PartitionID partitionID = invalidPartition;
+                for (NodeID u : hg.pinsOf(e)) {
+                    if (partitionID == invalidPartition) {
+                        partitionID = partition[u];
+                    } else if (partitionID != partition[u]) {
+                        cut_hes.push_back(e);
+                        break;
                     }
-                }
-                if (partitionID == -1) {
-                    cut_hes.push_back(e);
                 }
             }
 
