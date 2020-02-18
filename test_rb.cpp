@@ -9,7 +9,7 @@ int main() {
     whfc_rb::CSRHypergraph hg = whfc::HMetisIO::readCSRHypergraph("../test_hypergraphs/testhg.hgr");
     //whfc_rb::CSRHypergraph hg = whfc::HMetisIO::readCSRHypergraph("../../benchmark_set/192bit.mtx.hgr");
 
-    std::vector<int> partition = PaToHInterface::bisectWithPatoh(hg, 42, 0.1, "D", true, true);
+    whfc_rb::Partition partition = PaToHInterface::bisectWithPatoh(hg, 42, 0.1, "D", true, true);
     /*
     for (uint i = 0; i < result.size(); ++i) {
         std::cout << result[i] << " ";
@@ -26,11 +26,7 @@ int main() {
 
     //std::vector<int> partition = whfc_rb::RecursiveBisector::run(hg, 42, 0.1, "D", 5);
 
-    std::cout << "Partition: ";
-    for (uint i = 0; i < partition.size(); ++i) {
-        std::cout << partition[i] << " ";
-    }
-    std::cout << std::endl;
+    partition.print(std::cout);
 
     std::vector<whfc_rb::CSRHypergraph::HyperedgeID> cut_hes;
     for (auto e : hg.hyperedges()) {

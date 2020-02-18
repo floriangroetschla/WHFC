@@ -2,6 +2,7 @@
 
 #include "../recursive_bisection/hypergraph.h"
 #include "patoh.h"
+#include "../recursive_bisection/partition.h"
 
 
 class PaToHInterface {
@@ -17,7 +18,7 @@ public:
         bool free;
     };
 
-    static std::vector<int> bisectImbalancedWithPatoh(whfc_rb::CSRHypergraph& hg,
+    static whfc_rb::Partition bisectImbalancedWithPatoh(whfc_rb::CSRHypergraph& hg,
                                                       int seed,
                                                       float imbalanceFactor,
                                                       double epsilon=0.05,
@@ -32,7 +33,7 @@ public:
         return runPatoh(hg, seed, p, preset);
     }
 
-    static std::vector<int> bisectWithPatoh(whfc_rb::CSRHypergraph &hg,
+    static whfc_rb::Partition bisectWithPatoh(whfc_rb::CSRHypergraph &hg,
                                             int seed,
                                             double epsilon=0.0,
                                             std::string preset = "D", bool alloc = true, bool free = true) {
@@ -53,9 +54,9 @@ public:
     }*/
 
 
-    static std::vector<int> runPatoh(whfc_rb::CSRHypergraph& hg, int seed, PatohParameters params, std::string str_preset = "D") {
+    static whfc_rb::Partition runPatoh(whfc_rb::CSRHypergraph& hg, int seed, PatohParameters params, std::string str_preset = "D") {
         // For output of PaToH
-        std::vector<int> vec_partition(hg.numNodes());
+        std::vector<whfc_rb::Partition::partitionID > vec_partition(hg.numNodes());
         std::vector<int> vec_partweights(params.k, 0);
 
         PaToH_Parameters args;
@@ -82,7 +83,7 @@ public:
         n = hg.numHyperedges();		// Note(Lars): Use static_cast<desired_type>( value )
         c = hg.numNodes();
         nconst = 1;
-        partvec = vec_partition.data();
+        partvec = reinterpret_cast<int*>(vec_partition.data());
         partweights = vec_partweights.data();
         cwghts = reinterpret_cast<int*>(hg.nodeWeights().data());
         nwghts = reinterpret_cast<int*>(hg.hyperedgeWeights().data());
@@ -105,7 +106,7 @@ public:
             PaToH_Free();
         }
 
-        return vec_partition;
+        return whfc_rb::Partition(vec_partition, static_cast<whfc_rb::Partition::partitionID>(params.k));
     }
 
     static int freePatoh() {

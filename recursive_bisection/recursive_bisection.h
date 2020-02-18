@@ -17,7 +17,7 @@ namespace whfc_rb {
 
         }
 
-        std::vector<int> run(CSRHypergraph& hg, int seed, double epsilon, std::string preset, uint k) {
+        Partition run(CSRHypergraph& hg, int seed, double epsilon, std::string preset, uint k) {
             epsilon = std::pow(1.0 + epsilon, 1.0 / std::log2(k)) - 1.0;
 
             return partition_recursively(hg, seed, epsilon, preset, k, true);
@@ -27,13 +27,13 @@ namespace whfc_rb {
         FlowHypergraphBuilderExtractor extractor;
         whfc::HyperFlowCutter<whfc::Dinic> hfc;
 
-        std::vector<int> partition_recursively(CSRHypergraph& hg, int seed, double epsilon, std::string preset, uint k, bool alloc) {
+        Partition partition_recursively(CSRHypergraph& hg, int seed, double epsilon, std::string preset, uint k, bool alloc) {
             if (k == 1) {
-                return std::vector<int>(hg.numNodes(), 0);
+                return Partition(hg.numNodes(), 1);
             }
 
             std::array<int, 2> numParts;
-            std::vector<int> partition;
+            Partition partition;
 
             if (k % 2 == 0) {
                 numParts[0] = k / 2;
@@ -82,7 +82,7 @@ namespace whfc_rb {
                     new_ids[i] = carries[partition[i]]++;
                 }
 
-                std::array<std::vector<int>, 2> sub_partitions;
+                std::array<Partition, 2> sub_partitions;
 
                 for (uint partID = 0; partID < 2; ++partID) {
                     CSRHypergraph partHg;

@@ -18,7 +18,7 @@ namespace whfc_rb {
             whfc::Node target;
         };
 
-        ExtractorInfo run(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const std::vector<int>& partition, uint distanceFromCut) {
+        ExtractorInfo run(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const Partition& partition, uint distanceFromCut) {
             initialize(hg.numNodes(), hg.numHyperedges());
 
             // shuffle cut edges?
@@ -64,10 +64,10 @@ namespace whfc_rb {
                 }
             }
 
-            auto totalWeights = weightsOfPartitions(hg, partition);
+            std::vector<CSRHypergraph::HyperedgeWeight> totalWeights = partition.partitionWeights(hg);
 
-            fhgb.nodeWeight(sourceNode) = totalWeights.first - w0;
-            fhgb.nodeWeight(targetNode) = totalWeights.second - w1;
+            fhgb.nodeWeight(sourceNode) = totalWeights[0] - w0;
+            fhgb.nodeWeight(targetNode) = totalWeights[1] - w1;
 
             fhgb.finalize();
 
@@ -91,7 +91,7 @@ namespace whfc_rb {
             w += hg.nodeWeight(node);
         }
 
-        void BreadthFirstSearch(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const std::vector<int>& partition, uint block, uint maxNodeNumber, whfc::Node terminal, whfc::NodeWeight& w) {
+        void BreadthFirstSearch(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const Partition& partition, uint block, uint maxNodeNumber, whfc::Node terminal, whfc::NodeWeight& w) {
             numVisitedNodes = 0;
 
             // Collect boundary vertices
@@ -108,7 +108,7 @@ namespace whfc_rb {
                 CSRHypergraph::NodeID u = queue.back();
                 queue.pop();
                 for (CSRHypergraph::HyperedgeID e : hg.hyperedgesOf(u)) {
-                    if (hg.pinCount(e) == pinsInPart(block, partition, hg, e) && pinsInPart(block, partition, hg, e) > 1 && !visitedHyperedge[e]) {
+                    if (hg.pinCount(e) == partition.pinsInPart(hg, block, e) && hg.pinCount(e) > 1 && !visitedHyperedge[e]) {
 
                         visitedHyperedge[e] = true;
                         fhgb.startHyperedge(hg.hyperedgeWeight(e));
@@ -134,16 +134,6 @@ namespace whfc_rb {
             }
         }
 
-        uint pinsInPart(uint partitionID, const std::vector<int>& partition, const CSRHypergraph& hg, CSRHypergraph::HyperedgeID e) {
-            uint count = 0;
-            for (CSRHypergraph::NodeID v : hg.pinsOf(e)) {
-                if (partition[v] == partitionID) {
-                    count++;
-                }
-            }
-            return count;
-        }
-
         void initialize(uint numNodes, uint numHyperedges) {
             fhgb.clear();
             queue.empty();
@@ -151,17 +141,6 @@ namespace whfc_rb {
             visitedNode.resize(numNodes, false);
             visitedHyperedge.clear();
             visitedHyperedge.resize(numHyperedges, false);
-        }
-
-        std::pair<whfc::NodeWeight, whfc::NodeWeight> weightsOfPartitions(CSRHypergraph& hg, const std::vector<int>& partition) {
-            std::array<whfc::NodeWeight,2> weights;
-            weights[0] = whfc::NodeWeight(0);
-            weights[1] = whfc::NodeWeight(0);
-            std::pair<whfc::NodeWeight, whfc::NodeWeight> result = {whfc::NodeWeight(0), whfc::NodeWeight(0)};
-            for (CSRHypergraph::NodeID v : hg.nodes()) {
-                weights[partition[v]] += hg.nodeWeight(v);
-            }
-            return {weights[0], weights[1]};
         }
     };
 }
