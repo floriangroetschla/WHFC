@@ -11,6 +11,12 @@
 namespace whfc_rb {
     class RecursiveBisector {
     public:
+        using PartitionID = int;
+        static constexpr PartitionID invalidPartition = std::numeric_limits<PartitionID>::max();
+        
+        using NodeID = CSRHypergraph::NodeID;
+        using HyperedgeID = CSRHypergraph::HyperedgeID;
+
         RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, int seed) :
             extractor(maxNumNodes, maxNumEdges, maxNumPins),
             hfc(extractor.fhgb, seed) {
@@ -60,22 +66,19 @@ namespace whfc_rb {
 
             partition.print(std::cout);
             FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(hg, partition, 0, 1, maxW0, maxW1);
+
             extractor.fhgb.printHypergraph(std::cout);
 
             // call WHFC to improve the bisection
             hfc.reset();
             hfc.cs.setMaxBlockWeight(0, maxBlockWeight);
             hfc.cs.setMaxBlockWeight(1, maxBlockWeight);
-            hfc.upperFlowBound = 10;
+            //hfc.upperFlowBound = 10;
+
             bool result = hfc.runUntilBalancedOrFlowBoundExceeded(extractor_info.source, extractor_info.target);
             std::cout << "WHFC successful: " << result << std::endl;
 
-            if (k == 2) {
-                if (alloc) {
-                    PaToHInterface::freePatoh();
-                }
-                return partition;
-            } else {
+            if (k > 2) {
                 std::vector<int> new_ids(partition.size());
                 std::vector<int> carries(2, 0);
                 for (uint i = 0; i < partition.size(); ++i) {
@@ -119,13 +122,12 @@ namespace whfc_rb {
                 for (uint i = 0; i < partition.size(); ++i) {
                     partition[i] = sub_partitions[partition[i]][new_ids[i]] + partition[i] * numParts[0];
                 }
-
-                if (alloc) {
-                    PaToHInterface::freePatoh();
-                }
-
-                return partition;
             }
+            
+			if (alloc) {
+				PaToHInterface::freePatoh();
+			}
+			return partition;
         }
     };
 }
