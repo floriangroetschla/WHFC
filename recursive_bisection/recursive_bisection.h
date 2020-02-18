@@ -11,9 +11,9 @@
 namespace whfc_rb {
     class RecursiveBisector {
     public:
-        RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins) :
+        RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, int seed) :
             extractor(maxNumNodes, maxNumEdges, maxNumPins),
-            hfc(extractor.fhgb, 42) {
+            hfc(extractor.fhgb, seed) {
 
         }
 
@@ -45,27 +45,27 @@ namespace whfc_rb {
                 partition = PaToHInterface::bisectImbalancedWithPatoh(hg, seed, float(numParts[1]) / float(numParts[0]), epsilon, preset, alloc, false);
             }
 
-            // extract cut hyperedges to feed the FlowHyperGraphExtractor
-            std::vector<CSRHypergraph::HyperedgeID> cut_hes;
-            for (auto e : hg.hyperedges()) {
-                uint partitionID = partition[hg.pinsOf(e).begin()[0]];
-                for (auto v : hg.pinsOf(e)) {
-                    if (partitionID != partition[v]) {
-                        partitionID = -1;
-                    }
-                }
-                if (partitionID == -1) {
-                    cut_hes.push_back(e);
-                }
-            }
+            std::vector<CSRHypergraph::NodeWeight> partWeights = partition.partitionWeights(hg);
+            CSRHypergraph::NodeWeight totalWeight = partWeights[0] + partWeights[1];
 
-            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(hg, cut_hes, partition, 5);
+            double alpha = 16.0;
+
+            double maxW0 = (1 + alpha * epsilon) * std::ceil(static_cast<double>(totalWeight) / 2.0) - partWeights[0];
+            double maxW1 = (1 + alpha * epsilon) * std::ceil(static_cast<double>(totalWeight) / 2.0) - partWeights[1];
+
+            maxW0 = std::min(maxW0, 0.999 * partWeights[0]);
+            maxW1 = std::min(maxW1, 0.999 * partWeights[1]);
+
+            whfc::NodeWeight maxBlockWeight = std::ceil((1.0 + epsilon) * totalWeight / 2.0) + 3;
+
+            partition.print(std::cout);
+            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(hg, partition, 0, 1, maxW0, maxW1);
             extractor.fhgb.printHypergraph(std::cout);
 
             // call WHFC to improve the bisection
-            if (!alloc) hfc.reset();
-            hfc.cs.setMaxBlockWeight(0, 15);
-            hfc.cs.setMaxBlockWeight(1, 15);
+            hfc.reset();
+            hfc.cs.setMaxBlockWeight(0, maxBlockWeight);
+            hfc.cs.setMaxBlockWeight(1, maxBlockWeight);
             hfc.upperFlowBound = 10;
             bool result = hfc.runUntilBalancedOrFlowBoundExceeded(extractor_info.source, extractor_info.target);
             std::cout << "WHFC successful: " << result << std::endl;

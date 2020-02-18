@@ -12,7 +12,7 @@ namespace whfc_rb {
         explicit Partition(std::vector<partitionID> vec_partition, partitionID num_parts) : partition(std::move(vec_partition)), num_parts(num_parts) {}
 
 
-        std::size_t partitionSize(CSRHypergraph& hg, partitionID id) const {
+        std::size_t partSize(CSRHypergraph& hg, partitionID id) const {
             if (id >= num_parts) throw std::runtime_error("partition id out of range");
 
             std::size_t size = 0;
@@ -22,7 +22,7 @@ namespace whfc_rb {
             return size;
         }
 
-        std::vector<std::size_t> partitionSizes(CSRHypergraph& hg) const {
+        std::vector<std::size_t> partSizes(CSRHypergraph& hg) const {
             std::vector<std::size_t> sizes(num_parts, 0);
 
             for (CSRHypergraph::NodeID u : hg.nodes()) {
@@ -89,7 +89,7 @@ namespace whfc_rb {
             return count;
         }
 
-        std::vector<CSRHypergraph::HyperedgeID> getCutEdges(CSRHypergraph& hg, partitionID part0, partitionID part1) {
+        std::vector<CSRHypergraph::HyperedgeID> getCutEdges(CSRHypergraph& hg, partitionID part0, partitionID part1) const {
             std::vector<CSRHypergraph::HyperedgeID> cut_hes;
 
             for (CSRHypergraph::HyperedgeID e : hg.hyperedges()) {

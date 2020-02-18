@@ -28,29 +28,11 @@ int main() {
 
     partition.print(std::cout);
 
-    std::vector<whfc_rb::CSRHypergraph::HyperedgeID> cut_hes;
-    for (auto e : hg.hyperedges()) {
-        uint partitionID = partition[hg.pinsOf(e).begin()[0]];
-        for (auto v : hg.pinsOf(e)) {
-            if (partitionID != partition[v]) {
-                partitionID = -1;
-            }
-        }
-        if (partitionID == -1) {
-            cut_hes.push_back(e);
-        }
-    }
-
-    std::cout << "Cut Hyperedges: ";
-    for (uint i = 0; i < cut_hes.size(); ++i) {
-        std::cout << cut_hes[i] << " ";
-    }
-    std::cout << std::endl;
 
     /*whfc_rb::FlowHypergraphBuilderExtractor fhge(hg.numNodes(), hg.numHyperedges(), hg.numPins());
     fhge.run(hg, cut_hes, partition, 100);
     fhge.fhgb.printHypergraph(std::cout);*/
 
-    whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector(hg.numNodes(), hg.numHyperedges(), hg.numPins());
+    whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector(hg.numNodes(), hg.numHyperedges(), hg.numPins(), 42);
     recursive_bisector.run(hg, 42, 0.1, "D", 4);
 }
