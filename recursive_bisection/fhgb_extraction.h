@@ -2,16 +2,17 @@
 
 #include "../datastructure/flow_hypergraph_builder.h"
 #include "hypergraph.h"
-#include <queue>
-
+#include "../datastructure/queue.h"
 
 namespace whfc_rb {
     class FlowHypergraphBuilderExtractor {
     public:
+        static constexpr CSRHypergraph::NodeID invalid_node = std::numeric_limits<CSRHypergraph::NodeID>::max();
+
         whfc::FlowHypergraphBuilder fhgb;
 
         FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins) :
-            fhgb(maxNumNodes, maxNumEdges, maxNumPins), globalToLocalID(maxNumNodes) { }
+                fhgb(maxNumNodes, maxNumEdges, maxNumPins), queue(maxNumNodes + 2), globalToLocalID(maxNumNodes) { }
 
         struct ExtractorInfo {
             whfc::Node source;
@@ -27,12 +28,16 @@ namespace whfc_rb {
 
             whfc::NodeWeight w0, w1;
 
-            fhgb.addNode(whfc::NodeWeight(0));
             whfc::Node sourceNode = whfc::Node::fromOtherValueType(0);
+            fhgb.addNode(whfc::NodeWeight(0));
+            queue.push(invalid_node);
+            queue.reinitialize();
             BreadthFirstSearch(hg, cut_hes, partition, part0, maxW0, sourceNode, w0);
 
             whfc::Node targetNode = whfc::Node::fromOtherValueType(fhgb.numNodes());
             fhgb.addNode(whfc::NodeWeight(0));
+            queue.push(invalid_node);
+            queue.reinitialize();
             BreadthFirstSearch(hg, cut_hes, partition, part1, maxW1, targetNode, w1);
 
             processCutHyperedges(hg, cut_hes, partition, part0, part1, sourceNode, targetNode);
@@ -49,7 +54,7 @@ namespace whfc_rb {
 
 
     private:
-        std::queue<CSRHypergraph::NodeID> queue;
+        LayeredQueue<CSRHypergraph::NodeID> queue;
         std::vector<bool> visitedNode;
         std::vector<bool> visitedHyperedge;
         std::vector<whfc::Node> globalToLocalID;
@@ -76,8 +81,7 @@ namespace whfc_rb {
 
             // Do the actual breadth first search
             while (!queue.empty()) {
-                CSRHypergraph::NodeID u = queue.front();
-                queue.pop();
+                CSRHypergraph::NodeID u = queue.pop();
                 for (CSRHypergraph::HyperedgeID e : hg.hyperedgesOf(u)) {
                     if (hg.pinCount(e) == partition.pinsInPart(hg, partID, e) && hg.pinCount(e) > 1 && !visitedHyperedge[e]) {
 
@@ -138,7 +142,7 @@ namespace whfc_rb {
 
         void initialize(uint numNodes, uint numHyperedges) {
             fhgb.clear();
-            queue.empty();
+            queue.clear();
             visitedNode.clear();
             visitedNode.resize(numNodes, false);
             visitedHyperedge.clear();
