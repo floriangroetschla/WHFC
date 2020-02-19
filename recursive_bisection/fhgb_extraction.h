@@ -17,6 +17,8 @@ namespace whfc_rb {
         struct ExtractorInfo {
             whfc::Node source;
             whfc::Node target;
+            whfc::Flow baseCut;
+            whfc::Flow cutAtStake;
         };
 
         ExtractorInfo run(CSRHypergraph& hg, const Partition& partition, const Partition::partitionID part0, const Partition::partitionID part1, CSRHypergraph::NodeWeight maxW0, CSRHypergraph::NodeWeight maxW1) {
@@ -28,36 +30,41 @@ namespace whfc_rb {
 
             whfc::NodeWeight w0, w1;
 
-            whfc::Node sourceNode = whfc::Node::fromOtherValueType(0);
+            // Add source node and run BFS in part0
             fhgb.addNode(whfc::NodeWeight(0));
             queue.push(invalid_node);
             queue.reinitialize();
-            BreadthFirstSearch(hg, cut_hes, partition, part0, maxW0, sourceNode, w0);
+            BreadthFirstSearch(hg, cut_hes, partition, part0, maxW0, result.source, w0);
 
-            whfc::Node targetNode = whfc::Node::fromOtherValueType(fhgb.numNodes());
+            // Add target node and run BFS in part1
+            result.target = whfc::Node::fromOtherValueType(fhgb.numNodes());
             fhgb.addNode(whfc::NodeWeight(0));
             queue.push(invalid_node);
             queue.reinitialize();
-            BreadthFirstSearch(hg, cut_hes, partition, part1, maxW1, targetNode, w1);
+            BreadthFirstSearch(hg, cut_hes, partition, part1, maxW1, result.target, w1);
 
-            processCutHyperedges(hg, cut_hes, partition, part0, part1, sourceNode, targetNode);
+            processCutHyperedges(hg, cut_hes, partition, part0, part1);
 
             std::vector<CSRHypergraph::NodeWeight> totalWeights = partition.partitionWeights(hg);
 
-            fhgb.nodeWeight(sourceNode) = totalWeights[0] - w0;
-            fhgb.nodeWeight(targetNode) = totalWeights[1] - w1;
+            fhgb.nodeWeight(result.source) = totalWeights[0] - w0;
+            fhgb.nodeWeight(result.target) = totalWeights[1] - w1;
 
             fhgb.finalize();
 
-            return {sourceNode, targetNode};
+            return result;
         }
 
+        auto localNodeIDs() const { return boost::irange<whfc::Node>(whfc::Node(0), whfc::Node::fromOtherValueType(queue.queueEnd())); }
+        whfc::Node global2local(const CSRHypergraph::NodeID x) const {  assert(visitedNode[x]); return globalToLocalID[x]; }
+        CSRHypergraph::NodeID local2global(const whfc::Node x) const { return queue.elementAt(x); }
 
     private:
         LayeredQueue<CSRHypergraph::NodeID> queue;
         std::vector<bool> visitedNode;
         std::vector<bool> visitedHyperedge;
         std::vector<whfc::Node> globalToLocalID;
+        ExtractorInfo result;
 
         void visitNode(const CSRHypergraph::NodeID node, CSRHypergraph& hg, whfc::NodeWeight& w) {
             globalToLocalID[node] = whfc::Node::fromOtherValueType(fhgb.numNodes());
@@ -109,10 +116,11 @@ namespace whfc_rb {
             }
         }
 
-        void processCutHyperedges(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const Partition& partition, const Partition::partitionID part0, const Partition::partitionID part1, whfc::Node sourceNode, whfc::Node targetNode) {
+        void processCutHyperedges(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const Partition& partition, const Partition::partitionID part0, const Partition::partitionID part1) {
             for (CSRHypergraph::HyperedgeID e : cut_hes) {
                 bool connectToSource = false;
                 bool connectToTarget = false;
+                result.cutAtStake += hg.hyperedgeWeight(e);
                 visitedHyperedge[e] = true;
                 fhgb.startHyperedge(hg.hyperedgeWeight(e));
 
@@ -129,12 +137,13 @@ namespace whfc_rb {
                 }
                 if (connectToSource && connectToTarget) {
                     fhgb.removeCurrentHyperedge();
+                    result.baseCut += hg.hyperedgeWeight(e);
                 } else {
                     if (connectToSource) {
-                        fhgb.addPin(sourceNode);
+                        fhgb.addPin(result.source);
                     }
                     if (connectToTarget) {
-                        fhgb.addPin(targetNode);
+                        fhgb.addPin(result.target);
                     }
                 }
             }
@@ -147,6 +156,7 @@ namespace whfc_rb {
             visitedNode.resize(numNodes, false);
             visitedHyperedge.clear();
             visitedHyperedge.resize(numHyperedges, false);
+            result = {whfc::Node::fromOtherValueType(0), whfc::Node::fromOtherValueType(0), 0, 0};
         }
     };
 }

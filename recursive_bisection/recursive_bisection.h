@@ -51,32 +51,10 @@ namespace whfc_rb {
                 partition = PaToHInterface::bisectImbalancedWithPatoh(hg, seed, float(numParts[1]) / float(numParts[0]), epsilon, preset, alloc, false);
             }
 
-            std::vector<CSRHypergraph::NodeWeight> partWeights = partition.partitionWeights(hg);
-            CSRHypergraph::NodeWeight totalWeight = partWeights[0] + partWeights[1];
-
-            double alpha = 16.0;
-
-            double maxW0 = (1 + alpha * epsilon) * std::ceil(static_cast<double>(totalWeight) / 2.0) - partWeights[0];
-            double maxW1 = (1 + alpha * epsilon) * std::ceil(static_cast<double>(totalWeight) / 2.0) - partWeights[1];
-
-            maxW0 = std::min(maxW0, 0.999 * partWeights[0]);
-            maxW1 = std::min(maxW1, 0.999 * partWeights[1]);
-
-            whfc::NodeWeight maxBlockWeight = std::ceil((1.0 + epsilon) * totalWeight / 2.0) + 3;
-
             partition.print(std::cout);
-            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(hg, partition, 0, 1, maxW0, maxW1);
-
-            extractor.fhgb.printHypergraph(std::cout);
-
-            // call WHFC to improve the bisection
-            hfc.reset();
-            hfc.cs.setMaxBlockWeight(0, maxBlockWeight);
-            hfc.cs.setMaxBlockWeight(1, maxBlockWeight);
-            //hfc.upperFlowBound = 10;
-
-            bool result = hfc.runUntilBalancedOrFlowBoundExceeded(extractor_info.source, extractor_info.target);
-            std::cout << "WHFC successful: " << result << std::endl;
+            bool result = refine(partition, hg, epsilon);
+            std::cout << "Refinement result: " << result << std::endl;
+            partition.print(std::cout);
 
             if (k > 2) {
                 std::vector<int> new_ids(partition.size());
@@ -128,6 +106,57 @@ namespace whfc_rb {
 				PaToHInterface::freePatoh();
 			}
 			return partition;
+        }
+
+        bool refine(Partition& partition, CSRHypergraph& hg, double epsilon) {
+            std::vector<CSRHypergraph::NodeWeight> partWeights = partition.partitionWeights(hg);
+            CSRHypergraph::NodeWeight totalWeight = partWeights[0] + partWeights[1];
+
+            double alpha = 16.0;
+
+            double maxW0 = (1 + alpha * epsilon) * std::ceil(static_cast<double>(totalWeight) / 2.0) - partWeights[0];
+            double maxW1 = (1 + alpha * epsilon) * std::ceil(static_cast<double>(totalWeight) / 2.0) - partWeights[1];
+
+            maxW0 = std::min(maxW0, 0.999 * partWeights[0]);
+            maxW1 = std::min(maxW1, 0.999 * partWeights[1]);
+
+            whfc::NodeWeight maxBlockWeight = std::ceil((1.0 + epsilon) * totalWeight / 2.0);
+
+            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(hg, partition, 0, 1, maxW0, maxW1);
+
+            std::cout << "Max block weight: " << maxBlockWeight << std::endl;
+
+            // call WHFC to improve the bisection
+            hfc.reset();
+            hfc.cs.setMaxBlockWeight(0, maxBlockWeight);
+            hfc.cs.setMaxBlockWeight(1, maxBlockWeight);
+            hfc.upperFlowBound = extractor_info.cutAtStake - extractor_info.baseCut;
+
+            if (extractor_info.cutAtStake - extractor_info.baseCut == 0) return false;
+
+            bool hfc_result = hfc.runUntilBalancedOrFlowBoundExceeded(extractor_info.source, extractor_info.target);
+
+            if (!hfc_result) return false;
+
+            whfc::Flow newCut = extractor_info.baseCut + hfc.cs.flowValue;
+
+            if (newCut < extractor_info.cutAtStake) {
+                reassign(partition, hg, extractor_info);
+                return true;
+            } else if (newCut == extractor_info.cutAtStake) {
+
+            }
+
+            return false;
+        }
+
+        void reassign(Partition& partition, CSRHypergraph& hg, FlowHypergraphBuilderExtractor::ExtractorInfo& info) {
+            for (whfc::Node localID : extractor.localNodeIDs()) {
+                if (localID == info.source || localID == info.target) continue;
+                    CSRHypergraph::NodeID globalID = extractor.local2global(localID);
+                    PartitionID newPart = hfc.cs.n.isSource(localID) ? 0 : 1;
+                    partition[globalID] = newPart;
+            }
         }
     };
 }

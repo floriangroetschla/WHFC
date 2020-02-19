@@ -26,8 +26,6 @@ int main() {
 
     //std::vector<int> partition = whfc_rb::RecursiveBisector::run(hg, 42, 0.1, "D", 5);
 
-    partition.print(std::cout);
-
 
     /*whfc_rb::FlowHypergraphBuilderExtractor fhge(hg.numNodes(), hg.numHyperedges(), hg.numPins());
     fhge.run(hg, cut_hes, partition, 100);
