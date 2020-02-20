@@ -28,7 +28,7 @@ namespace whfc {
 		}
 		
 		bool isPerfectlyBalanced() const {
-			return std::abs(imbalanceSourceBlock - imbalanceTargetBlock) < 1e-7;
+			return std::abs(imbalanceSourceBlock - imbalanceTargetBlock) < 1e-9;
 		}
 	};
 	
@@ -257,10 +257,10 @@ namespace whfc {
 			}
 		}
 		
-		int lessBalancedSide() const {
+		int sideToGrow() const {
 			const double imb_s = static_cast<double>(n.sourceReachableWeight) / static_cast<double>(maxBlockWeight(currentViewDirection()));
 			const double imb_t = static_cast<double>(n.targetReachableWeight) / static_cast<double>(maxBlockWeight(oppositeViewDirection()));
-			return imb_s > imb_t ? currentViewDirection() : oppositeViewDirection();
+			return imb_s <= imb_t ? currentViewDirection() : oppositeViewDirection();
 		}
 		
 		bool isBalanced() {
