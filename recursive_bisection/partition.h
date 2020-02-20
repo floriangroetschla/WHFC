@@ -121,6 +121,14 @@ namespace whfc_rb {
             return (static_cast<double>(maxPartWeight) / static_cast<double>(totalWeight)) - (1.0 / static_cast<double>(num_parts));
         }
 
+        partitionID numParts() {
+            return num_parts;
+        }
+
+        void setNumParts(partitionID num) {
+            num_parts = num;
+        }
+
         void print(std::ostream& out) {
             out << "Partition: ";
             for (uint i = 0; i < partition.size(); ++i) {

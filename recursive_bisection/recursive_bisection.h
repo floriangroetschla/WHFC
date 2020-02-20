@@ -55,6 +55,7 @@ namespace whfc_rb {
             std::cout << "Refinement result: " << result << std::endl;
 
             if (k > 2) {
+                partition.setNumParts(k);
                 std::vector<int> new_ids(partition.size());
                 std::vector<int> carries(2, 0);
                 for (uint i = 0; i < partition.size(); ++i) {

@@ -21,5 +21,6 @@ int main() {
     timer.stop("Recursive bisector");
     timer.report(std::cout);
     std::cout << "Imbalance: " << partition.imbalance(hg) << std::endl;
+    std::cout << "Num parts: " << partition.numParts() << std::endl;
 
 }
