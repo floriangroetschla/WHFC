@@ -120,6 +120,8 @@ namespace whfc_rb {
             maxW0 = std::min(maxW0, 0.999 * partWeights[0]);
             maxW1 = std::min(maxW1, 0.999 * partWeights[1]);
 
+            
+            
             whfc::NodeWeight maxBlockWeight = std::ceil((1.0 + epsilon) * totalWeight / 2.0);
 
             FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(hg, partition, 0, 1, maxW0, maxW1);
