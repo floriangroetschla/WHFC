@@ -11,8 +11,8 @@ namespace whfc_rb {
 
         whfc::FlowHypergraphBuilder fhgb;
 
-        FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins) :
-                fhgb(maxNumNodes, maxNumEdges, maxNumPins), queue(maxNumNodes + 2), globalToLocalID(maxNumNodes) { }
+        FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, std::mt19937& mt) :
+                fhgb(maxNumNodes, maxNumEdges, maxNumPins), queue(maxNumNodes + 2), globalToLocalID(maxNumNodes), mt(mt) { }
 
         struct ExtractorInfo {
             whfc::Node source;
@@ -26,7 +26,8 @@ namespace whfc_rb {
 
             std::vector<CSRHypergraph::HyperedgeID> cut_hes = partition.getCutEdges(hg, part0, part1);
 
-            // shuffle cut edges?
+            // shuffle cut edges
+            std::shuffle(cut_hes.begin(), cut_hes.end(), mt);
 
             whfc::NodeWeight w0, w1;
 
@@ -65,6 +66,7 @@ namespace whfc_rb {
         std::vector<bool> visitedHyperedge;
         std::vector<whfc::Node> globalToLocalID;
         ExtractorInfo result;
+        std::mt19937& mt;
 
         void visitNode(const CSRHypergraph::NodeID node, CSRHypergraph& hg, whfc::NodeWeight& w) {
             globalToLocalID[node] = whfc::Node::fromOtherValueType(fhgb.numNodes());

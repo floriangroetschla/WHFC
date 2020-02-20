@@ -3,6 +3,7 @@
 #include "fhgb_extraction.h"
 #include "../algorithm/hyperflowcutter.h"
 #include "../algorithm/dinic.h"
+#include <random>
 
 namespace whfc_rb {
     class WHFCRefiner {
@@ -11,9 +12,9 @@ namespace whfc_rb {
         using NodeID = CSRHypergraph::NodeID;
         using HyperedgeID = CSRHypergraph::HyperedgeID;
 
-        WHFCRefiner(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, int seed) :
-            extractor(maxNumNodes, maxNumEdges, maxNumPins),
-            hfc(extractor.fhgb, seed) {
+        WHFCRefiner(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937& mt) :
+            extractor(maxNumNodes, maxNumEdges, maxNumPins, mt),
+            hfc(extractor.fhgb, mt()), mt(mt) {
 
         }
 
@@ -70,6 +71,7 @@ namespace whfc_rb {
     private:
         FlowHypergraphBuilderExtractor extractor;
         whfc::HyperFlowCutter<whfc::Dinic> hfc;
+        std::mt19937 mt;
 
         void reassign(Partition& partition, CSRHypergraph& hg, FlowHypergraphBuilderExtractor::ExtractorInfo& info) {
             for (whfc::Node localID : extractor.localNodeIDs()) {

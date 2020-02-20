@@ -4,7 +4,7 @@
 #include "../io/hmetis_io.h"
 #include "hypergraph.h"
 #include "refinement.h"
-
+#include <random>
 
 namespace whfc_rb {
     class RecursiveBisector {
@@ -15,21 +15,22 @@ namespace whfc_rb {
         using NodeID = CSRHypergraph::NodeID;
         using HyperedgeID = CSRHypergraph::HyperedgeID;
 
-        RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, int seed) :
-            refiner(maxNumNodes, maxNumEdges, maxNumPins, seed) {
+        RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937& mt) :
+            refiner(maxNumNodes, maxNumEdges, maxNumPins, mt), mt(mt) {
 
         }
 
-        Partition run(CSRHypergraph& hg, int seed, double epsilon, std::string preset, uint k) {
+        Partition run(CSRHypergraph& hg, double epsilon, std::string preset, uint k) {
             epsilon = std::pow(1.0 + epsilon, 1.0 / std::log2(k)) - 1.0;
 
-            return partition_recursively(hg, seed, epsilon, preset, k, true);
+            return partition_recursively(hg, epsilon, preset, k, true);
         }
 
     private:
         WHFCRefiner refiner;
+        std::mt19937& mt;
 
-        Partition partition_recursively(CSRHypergraph& hg, int seed, double epsilon, std::string preset, uint k, bool alloc) {
+        Partition partition_recursively(CSRHypergraph& hg, double epsilon, std::string preset, uint k, bool alloc) {
             if (k == 1) {
                 return Partition(hg.numNodes(), 1);
             }
@@ -40,11 +41,11 @@ namespace whfc_rb {
             if (k % 2 == 0) {
                 numParts[0] = k / 2;
                 numParts[1] = k / 2;
-                partition = PaToHInterface::bisectWithPatoh(hg, seed, epsilon, preset, alloc, false);
+                partition = PaToHInterface::bisectWithPatoh(hg, mt(), epsilon, preset, alloc, false);
             } else {
                 numParts[0] = k / 2;
                 numParts[1] = numParts[0] + 1;
-                partition = PaToHInterface::bisectImbalancedWithPatoh(hg, seed, float(numParts[1]) / float(numParts[0]), epsilon, preset, alloc, false);
+                partition = PaToHInterface::bisectImbalancedWithPatoh(hg, mt(), float(numParts[1]) / float(numParts[0]), epsilon, preset, alloc, false);
             }
 
             partition.print(std::cout);
@@ -89,7 +90,7 @@ namespace whfc_rb {
                     partHg.initNodes(carries[partID]);
                     partHg.computeXPins();
 
-                    sub_partitions[partID] = partition_recursively(partHg, seed, epsilon, preset, numParts[partID], false);
+                    sub_partitions[partID] = partition_recursively(partHg, epsilon, preset, numParts[partID], false);
 
                 }
 
