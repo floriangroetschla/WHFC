@@ -106,6 +106,21 @@ namespace whfc_rb {
             return cut_hes;
         }
 
+        double imbalance(CSRHypergraph& hg) {
+            std::vector<CSRHypergraph::NodeWeight> vec_partitionWeights = partitionWeights(hg);
+            CSRHypergraph::NodeWeight totalWeight = 0;
+            CSRHypergraph::NodeWeight maxPartWeight = 0;
+
+            for (uint i = 0; i < vec_partitionWeights.size(); ++i) {
+                if (vec_partitionWeights[i] > maxPartWeight) {
+                    maxPartWeight = vec_partitionWeights[i];
+                }
+                totalWeight += vec_partitionWeights[i];
+            }
+
+            return (static_cast<double>(maxPartWeight) / static_cast<double>(totalWeight)) - (1.0 / static_cast<double>(num_parts));
+        }
+
         void print(std::ostream& out) {
             out << "Partition: ";
             for (uint i = 0; i < partition.size(); ++i) {

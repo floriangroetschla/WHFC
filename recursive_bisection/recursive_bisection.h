@@ -48,10 +48,11 @@ namespace whfc_rb {
                 partition = PaToHInterface::bisectImbalancedWithPatoh(hg, mt(), float(numParts[1]) / float(numParts[0]), epsilon, preset, alloc, false);
             }
 
-            partition.print(std::cout);
-            bool result = refiner.refine(partition, hg, epsilon);
+            double maxFractionPart0 = (1.0 + epsilon) * numParts[0] / k;
+            double maxFractionPart1 = (1.0 + epsilon) * numParts[1] / k;
+
+            bool result = refiner.refine(partition, hg, maxFractionPart0, maxFractionPart1);
             std::cout << "Refinement result: " << result << std::endl;
-            partition.print(std::cout);
 
             if (k > 2) {
                 std::vector<int> new_ids(partition.size());
