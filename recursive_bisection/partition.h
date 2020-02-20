@@ -118,7 +118,7 @@ namespace whfc_rb {
                 totalWeight += vec_partitionWeights[i];
             }
 
-            return (static_cast<double>(maxPartWeight) / static_cast<double>(totalWeight)) - (1.0 / static_cast<double>(num_parts));
+            return (static_cast<double>(maxPartWeight) * static_cast<double>(num_parts) / static_cast<double>(totalWeight)) - 1.0;
         }
 
         partitionID numParts() {

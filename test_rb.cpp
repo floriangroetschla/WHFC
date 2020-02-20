@@ -20,6 +20,7 @@ int main() {
     whfc_rb::Partition partition = recursive_bisector.run(hg, 0.1, "D", 5);
     timer.stop("Recursive bisector");
     timer.report(std::cout);
+    //partition.print(std::cout);
     std::cout << "Imbalance: " << partition.imbalance(hg) << std::endl;
     std::cout << "Num parts: " << partition.numParts() << std::endl;
 
