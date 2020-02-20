@@ -67,9 +67,9 @@ namespace whfc_rb {
 
                 for (uint partID = 0; partID < 2; ++partID) {
                     CSRHypergraph partHg;
-                    for (CSRHypergraph::HyperedgeID e : hg.hyperedges()) {
+                    for (HyperedgeID e : hg.hyperedges()) {
                         int hyperedgeSize = 0;
-                        for (CSRHypergraph::NodeID pin : hg.pinsOf(e)) {
+                        for (NodeID pin : hg.pinsOf(e)) {
                             if (partID == partition[pin]) {
                                 partHg.pins().push_back(new_ids[pin]);
                                 hyperedgeSize++;
@@ -153,7 +153,7 @@ namespace whfc_rb {
         void reassign(Partition& partition, CSRHypergraph& hg, FlowHypergraphBuilderExtractor::ExtractorInfo& info) {
             for (whfc::Node localID : extractor.localNodeIDs()) {
                 if (localID == info.source || localID == info.target) continue;
-                    CSRHypergraph::NodeID globalID = extractor.local2global(localID);
+                    NodeID globalID = extractor.local2global(localID);
                     PartitionID newPart = hfc.cs.n.isSource(localID) ? 0 : 1;
                     partition[globalID] = newPart;
             }
