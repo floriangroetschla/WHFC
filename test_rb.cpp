@@ -17,7 +17,7 @@ int main() {
 
     whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector(hg.numNodes(), hg.numHyperedges(), hg.numPins(), mt);
     timer.start("Recursive bisector");
-    whfc_rb::Partition partition = recursive_bisector.run(hg, 0.1, "D", 5);
+    whfc_rb::Partition partition = recursive_bisector.run(hg, 0.05, "D", 5);
     timer.stop("Recursive bisector");
     timer.report(std::cout);
     //partition.print(std::cout);

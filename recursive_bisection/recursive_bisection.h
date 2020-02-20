@@ -21,7 +21,7 @@ namespace whfc_rb {
         }
 
         Partition run(CSRHypergraph& hg, double epsilon, std::string preset, uint k) {
-            epsilon = std::pow(1.0 + epsilon, 1.0 / std::log2(k)) - 1.0;
+            epsilon = std::pow(1.0 + epsilon, 1.0 / std::ceil(std::log2(k))) - 1.0;
 
             return partition_recursively(hg, epsilon, preset, k, true);
         }
