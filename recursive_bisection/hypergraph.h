@@ -59,8 +59,8 @@ public:
 	}
 
 	void initNodes(NodeID numNodes) {
-			    Vertices = CSR<NodeID, HyperedgeID>(numNodes + 1);
-			}
+        Vertices = CSR<NodeID, HyperedgeID>(numNodes + 1);
+    }
 	
 	const_range< std::vector<HyperedgeID> > hyperedgesOf(const NodeID u) const {
 		return Vertices.incidentElementsOf(u);
@@ -102,36 +102,43 @@ public:
 		return static_cast<NodeID>(E.incidence.size());
 	}
 	
-	std::vector<HyperedgeID>& xpins() {
+	std::vector<HyperedgeID>& vertexIncidences() {
 		return Vertices.incidence;
 	}
 
 	std::vector<Index>& indexPins() {
-			    return E.first_out;
-			}
-	
+		return E.first_out;
+	}
+
 	NodeWeight& nodeWeight(const NodeID u) {
 		return node_weights[u];
 	}
-
 	
-	HyperedgeWeight& hyperedgeWeight(const HyperedgeID u) {
-		return hyperedge_weights[u];
+	NodeWeight nodeWeight(const NodeID u) const {
+		return node_weights[u];
+	}
+	
+	HyperedgeWeight& hyperedgeWeight(const HyperedgeID e) {
+		return hyperedge_weights[e];
+	}
+	
+	HyperedgeWeight hyperedgeWeight(const HyperedgeID e) const {
+		return hyperedge_weights[e];
 	}
 
 	std::vector<NodeWeight>& nodeWeights() {
-			    return node_weights;
-			}
+		return node_weights;
+	}
 
-			std::vector<HyperedgeWeight>& hyperedgeWeights() {
-			    return hyperedge_weights;
-			}
-	
+	std::vector<HyperedgeWeight>& hyperedgeWeights() {
+		return hyperedge_weights;
+	}
+
 	void finishHyperedge(const HyperedgeID e) {
 		E.finishRow(e);
 	}
 	
-	void computeXPins() {
+	void computeVertexIncidences() {
 		// still need to compute Vertices.first_out
 		// and Vertices.incidence
 		

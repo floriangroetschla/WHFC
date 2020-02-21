@@ -56,7 +56,7 @@ public:
 
     static whfc_rb::Partition runPatoh(whfc_rb::CSRHypergraph& hg, int seed, PatohParameters params, std::string str_preset = "D") {
         // For output of PaToH
-        std::vector<whfc_rb::Partition::partitionID > vec_partition(hg.numNodes());
+        std::vector<whfc_rb::Partition::PartitionID > vec_partition(hg.numNodes());
         std::vector<int> vec_partweights(params.k, 0);
 
         PaToH_Parameters args;
@@ -106,7 +106,7 @@ public:
             PaToH_Free();
         }
 
-        return whfc_rb::Partition(vec_partition, static_cast<whfc_rb::Partition::partitionID>(params.k));
+        return whfc_rb::Partition(vec_partition, static_cast<whfc_rb::Partition::PartitionID>(params.k));
     }
 
     static int freePatoh() {

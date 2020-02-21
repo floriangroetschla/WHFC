@@ -3,6 +3,7 @@
 #include "../datastructure/flow_hypergraph_builder.h"
 #include "hypergraph.h"
 #include "../datastructure/queue.h"
+#include "partition.h"
 
 namespace whfc_rb {
     class FlowHypergraphBuilderExtractor {
@@ -21,7 +22,7 @@ namespace whfc_rb {
             whfc::Flow cutAtStake;
         };
 
-        ExtractorInfo run(CSRHypergraph& hg, const Partition& partition, const Partition::partitionID part0, const Partition::partitionID part1, CSRHypergraph::NodeWeight maxW0, CSRHypergraph::NodeWeight maxW1) {
+        ExtractorInfo run(CSRHypergraph& hg, const Partition& partition, const Partition::PartitionID part0, const Partition::PartitionID part1, CSRHypergraph::NodeWeight maxW0, CSRHypergraph::NodeWeight maxW1) {
             initialize(hg.numNodes(), hg.numHyperedges());
 
             std::vector<CSRHypergraph::HyperedgeID> cut_hes = partition.getCutEdges(hg, part0, part1);
@@ -118,7 +119,7 @@ namespace whfc_rb {
             }
         }
 
-        void processCutHyperedges(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const Partition& partition, const Partition::partitionID part0, const Partition::partitionID part1) {
+        void processCutHyperedges(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const Partition& partition, const Partition::PartitionID part0, const Partition::PartitionID part1) {
             for (CSRHypergraph::HyperedgeID e : cut_hes) {
                 bool connectToSource = false;
                 bool connectToTarget = false;

@@ -9,9 +9,6 @@
 namespace whfc_rb {
     class RecursiveBisector {
     public:
-        using PartitionID = int;
-        static constexpr PartitionID invalidPartition = std::numeric_limits<PartitionID>::max();
-        
         using NodeID = CSRHypergraph::NodeID;
         using HyperedgeID = CSRHypergraph::HyperedgeID;
 
@@ -78,6 +75,7 @@ namespace whfc_rb {
                         if (hyperedgeSize == 1) {
                             partHg.pins().pop_back();
                         } else if (hyperedgeSize > 1) {
+                            assert(partHg.indexPins().back() + hyperedgeSize == partHg.pins().size());
                             partHg.indexPins().push_back(partHg.indexPins().back() + hyperedgeSize);
                             partHg.hyperedgeWeights().push_back(hg.hyperedgeWeight(e));
                         }
@@ -90,7 +88,7 @@ namespace whfc_rb {
                     }
 
                     partHg.initNodes(carries[partID]);
-                    partHg.computeXPins();
+                    partHg.computeVertexIncidences();
 
                     sub_partitions[partID] = partition_recursively(partHg, epsilon, preset, numParts[partID], false);
 

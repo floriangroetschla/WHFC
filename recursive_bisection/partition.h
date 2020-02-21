@@ -1,18 +1,20 @@
 #pragma once
 
+#include <boost/dynamic_bitset.hpp>
 #include "hypergraph.h"
 
 namespace whfc_rb {
     class Partition {
     public:
-        using partitionID = uint32_t;
+        using PartitionID = uint32_t;
+        static constexpr PartitionID invalidPartition = std::numeric_limits<PartitionID>::max();
 
         explicit Partition() : partition(), num_parts(1) {}
-        explicit Partition(std::size_t size, partitionID num_parts) : partition(size, 0), num_parts(num_parts) {}
-        explicit Partition(std::vector<partitionID> vec_partition, partitionID num_parts) : partition(std::move(vec_partition)), num_parts(num_parts) {}
+        explicit Partition(std::size_t size, PartitionID num_parts) : partition(size, 0), num_parts(num_parts) {}
+        explicit Partition(std::vector<PartitionID> vec_partition, PartitionID num_parts) : partition(std::move(vec_partition)), num_parts(num_parts) {}
 
 
-        std::size_t partSize(CSRHypergraph& hg, partitionID id) const {
+        std::size_t partSize(CSRHypergraph& hg, PartitionID id) const {
             if (id >= num_parts) throw std::runtime_error("partition id out of range");
 
             std::size_t size = 0;
@@ -36,7 +38,7 @@ namespace whfc_rb {
             return partition.size();
         }
 
-        CSRHypergraph::NodeWeight weight(CSRHypergraph& hg, partitionID id) const {
+        CSRHypergraph::NodeWeight weight(CSRHypergraph& hg, PartitionID id) const {
             CSRHypergraph::NodeWeight weight(0);
 
             for (CSRHypergraph::NodeID u : hg.nodes()) {
@@ -56,7 +58,7 @@ namespace whfc_rb {
             return weights;
         }
 
-        std::vector<CSRHypergraph::NodeID> nodesOf(CSRHypergraph& hg, partitionID id) {
+        std::vector<CSRHypergraph::NodeID> nodesOf(CSRHypergraph& hg, PartitionID id) {
             if (id >= num_parts) throw std::runtime_error("partition id out of range");
 
             std::vector<CSRHypergraph::NodeID> nodes;
@@ -69,17 +71,17 @@ namespace whfc_rb {
             return nodes;
         }
 
-        partitionID& operator[](std::size_t idx) { return partition[idx]; }
+        PartitionID& operator[](std::size_t idx) { return partition[idx]; }
 
-        const partitionID& operator[](std::size_t idx) const { return partition[idx]; }
+        const PartitionID& operator[](std::size_t idx) const { return partition[idx]; }
 
-        partitionID* data() { return partition.data(); }
+        PartitionID* data() { return partition.data(); }
 
-        /*const_range<partitionID> entries() {
+        /*const_range<PartitionID> entries() {
             return {partition.begin(), partition.end()};
         }*/
 
-        std::size_t pinsInPart(CSRHypergraph& hg, partitionID id, CSRHypergraph::HyperedgeID e) const {
+        std::size_t pinsInPart(CSRHypergraph& hg, PartitionID id, CSRHypergraph::HyperedgeID e) const {
             std::size_t count = 0;
             for (CSRHypergraph::NodeID u : hg.pinsOf(e)) {
                 if (partition[u] == id) {
@@ -89,7 +91,7 @@ namespace whfc_rb {
             return count;
         }
 
-        std::vector<CSRHypergraph::HyperedgeID> getCutEdges(CSRHypergraph& hg, partitionID part0, partitionID part1) const {
+        std::vector<CSRHypergraph::HyperedgeID> getCutEdges(CSRHypergraph& hg, PartitionID part0, PartitionID part1) const {
             std::vector<CSRHypergraph::HyperedgeID> cut_hes;
 
             for (CSRHypergraph::HyperedgeID e : hg.hyperedges()) {
@@ -108,24 +110,45 @@ namespace whfc_rb {
 
         double imbalance(CSRHypergraph& hg) {
             std::vector<CSRHypergraph::NodeWeight> vec_partitionWeights = partitionWeights(hg);
-            CSRHypergraph::NodeWeight totalWeight = 0;
-            CSRHypergraph::NodeWeight maxPartWeight = 0;
-
-            for (uint i = 0; i < vec_partitionWeights.size(); ++i) {
-                if (vec_partitionWeights[i] > maxPartWeight) {
-                    maxPartWeight = vec_partitionWeights[i];
-                }
-                totalWeight += vec_partitionWeights[i];
-            }
-
+            CSRHypergraph::NodeWeight totalWeight = std::accumulate(vec_partitionWeights.begin(), vec_partitionWeights.end(), 0U);
+            CSRHypergraph::NodeWeight maxPartWeight = *std::max_element(vec_partitionWeights.begin(), vec_partitionWeights.end());
             return (static_cast<double>(maxPartWeight) * static_cast<double>(num_parts) / static_cast<double>(totalWeight)) - 1.0;
         }
+        
+        size_t km1Objective(const CSRHypergraph& hg) const {
+            size_t obj = 0;
+            boost::dynamic_bitset<> has_pins_in_part(num_parts);
+            for (CSRHypergraph::HyperedgeID e : hg.hyperedges()) {
+                for (CSRHypergraph::NodeID u : hg.pinsOf(e)) {
+                    has_pins_in_part.set( partition[u] );
+                }
+                obj += (has_pins_in_part.count() - 1) * hg.hyperedgeWeight(e);
+                has_pins_in_part.reset();
+            }
+            return obj;
+        }
+        
+        size_t cutObjective(const CSRHypergraph& hg) const {
+            size_t obj = 0;
+            for (CSRHypergraph::HyperedgeID e : hg.hyperedges()) {
+                PartitionID p = invalidPartition;
+                for (CSRHypergraph::NodeID u : hg.pinsOf(e)) {
+                    if (p == invalidPartition) {
+                        p = partition[u];
+                    } else if (partition[u] != p) {
+                        obj += hg.hyperedgeWeight(e);
+                        break;
+                    }
+                }
+            }
+            return obj;
+        }
 
-        partitionID numParts() {
+        PartitionID numParts() {
             return num_parts;
         }
 
-        void setNumParts(partitionID num) {
+        void setNumParts(PartitionID num) {
             num_parts = num;
         }
 
@@ -138,8 +161,8 @@ namespace whfc_rb {
         }
 
     private:
-        std::vector<partitionID> partition;
-        partitionID num_parts;
+        std::vector<PartitionID> partition;
+        PartitionID num_parts;
 
     };
 }

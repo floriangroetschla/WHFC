@@ -87,7 +87,7 @@ namespace whfc {
 				hg.nodeWeight(u) = nw;
 			}
 			
-			hg.computeXPins();
+			hg.computeVertexIncidences();
 			return hg;
 		}
 		
