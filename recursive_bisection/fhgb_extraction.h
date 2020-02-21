@@ -30,20 +30,19 @@ namespace whfc_rb {
             // shuffle cut edges
             std::shuffle(cut_hes.begin(), cut_hes.end(), mt);
 
-            whfc::NodeWeight w0, w1;
 
             // Add source node and run BFS in part0
             fhgb.addNode(whfc::NodeWeight(0));
             queue.push(invalid_node);
             queue.reinitialize();
-            BreadthFirstSearch(hg, cut_hes, partition, part0, maxW0, result.source, w0);
+            whfc::NodeWeight w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, maxW0, result.source);
 
             // Add target node and run BFS in part1
             result.target = whfc::Node::fromOtherValueType(fhgb.numNodes());
             fhgb.addNode(whfc::NodeWeight(0));
             queue.push(invalid_node);
             queue.reinitialize();
-            BreadthFirstSearch(hg, cut_hes, partition, part1, maxW1, result.target, w1);
+            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, maxW1, result.target);
 
             processCutHyperedges(hg, cut_hes, partition, part0, part1);
 
@@ -77,8 +76,8 @@ namespace whfc_rb {
             w += hg.nodeWeight(node);
         }
 
-        void BreadthFirstSearch(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const Partition& partition, uint partID, CSRHypergraph::NodeWeight maxWeight, whfc::Node terminal, whfc::NodeWeight& w) {
-            w = 0;
+        whfc::NodeWeight BreadthFirstSearch(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const Partition& partition, uint partID, CSRHypergraph::NodeWeight maxWeight, whfc::Node terminal) {
+            whfc::NodeWeight w = 0;
 
             // Collect boundary vertices
             for (CSRHypergraph::HyperedgeID e : cut_hes) {
@@ -93,7 +92,8 @@ namespace whfc_rb {
             while (!queue.empty()) {
                 CSRHypergraph::NodeID u = queue.pop();
                 for (CSRHypergraph::HyperedgeID e : hg.hyperedgesOf(u)) {
-                    if (hg.pinCount(e) == partition.pinsInPart(hg, partID, e) && hg.pinCount(e) > 1 && !visitedHyperedge[e]) {
+                    // TODO condition must be: has at least one pin in partID and no pins in opposite part of the currently refining bipartition. if objective = cut we can also exclude e if it has pins in any other block than part0 or part1
+                    if (hg.pinCount(e) > 1 && !visitedHyperedge[e] && hg.pinCount(e) == partition.pinsInPart(hg, partID, e)) {
 
                         visitedHyperedge[e] = true;
                         fhgb.startHyperedge(hg.hyperedgeWeight(e));
@@ -117,6 +117,8 @@ namespace whfc_rb {
                     }
                 }
             }
+
+            return w;
         }
 
         void processCutHyperedges(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const Partition& partition, const Partition::PartitionID part0, const Partition::PartitionID part1) {
@@ -131,8 +133,8 @@ namespace whfc_rb {
                     if (visitedNode[v]) {
                         fhgb.addPin(globalToLocalID[v]);
                     } else {
-                        connectToSource |= (partition[v] == 0);
-                        connectToTarget |= (partition[v] == 1);
+                        connectToSource |= (partition[v] == part0);
+                        connectToTarget |= (partition[v] == part1);
                         if (connectToSource && connectToTarget) {
                             break;
                         }
