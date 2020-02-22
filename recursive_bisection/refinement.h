@@ -12,9 +12,9 @@ namespace whfc_rb {
         using NodeID = CSRHypergraph::NodeID;
         using HyperedgeID = CSRHypergraph::HyperedgeID;
 
-        WHFCRefiner(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937& mt) :
+        WHFCRefiner(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937& mt, whfc::TimeReporter& timer) :
             extractor(maxNumNodes, maxNumEdges, maxNumPins, mt),
-            hfc(extractor.fhgb, mt()), mt(mt) {
+            hfc(extractor.fhgb, mt()), mt(mt), timer(timer) {
 
         }
 
@@ -28,8 +28,11 @@ namespace whfc_rb {
             whfc::NodeWeight maxBlockWeight0 = std::ceil(maxFractionPart0 * totalWeight);
             whfc::NodeWeight maxBlockWeight1 = std::ceil(maxFractionPart1 * totalWeight);
 
+            timer.start("Extraction", "Refinement");
             FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(hg, partition, 0, 1, maxW0, maxW1);
+            timer.stop("Extraction");
 
+            //extractor.fhgb.printHypergraph(std::cout);
 
             // call WHFC to improve the bisection
             hfc.reset();
@@ -39,7 +42,9 @@ namespace whfc_rb {
 
             if (extractor_info.cutAtStake - extractor_info.baseCut == 0) return false;
 
+            timer.start("WHFC", "Refinement");
             bool hfc_result = hfc.runUntilBalancedOrFlowBoundExceeded(extractor_info.source, extractor_info.target);
+            timer.stop("WHFC");
 
             if (!hfc_result) return false;
 
@@ -58,7 +63,8 @@ namespace whfc_rb {
     private:
         FlowHypergraphBuilderExtractor extractor;
         whfc::HyperFlowCutter<whfc::Dinic> hfc;
-        std::mt19937 mt;
+        std::mt19937& mt;
+        whfc::TimeReporter& timer;
 
         void reassign(Partition& partition, CSRHypergraph& hg, FlowHypergraphBuilderExtractor::ExtractorInfo& info) {
             for (whfc::Node localID : extractor.localNodeIDs()) {

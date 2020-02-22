@@ -3,29 +3,24 @@
 #include <iostream>
 #include "extern/patoh_wrapper.h"
 #include "recursive_bisection/recursive_bisection.h"
-#include <random>
 #include "util/timer.h"
 
 int main(int argc, const char* argv[]) {
-    
+
     if (argc != 4) {
-        throw std::runtime_error("Usage ./RecursiveBisection HypergraphFile epsilon k");
+        throw std::runtime_error("Usage ./PaToH HypergraphFile epsilon k");
     }
-    //whfc_rb::CSRHypergraph hg = whfc::HMetisIO::readCSRHypergraph("../test_hypergraphs/testhg.hgr");
     whfc_rb::CSRHypergraph hg = whfc::HMetisIO::readCSRHypergraph(argv[1]);
     double epsilon = std::stod(argv[2]);
     uint numParts = std::stoul(argv[3]);
     std::string patoh_preset = "D";
-    //whfc_rb::CSRHypergraph hg = whfc::HMetisIO::readCSRHypergraph("../test_hypergraphs/twocenters.hgr");
 
-    std::mt19937 mt(42);
 
     whfc::TimeReporter timer;
 
-    whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector(hg.numNodes(), hg.numHyperedges(), hg.numPins(), mt, timer);
-    timer.start("Recursive bisector");
-    whfc_rb::Partition partition = recursive_bisector.run(hg, epsilon, patoh_preset, numParts);
-    timer.stop("Recursive bisector");
+    timer.start("PaToH");
+    whfc_rb::Partition partition = PaToHInterface::partitionWithPatoh(hg, 42, numParts, epsilon, patoh_preset);
+    timer.stop("PaToH");
     timer.report(std::cout);
     //partition.print(std::cout);
     std::cout << "Imbalance: " << partition.imbalance(hg) << std::endl;

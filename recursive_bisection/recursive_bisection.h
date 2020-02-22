@@ -12,8 +12,8 @@ namespace whfc_rb {
         using NodeID = CSRHypergraph::NodeID;
         using HyperedgeID = CSRHypergraph::HyperedgeID;
 
-        RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937& mt) :
-            refiner(maxNumNodes, maxNumEdges, maxNumPins, mt), mt(mt) {
+        RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937& mt, whfc::TimeReporter& timer) :
+            refiner(maxNumNodes, maxNumEdges, maxNumPins, mt, timer), mt(mt), timer(timer) {
 
         }
 
@@ -26,6 +26,7 @@ namespace whfc_rb {
     private:
         WHFCRefiner refiner;
         std::mt19937& mt;
+        whfc::TimeReporter& timer;
 
         Partition partition_recursively(CSRHypergraph& hg, double epsilon, std::string preset, uint k, bool alloc) {
             if (k == 1) {
@@ -35,6 +36,7 @@ namespace whfc_rb {
             std::array<int, 2> numParts;
             Partition partition;
 
+            timer.start("PaToH", "Recursive bisector");
             if (k % 2 == 0) {
                 numParts[0] = k / 2;
                 numParts[1] = k / 2;
@@ -44,11 +46,14 @@ namespace whfc_rb {
                 numParts[1] = numParts[0] + 1;
                 partition = PaToHInterface::bisectImbalancedWithPatoh(hg, mt(), float(numParts[1]) / float(numParts[0]), epsilon, preset, alloc, false);
             }
+            timer.stop("PaToH");
 
             double maxFractionPart0 = (1.0 + epsilon) * numParts[0] / k;
             double maxFractionPart1 = (1.0 + epsilon) * numParts[1] / k;
 
+            timer.start("Refinement", "Recursive bisector");
             bool result = refiner.refine(partition, hg, maxFractionPart0, maxFractionPart1);
+            timer.stop("Refinement");
             std::cout << "Refinement result: " << result << std::endl;
 
             if (k > 2) {

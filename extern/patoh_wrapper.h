@@ -44,14 +44,14 @@ public:
         return runPatoh(hg, seed, p, preset);
     }
 
-    /*static std::vector<int> partitionWithPatoh(const FlowHypergraph& hg, int seed, int numPartitions, double epsilon=0.05,
+    static whfc_rb::Partition partitionWithPatoh(whfc_rb::CSRHypergraph& hg, int seed, int numPartitions, double epsilon=0.05,
                                                std::string preset = "D") {
         PatohParameters p;
         p.use_target_weights = false;
         p.k = numPartitions;
         p.epsilon = epsilon;
         return runPatoh(hg, seed, p, preset);
-    }*/
+    }
 
 
     static whfc_rb::Partition runPatoh(whfc_rb::CSRHypergraph& hg, int seed, PatohParameters params, std::string str_preset = "D") {
