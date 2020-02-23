@@ -28,11 +28,11 @@ namespace whfc_rb {
             whfc::NodeWeight maxBlockWeight0 = std::ceil(maxFractionPart0 * totalWeight);
             whfc::NodeWeight maxBlockWeight1 = std::ceil(maxFractionPart1 * totalWeight);
 
+            double imbalanceBefore = std::max(partWeights[0] / (maxFractionPart0 * totalWeight), partWeights[1] / (maxFractionPart1 + totalWeight));
+
             timer.start("Extraction", "Refinement");
             FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(hg, partition, 0, 1, maxW0, maxW1);
             timer.stop("Extraction");
-
-            //extractor.fhgb.printHypergraph(std::cout);
 
             // call WHFC to improve the bisection
             hfc.reset();
@@ -50,11 +50,11 @@ namespace whfc_rb {
 
             whfc::Flow newCut = extractor_info.baseCut + hfc.cs.flowValue;
 
-            if (newCut < extractor_info.cutAtStake) {
+            double imbalanceAfter = std::max(hfc.cs.n.sourceReachableWeight / (maxFractionPart0 * totalWeight), hfc.cs.n.targetReachableWeight / (maxFractionPart1 + totalWeight));
+
+            if (newCut < extractor_info.cutAtStake || (newCut == extractor_info.cutAtStake && imbalanceAfter < imbalanceBefore)) {
                 reassign(partition, hg, extractor_info);
                 return true;
-            } else if (newCut == extractor_info.cutAtStake) {
-
             }
 
             return false;

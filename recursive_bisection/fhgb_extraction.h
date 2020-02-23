@@ -35,14 +35,14 @@ namespace whfc_rb {
             fhgb.addNode(whfc::NodeWeight(0));
             queue.push(invalid_node);
             queue.reinitialize();
-            whfc::NodeWeight w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, maxW0, result.source);
+            whfc::NodeWeight w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source);
 
             // Add target node and run BFS in part1
             result.target = whfc::Node::fromOtherValueType(fhgb.numNodes());
             fhgb.addNode(whfc::NodeWeight(0));
             queue.push(invalid_node);
             queue.reinitialize();
-            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, maxW1, result.target);
+            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target);
 
             processCutHyperedges(hg, cut_hes, partition, part0, part1);
 
@@ -76,7 +76,7 @@ namespace whfc_rb {
             w += hg.nodeWeight(node);
         }
 
-        whfc::NodeWeight BreadthFirstSearch(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const Partition& partition, uint partID, CSRHypergraph::NodeWeight maxWeight, whfc::Node terminal) {
+        whfc::NodeWeight BreadthFirstSearch(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const Partition& partition, uint partID, uint otherPartID, CSRHypergraph::NodeWeight maxWeight, whfc::Node terminal) {
             whfc::NodeWeight w = 0;
 
             // Collect boundary vertices
@@ -92,9 +92,7 @@ namespace whfc_rb {
             while (!queue.empty()) {
                 CSRHypergraph::NodeID u = queue.pop();
                 for (CSRHypergraph::HyperedgeID e : hg.hyperedgesOf(u)) {
-                    // TODO condition must be: has at least one pin in partID and no pins in opposite part of the currently refining bipartition. if objective = cut we can also exclude e if it has pins in any other block than part0 or part1
-                    if (hg.pinCount(e) > 1 && !visitedHyperedge[e] && hg.pinCount(e) == partition.pinsInPart(hg, partID, e)) {
-
+                    if (partition.pinsInPart(hg, otherPartID, e) == 0 && partition.pinsInPart(hg, partID, e) > 1 && !visitedHyperedge[e]) {
                         visitedHyperedge[e] = true;
                         fhgb.startHyperedge(hg.hyperedgeWeight(e));
                         bool connectToTerminal = false;
