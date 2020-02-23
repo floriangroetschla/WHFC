@@ -20,7 +20,7 @@ int main(int argc, const char* argv[]) {
 
     std::mt19937 mt(42);
 
-    whfc::TimeReporter timer;
+    whfc::TimeReporter timer("Recursive bisector");
 
     whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector(hg.numNodes(), hg.numHyperedges(), hg.numPins(), mt, timer);
     timer.start("Recursive bisector");
