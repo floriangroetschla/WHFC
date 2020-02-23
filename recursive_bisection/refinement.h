@@ -9,8 +9,6 @@ namespace whfc_rb {
     class WHFCRefiner {
     public:
         using PartitionID = int;
-        using NodeID = CSRHypergraph::NodeID;
-        using HyperedgeID = CSRHypergraph::HyperedgeID;
 
         WHFCRefiner(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937& mt, whfc::TimeReporter& timer) :
             extractor(maxNumNodes, maxNumEdges, maxNumPins, mt),
@@ -19,8 +17,8 @@ namespace whfc_rb {
         }
 
         bool refine(Partition& partition, CSRHypergraph& hg, double maxFractionPart0, double maxFractionPart1) {
-            std::vector<CSRHypergraph::NodeWeight> partWeights = partition.partitionWeights(hg);
-            CSRHypergraph::NodeWeight totalWeight = partWeights[0] + partWeights[1];
+            std::vector<NodeWeight> partWeights = partition.partitionWeights(hg);
+            NodeWeight totalWeight = partWeights[0] + partWeights[1];
 
             double maxW0 = 0.2 * partWeights[0];
             double maxW1 = 0.2 * partWeights[1];

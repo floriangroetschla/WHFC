@@ -9,8 +9,6 @@
 namespace whfc_rb {
     class RecursiveBisector {
     public:
-        using NodeID = CSRHypergraph::NodeID;
-        using HyperedgeID = CSRHypergraph::HyperedgeID;
 
         RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937& mt, whfc::TimeReporter& timer) :
             refiner(maxNumNodes, maxNumEdges, maxNumPins, mt, timer), mt(mt), timer(timer) {

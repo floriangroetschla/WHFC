@@ -11,6 +11,11 @@ namespace whfc_rb {
 
 using Index = uint32_t ;
 
+using HyperedgeWeight = uint32_t;
+using HyperedgeID = uint32_t;
+using NodeWeight = uint32_t;
+using NodeID = uint32_t;
+
 template<typename RowID, typename ColumnID>
 class CSR {
 public:
@@ -46,11 +51,6 @@ public:
 
 class CSRHypergraph {
 public:
-	using HyperedgeWeight = uint32_t;
-	using HyperedgeID = uint32_t;
-	using NodeWeight = uint32_t;
-	using NodeID = uint32_t;
-	
 	CSRHypergraph(const NodeID numNodes = 0, const HyperedgeID numHyperedges = 0) :
 			Vertices(numNodes + 1), /* +1 is a hack to abuse the first_out array for the prefix sum without reverse sweep reset */
 			E(numHyperedges), node_weights(numNodes, 1), hyperedge_weights(numHyperedges, 1)

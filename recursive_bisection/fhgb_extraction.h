@@ -8,7 +8,7 @@
 namespace whfc_rb {
     class FlowHypergraphBuilderExtractor {
     public:
-        static constexpr CSRHypergraph::NodeID invalid_node = std::numeric_limits<CSRHypergraph::NodeID>::max();
+        static constexpr NodeID invalid_node = std::numeric_limits<NodeID>::max();
 
         whfc::FlowHypergraphBuilder fhgb;
 
@@ -22,10 +22,10 @@ namespace whfc_rb {
             whfc::Flow cutAtStake;
         };
 
-        ExtractorInfo run(CSRHypergraph& hg, const Partition& partition, const Partition::PartitionID part0, const Partition::PartitionID part1, CSRHypergraph::NodeWeight maxW0, CSRHypergraph::NodeWeight maxW1) {
+        ExtractorInfo run(CSRHypergraph& hg, const Partition& partition, const Partition::PartitionID part0, const Partition::PartitionID part1, NodeWeight maxW0, NodeWeight maxW1) {
             initialize(hg.numNodes(), hg.numHyperedges());
 
-            std::vector<CSRHypergraph::HyperedgeID> cut_hes = partition.getCutEdges(hg, part0, part1);
+            std::vector<HyperedgeID> cut_hes = partition.getCutEdges(hg, part0, part1);
 
             // shuffle cut edges
             std::shuffle(cut_hes.begin(), cut_hes.end(), mt);
@@ -46,7 +46,7 @@ namespace whfc_rb {
 
             processCutHyperedges(hg, cut_hes, partition, part0, part1);
 
-            std::vector<CSRHypergraph::NodeWeight> totalWeights = partition.partitionWeights(hg);
+            std::vector<NodeWeight> totalWeights = partition.partitionWeights(hg);
 
             fhgb.nodeWeight(result.source) = totalWeights[0] - w0;
             fhgb.nodeWeight(result.target) = totalWeights[1] - w1;
@@ -57,18 +57,18 @@ namespace whfc_rb {
         }
 
         auto localNodeIDs() const { return boost::irange<whfc::Node>(whfc::Node(0), whfc::Node::fromOtherValueType(queue.queueEnd())); }
-        whfc::Node global2local(const CSRHypergraph::NodeID x) const {  assert(visitedNode[x]); return globalToLocalID[x]; }
-        CSRHypergraph::NodeID local2global(const whfc::Node x) const { return queue.elementAt(x); }
+        whfc::Node global2local(const NodeID x) const {  assert(visitedNode[x]); return globalToLocalID[x]; }
+        NodeID local2global(const whfc::Node x) const { return queue.elementAt(x); }
 
     private:
-        LayeredQueue<CSRHypergraph::NodeID> queue;
+        LayeredQueue<NodeID> queue;
         std::vector<bool> visitedNode;
         std::vector<bool> visitedHyperedge;
         std::vector<whfc::Node> globalToLocalID;
         ExtractorInfo result;
         std::mt19937& mt;
 
-        void visitNode(const CSRHypergraph::NodeID node, CSRHypergraph& hg, whfc::NodeWeight& w) {
+        void visitNode(const NodeID node, CSRHypergraph& hg, whfc::NodeWeight& w) {
             globalToLocalID[node] = whfc::Node::fromOtherValueType(fhgb.numNodes());
             queue.push(node);
             visitedNode[node] = true;
@@ -76,12 +76,12 @@ namespace whfc_rb {
             w += hg.nodeWeight(node);
         }
 
-        whfc::NodeWeight BreadthFirstSearch(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const Partition& partition, uint partID, uint otherPartID, CSRHypergraph::NodeWeight maxWeight, whfc::Node terminal) {
+        whfc::NodeWeight BreadthFirstSearch(CSRHypergraph& hg, const std::vector<HyperedgeID>& cut_hes, const Partition& partition, uint partID, uint otherPartID, NodeWeight maxWeight, whfc::Node terminal) {
             whfc::NodeWeight w = 0;
 
             // Collect boundary vertices
-            for (CSRHypergraph::HyperedgeID e : cut_hes) {
-                for (CSRHypergraph::NodeID v : hg.pinsOf(e)) {
+            for (HyperedgeID e : cut_hes) {
+                for (NodeID v : hg.pinsOf(e)) {
                     if (!visitedNode[v] && partition[v] == partID && w + hg.nodeWeight(v) <= maxWeight) {
                         visitNode(v, hg, w);
                     }
@@ -90,13 +90,13 @@ namespace whfc_rb {
 
             // Do the actual breadth first search
             while (!queue.empty()) {
-                CSRHypergraph::NodeID u = queue.pop();
-                for (CSRHypergraph::HyperedgeID e : hg.hyperedgesOf(u)) {
+                NodeID u = queue.pop();
+                for (HyperedgeID e : hg.hyperedgesOf(u)) {
                     if (partition.pinsInPart(hg, otherPartID, e) == 0 && partition.pinsInPart(hg, partID, e) > 1 && !visitedHyperedge[e]) {
                         visitedHyperedge[e] = true;
                         fhgb.startHyperedge(hg.hyperedgeWeight(e));
                         bool connectToTerminal = false;
-                        for (CSRHypergraph::NodeID v : hg.pinsOf(e)) {
+                        for (NodeID v : hg.pinsOf(e)) {
                             if (partition[v] == partID) {
                                 if (!visitedNode[v] && w + hg.nodeWeight(v) <= maxWeight) {
                                     visitNode(v, hg, w);
@@ -119,15 +119,15 @@ namespace whfc_rb {
             return w;
         }
 
-        void processCutHyperedges(CSRHypergraph& hg, const std::vector<CSRHypergraph::HyperedgeID>& cut_hes, const Partition& partition, const Partition::PartitionID part0, const Partition::PartitionID part1) {
-            for (CSRHypergraph::HyperedgeID e : cut_hes) {
+        void processCutHyperedges(CSRHypergraph& hg, const std::vector<HyperedgeID>& cut_hes, const Partition& partition, const Partition::PartitionID part0, const Partition::PartitionID part1) {
+            for (HyperedgeID e : cut_hes) {
                 bool connectToSource = false;
                 bool connectToTarget = false;
                 result.cutAtStake += hg.hyperedgeWeight(e);
                 visitedHyperedge[e] = true;
                 fhgb.startHyperedge(hg.hyperedgeWeight(e));
 
-                for (CSRHypergraph::NodeID v : hg.pinsOf(e)) {
+                for (NodeID v : hg.pinsOf(e)) {
                     if (visitedNode[v]) {
                         fhgb.addPin(globalToLocalID[v]);
                     } else {

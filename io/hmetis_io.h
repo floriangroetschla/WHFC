@@ -53,7 +53,7 @@ namespace whfc {
 			bool hasNodeWeights = hg_type == HGType::EdgeAndNodeWeights || hg_type == HGType::NodeWeights;
 			
 			whfc_rb::CSRHypergraph hg(numNodes, numHEs);
-			for (whfc_rb::CSRHypergraph::HyperedgeID e = 0; e < numHEs; ++e) {
+			for (whfc_rb::HyperedgeID e = 0; e < numHEs; ++e) {
 				mgetline(f, line);
 				std::istringstream iss(line);
 				uint32_t pin;
@@ -78,7 +78,7 @@ namespace whfc {
 			}
 			
 			for (Node u(0); u < numNodes; ++u) {
-				whfc_rb::CSRHypergraph::NodeWeight nw = 1;
+				whfc_rb::NodeWeight nw = 1;
 				if (hasNodeWeights) {
 					mgetline(f, line);
 					std::istringstream iss(line);
