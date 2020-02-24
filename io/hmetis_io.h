@@ -72,8 +72,8 @@ namespace whfc {
 					hg.pins().push_back(pin - 1);
 					he_size++;
 				}
-				if (he_size <= 1)
-					throw std::runtime_error("File: " + filename + " has hyperedge with zero or one pins.");
+				//if (he_size <= 1)
+				//	throw std::runtime_error("File: " + filename + " has hyperedge with zero or one pins.");
 				hg.finishHyperedge(e);
 			}
 			
