@@ -92,8 +92,7 @@ namespace whfc_rb {
             while (!queue.empty()) {
                 NodeID u = queue.pop();
                 for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                    if (partition.pinsInPart(hg, otherPartID, e) == 0 && partition.pinsInPart(hg, partID, e) > 1 && !visitedHyperedge[e]) {
-                        visitedHyperedge[e] = true;
+                    if (!visitedHyperedge[e] && partition.pinsInPart(hg, otherPartID, e) == 0 && partition.pinsInPart(hg, partID, e) > 1) {
                         fhgb.startHyperedge(hg.hyperedgeWeight(e));
                         bool connectToTerminal = false;
                         for (NodeID v : hg.pinsOf(e)) {
@@ -113,6 +112,7 @@ namespace whfc_rb {
                             fhgb.addPin(terminal);
                         }
                     }
+                    visitedHyperedge[e] = true;
                 }
             }
 
