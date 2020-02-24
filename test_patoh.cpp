@@ -7,19 +7,20 @@
 
 int main(int argc, const char* argv[]) {
 
-    if (argc != 4) {
-        throw std::runtime_error("Usage ./PaToH HypergraphFile epsilon k");
+    if (argc != 6) {
+        throw std::runtime_error("Usage ./PaToH HypergraphFile epsilon k seed preset");
     }
     whfc_rb::CSRHypergraph hg = whfc::HMetisIO::readCSRHypergraph(argv[1]);
     double epsilon = std::stod(argv[2]);
     uint numParts = std::stoul(argv[3]);
-    std::string patoh_preset = "D";
+    int seed = std::stoi(argv[4]);
+    std::string patoh_preset = argv[5];
 
 
     whfc::TimeReporter timer;
 
     timer.start("PaToH");
-    whfc_rb::Partition partition = PaToHInterface::partitionWithPatoh(hg, 42, numParts, epsilon, patoh_preset);
+    whfc_rb::Partition partition = PaToHInterface::partitionWithPatoh(hg, seed, numParts, epsilon, patoh_preset);
     timer.stop("PaToH");
     timer.report(std::cout);
     //partition.print(std::cout);
