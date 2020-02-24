@@ -36,7 +36,7 @@ namespace whfc {
 			piercer.reset();
 			flow_algo.reset();
 			upperFlowBound = maxFlow;
-			//timer.clear();
+			timer.clear();
 		}
 		
 		void setPiercingNode(const Node piercingNode) {
@@ -111,6 +111,7 @@ namespace whfc {
 		}
 
 		bool runUntilBalancedOrFlowBoundExceeded(const Node s, const Node t) {
+			timer.start("HyperFlowCutter");
 			cs.initialize(s,t);
 			bool piercingFailedOrFlowBoundReachedWithNonAAPPiercingNode = false;
 			bool has_balanced_cut = false;
@@ -145,7 +146,8 @@ namespace whfc {
 			if (cs.currentViewDirection() != 0) {
 				cs.flipViewDirection();
 			}
-			
+
+			timer.stop("HyperFlowCutter");
 			return !piercingFailedOrFlowBoundReachedWithNonAAPPiercingNode && cs.flowValue <= upperFlowBound && has_balanced_cut;
 		}
 		

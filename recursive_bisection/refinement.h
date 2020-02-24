@@ -3,6 +3,7 @@
 #include "fhgb_extraction.h"
 #include "../algorithm/hyperflowcutter.h"
 #include "../algorithm/dinic.h"
+#include "../io/whfc_io.h"
 #include <random>
 
 namespace whfc_rb {
@@ -32,6 +33,7 @@ namespace whfc_rb {
             FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(hg, partition, 0, 1, maxW0, maxW1);
             timer.stop("Extraction");
 
+
             // call WHFC to improve the bisection
             hfc.reset();
             hfc.cs.setMaxBlockWeight(0, maxBlockWeight0);
@@ -39,6 +41,11 @@ namespace whfc_rb {
             hfc.upperFlowBound = extractor_info.cutAtStake - extractor_info.baseCut;
 
             if (extractor_info.cutAtStake - extractor_info.baseCut == 0) return false;
+
+            static constexpr bool write_snapshot = false;
+            if constexpr (write_snapshot) {
+                writeSnapshot(extractor_info);
+            }
 
             timer.start("WHFC", "Refinement");
             bool hfc_result = hfc.runUntilBalancedOrFlowBoundExceeded(extractor_info.source, extractor_info.target);
@@ -64,6 +71,8 @@ namespace whfc_rb {
         std::mt19937& mt;
         whfc::TimeReporter& timer;
 
+        size_t instance_counter = 0;
+
         void reassign(Partition& partition, CSRHypergraph& hg, FlowHypergraphBuilderExtractor::ExtractorInfo& info) {
             for (whfc::Node localID : extractor.localNodeIDs()) {
                 if (localID == info.source || localID == info.target) continue;
@@ -72,5 +81,20 @@ namespace whfc_rb {
                 partition[globalID] = newPart;
             }
         }
+
+        void writeSnapshot(FlowHypergraphBuilderExtractor::ExtractorInfo& extractor_info) {
+            whfc::WHFC_IO::WHFCInformation i = {
+                    { hfc.cs.maxBlockWeight(0), hfc.cs.maxBlockWeight(1) },
+                    extractor_info.cutAtStake - extractor_info.baseCut,
+                    extractor_info.source,
+                    extractor_info.target
+            };
+            std::string hg_filename = "Snapshot" + std::to_string(instance_counter);
+            instance_counter++;
+            std::cout << "Wrote snapshot: " << hg_filename << std::endl;
+            whfc::HMetisIO::writeFlowHypergraph(extractor.fhgb, hg_filename);
+            whfc::WHFC_IO::writeAdditionalInformation(hg_filename, i, hfc.cs.rng);
+        }
+
     };
 }

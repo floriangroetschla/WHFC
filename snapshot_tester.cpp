@@ -11,19 +11,23 @@
 
 namespace whfc {
 	void runSnapshotTester(const std::string& filename) {
-		
-		using FlowAlgorithm = Dinic;
-		//using FlowAlgorithm = ScalingDinic;
+
+
+
+		//using FlowAlgorithm = Dinic;
+		using FlowAlgorithm = ScalingDinic;
 		
 		WHFC_IO::WHFCInformation info = WHFC_IO::readAdditionalInformation(filename);
 		Node s = info.s;
 		Node t = info.t;
 		std::cout << s << " " << t << " " << info.maxBlockWeight[0] << " " << info.maxBlockWeight[1] << " " << info.upperFlowBound<< std::endl;
-		
+
 		FlowHypergraphBuilder hg = HMetisIO::readFlowHypergraphWithBuilder(filename);
 		if (s >= hg.numNodes() || t >= hg.numNodes())
 			throw std::runtime_error("s or t not within node id range");
-		
+
+		std::cout << hg.numNodes() << " " << hg.numHyperedges() << " " << hg.numPins() << std::endl;
+
 		int seed = 42;
 		HyperFlowCutter<FlowAlgorithm> hfc(hg, seed);
 		hfc.upperFlowBound = info.upperFlowBound;
@@ -32,12 +36,8 @@ namespace whfc {
 		
 		WHFC_IO::readRandomGeneratorState(filename, hfc.cs.rng);
 		
-		hfc.timer.start();
 		hfc.runUntilBalancedOrFlowBoundExceeded(s, t);
-		hfc.timer.stop();
-		hfc.timer.report(std::cout);
-		hfc.timer.clear();
-		
+
 		std::cout << "Reread" << std::endl;
 		HMetisIO::readFlowHypergraphWithBuilder(hg, filename);
 		WHFC_IO::readRandomGeneratorState(filename, hfc.cs.rng);
@@ -47,13 +47,7 @@ namespace whfc {
 		hfc.upperFlowBound = info.upperFlowBound;
 		std::cout << "Run again" << std::endl;
 		
-		hfc.timer.start();
 		hfc.runUntilBalancedOrFlowBoundExceeded(s, t);
-		hfc.timer.stop();
-		hfc.timer.report(std::cout);
-		hfc.timer.clear();
-		
-		
 	}
 }
 
