@@ -14,7 +14,7 @@ namespace whfc_rb {
         WHFCRefiner(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937& mt, whfc::TimeReporter& timer) :
             extractor(maxNumNodes, maxNumEdges, maxNumPins, mt),
             hfc(extractor.fhgb, mt()), mt(mt), timer(timer) {
-
+                hfc.timer.active = false;
         }
 
         bool refine(Partition& partition, CSRHypergraph& hg, double maxFractionPart0, double maxFractionPart1) {
