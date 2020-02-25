@@ -34,7 +34,7 @@ namespace whfc_rb {
             std::array<int, 2> numParts;
             Partition partition;
 
-            timer.start("PaToH", "Recursive bisector");
+            timer.start("PaToH", "RecursiveBisector");
             if (k % 2 == 0) {
                 numParts[0] = k / 2;
                 numParts[1] = k / 2;
@@ -49,7 +49,7 @@ namespace whfc_rb {
             double maxFractionPart0 = (1.0 + epsilon) * numParts[0] / k;
             double maxFractionPart1 = (1.0 + epsilon) * numParts[1] / k;
 
-            timer.start("Refinement", "Recursive bisector");
+            timer.start("Refinement", "RecursiveBisector");
             refiner.refine(partition, hg, maxFractionPart0, maxFractionPart1);
             timer.stop("Refinement");
             //std::cout << "Refinement result: " << result << std::endl;
