@@ -11,7 +11,7 @@ namespace whfc_rb {
     public:
 
         RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937& mt, whfc::TimeReporter& timer) :
-            refiner(maxNumNodes, maxNumEdges, maxNumPins, mt, timer), mt(mt), timer(timer) {
+            mt(mt), timer(timer) {
 
         }
 
@@ -22,7 +22,6 @@ namespace whfc_rb {
         }
 
     private:
-        WHFCRefiner refiner;
         std::mt19937& mt;
         whfc::TimeReporter& timer;
 
@@ -48,11 +47,6 @@ namespace whfc_rb {
 
             double maxFractionPart0 = (1.0 + epsilon) * numParts[0] / k;
             double maxFractionPart1 = (1.0 + epsilon) * numParts[1] / k;
-
-            timer.start("Refinement", "RecursiveBisector");
-            refiner.refine(partition, hg, maxFractionPart0, maxFractionPart1);
-            timer.stop("Refinement");
-            //std::cout << "Refinement result: " << result << std::endl;
 
             if (k > 2) {
                 partition.setNumParts(k);
@@ -94,7 +88,6 @@ namespace whfc_rb {
                     partHg.computeVertexIncidences();
 
                     sub_partitions[partID] = partition_recursively(partHg, epsilon, preset, numParts[partID], false);
-
                 }
 
                 for (uint i = 0; i < partition.size(); ++i) {
@@ -105,6 +98,7 @@ namespace whfc_rb {
 			if (alloc) {
 				PaToHInterface::freePatoh();
 			}
+
 			return partition;
         }
     };
