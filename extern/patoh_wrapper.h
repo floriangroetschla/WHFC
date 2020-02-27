@@ -18,7 +18,7 @@ public:
         bool free;
     };
 
-    static whfc_rb::Partition bisectImbalancedWithPatoh(whfc_rb::CSRHypergraph& hg,
+    static void bisectImbalancedWithPatoh(whfc_rb::Partition& partition,
                                                       int seed,
                                                       float imbalanceFactor,
                                                       double epsilon=0.05,
@@ -30,10 +30,10 @@ public:
         p.target_weights = { float(1), float(imbalanceFactor) };	// Note(Lars): I think these might be just upper bounds on the part weights.
         p.alloc = alloc;
         p.free = free;
-        return runPatoh(hg, seed, p, preset);
+        runPatoh(partition, seed, p, preset);
     }
 
-    static whfc_rb::Partition bisectWithPatoh(whfc_rb::CSRHypergraph &hg,
+    static void bisectWithPatoh(whfc_rb::Partition& partition,
                                             int seed,
                                             double epsilon=0.0,
                                             std::string preset = "D", bool alloc = true, bool free = true) {
@@ -41,22 +41,23 @@ public:
         p.alloc = alloc;
         p.free = free;
 
-        return runPatoh(hg, seed, p, preset);
+        runPatoh(partition, seed, p, preset);
     }
 
-    static whfc_rb::Partition partitionWithPatoh(whfc_rb::CSRHypergraph& hg, int seed, int numPartitions, double epsilon=0.05,
+    static void partitionWithPatoh(whfc_rb::Partition& partition, int seed, int numPartitions, double epsilon=0.05,
                                                std::string preset = "D") {
         PatohParameters p;
         p.use_target_weights = false;
         p.k = numPartitions;
         p.epsilon = epsilon;
-        return runPatoh(hg, seed, p, preset);
+        runPatoh(partition, seed, p, preset);
     }
 
 
-    static whfc_rb::Partition runPatoh(whfc_rb::CSRHypergraph& hg, int seed, PatohParameters params, std::string str_preset = "D") {
+    static void runPatoh(whfc_rb::Partition& partition, int seed, PatohParameters params, std::string str_preset = "D") {
+        whfc_rb::CSRHypergraph& hg = partition.getGraph();
         // For output of PaToH
-        std::vector<whfc_rb::Partition::PartitionID > vec_partition(hg.numNodes());
+        //std::vector<whfc_rb::Partition::PartitionID > vec_partition(hg.numNodes());
         std::vector<int> vec_partweights(params.k, 0);
 
         PaToH_Parameters args;
@@ -83,7 +84,7 @@ public:
         n = hg.numHyperedges();		// Note(Lars): Use static_cast<desired_type>( value )
         c = hg.numNodes();
         nconst = 1;
-        partvec = reinterpret_cast<int*>(vec_partition.data());
+        partvec = reinterpret_cast<int*>(partition.data());
         partweights = vec_partweights.data();
         cwghts = reinterpret_cast<int*>(hg.nodeWeights().data());
         nwghts = reinterpret_cast<int*>(hg.hyperedgeWeights().data());
@@ -105,8 +106,7 @@ public:
         if (params.free) {
             PaToH_Free();
         }
-
-        return whfc_rb::Partition(vec_partition, static_cast<whfc_rb::Partition::PartitionID>(params.k));
+        partition.recompute();
     }
 
     static int freePatoh() {

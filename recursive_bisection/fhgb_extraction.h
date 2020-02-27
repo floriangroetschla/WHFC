@@ -22,10 +22,11 @@ namespace whfc_rb {
             whfc::Flow cutAtStake;
         };
 
-        ExtractorInfo run(CSRHypergraph& hg, const Partition& partition, const Partition::PartitionID part0, const Partition::PartitionID part1, NodeWeight maxW0, NodeWeight maxW1) {
+        ExtractorInfo run(Partition& partition, const Partition::PartitionID part0, const Partition::PartitionID part1, NodeWeight maxW0, NodeWeight maxW1) {
+            CSRHypergraph& hg = partition.getGraph();
             initialize(hg.numNodes(), hg.numHyperedges());
 
-            std::vector<HyperedgeID> cut_hes = partition.getCutEdges(hg, part0, part1);
+            std::vector<HyperedgeID> cut_hes = partition.getCutEdges(part0, part1);
 
             // shuffle cut edges
             std::shuffle(cut_hes.begin(), cut_hes.end(), mt);
@@ -46,7 +47,7 @@ namespace whfc_rb {
 
             processCutHyperedges(hg, cut_hes, partition, part0, part1);
 
-            std::vector<NodeWeight> totalWeights = partition.partitionWeights(hg);
+            std::vector<NodeWeight> totalWeights = partition.partitionWeights();
 
             fhgb.nodeWeight(result.source) = totalWeights[0] - w0;
             fhgb.nodeWeight(result.target) = totalWeights[1] - w1;
@@ -92,7 +93,7 @@ namespace whfc_rb {
             while (!queue.empty()) {
                 NodeID u = queue.pop();
                 for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                    if (!visitedHyperedge[e] && partition.pinsInPart(hg, otherPartID, e) == 0 && partition.pinsInPart(hg, partID, e) > 1) {
+                    if (!visitedHyperedge[e] && partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
                         fhgb.startHyperedge(hg.hyperedgeWeight(e));
                         bool connectToTerminal = false;
                         for (NodeID v : hg.pinsOf(e)) {

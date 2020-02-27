@@ -18,14 +18,15 @@ int main(int argc, const char* argv[]) {
 
 
     whfc::TimeReporter timer;
+    whfc_rb::Partition partition(numParts, hg);
 
     timer.start("PaToH");
-    whfc_rb::Partition partition = PaToHInterface::partitionWithPatoh(hg, seed, numParts, epsilon, patoh_preset);
+    PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset);
     timer.stop("PaToH");
     timer.report(std::cout);
     //partition.print(std::cout);
-    std::cout << "Imbalance: " << partition.imbalance(hg) << std::endl;
+    std::cout << "Imbalance: " << partition.imbalance() << std::endl;
     std::cout << "Num parts: " << partition.numParts() << std::endl;
-    std::cout << "km1: " << partition.km1Objective(hg) << std::endl;
-    std::cout << "cut: " << partition.cutObjective(hg) << std::endl;
+    std::cout << "km1: " << partition.km1Objective() << std::endl;
+    std::cout << "cut: " << partition.cutObjective() << std::endl;
 }

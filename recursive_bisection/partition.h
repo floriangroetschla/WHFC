@@ -9,69 +9,33 @@ namespace whfc_rb {
         using PartitionID = uint32_t;
         static constexpr PartitionID invalidPartition = std::numeric_limits<PartitionID>::max();
 
-        explicit Partition() : partition(), num_parts(1) {}
-        explicit Partition(std::size_t size, PartitionID num_parts) : partition(size, 0), num_parts(num_parts) {}
-        explicit Partition(std::vector<PartitionID> vec_partition, PartitionID num_parts) : partition(std::move(vec_partition)), num_parts(num_parts) {}
-
-
-        std::size_t partSize(CSRHypergraph& hg, PartitionID id) const {
-            if (id >= num_parts) throw std::runtime_error("partition id out of range");
-
-            std::size_t size = 0;
-            for (NodeID u : hg.nodes()) {
-                if (partition[u] == id) { size++; }
-            }
-            return size;
+        //explicit Partition() : partition(), num_parts(1) {}
+        explicit Partition(PartitionID num_parts, CSRHypergraph& hg) : partition(hg.numNodes(), 0), hg(hg), num_parts(num_parts), vec_pinsInPart(hg.numHyperedges(), std::vector<std::size_t>(num_parts, 0)), vec_partWeights(num_parts, 0) {
+            //recompute();
         }
-
-        std::vector<std::size_t> partSizes(CSRHypergraph& hg) const {
-            std::vector<std::size_t> sizes(num_parts, 0);
-
-            for (NodeID u : hg.nodes()) {
-                sizes[partition[u]]++;
-            }
-
-            return sizes;
+        explicit Partition(std::vector<PartitionID> vec_partition, PartitionID num_parts, CSRHypergraph& hg) : partition(std::move(vec_partition)), hg(hg), num_parts(num_parts), vec_pinsInPart(hg.numHyperedges(), std::vector<std::size_t>(num_parts, 0)), vec_partWeights(num_parts, 0) {
+            // insert assertions here
+            recompute();
         }
 
         std::size_t size() const {
             return partition.size();
         }
 
-        NodeWeight weight(CSRHypergraph& hg, PartitionID id) const {
-            NodeWeight weight(0);
-
-            for (NodeID u : hg.nodes()) {
-                if (partition[u] == id) { weight += hg.nodeWeight(u); }
-            }
-
-            return weight;
+        NodeWeight partWeight(PartitionID id) const {
+            return vec_partWeights[id];
         }
 
-        std::vector<NodeWeight> partitionWeights(CSRHypergraph& hg) const {
-            std::vector<NodeWeight> weights(num_parts, 0);
-
-            for (NodeID u : hg.nodes()) {
-                weights[partition[u]] += hg.nodeWeight(u);
-            }
-
-            return weights;
+        const std::vector<NodeWeight>& partitionWeights() const {
+            return vec_partWeights;
         }
 
-        std::vector<NodeID> nodesOf(CSRHypergraph& hg, PartitionID id) {
-            if (id >= num_parts) throw std::runtime_error("partition id out of range");
-
-            std::vector<NodeID> nodes;
-            for (NodeID u : hg.nodes()) {
-                if (partition[u] == id) {
-                    nodes.push_back(u);
-                }
-            }
-
-            return nodes;
+        void rebuild(std::vector<PartitionID> vec_part) {
+            // TODO: assertions here
+            partition = std::move(vec_part);
+            recompute();
         }
 
-        PartitionID& operator[](std::size_t idx) { return partition[idx]; }
 
         const PartitionID& operator[](std::size_t idx) const { return partition[idx]; }
 
@@ -81,26 +45,15 @@ namespace whfc_rb {
             return {partition.begin(), partition.end()};
         }*/
 
-        std::size_t pinsInPart(CSRHypergraph& hg, PartitionID id, HyperedgeID e) const {
-            std::size_t count = 0;
-            for (NodeID u : hg.pinsOf(e)) {
-                if (partition[u] == id) {
-                    count++;
-                }
-            }
-            return count;
+        std::size_t pinsInPart(PartitionID id, HyperedgeID e) const {
+            return vec_pinsInPart[e][id];
         }
 
-        std::vector<HyperedgeID> getCutEdges(CSRHypergraph& hg, PartitionID part0, PartitionID part1) const {
+        std::vector<HyperedgeID> getCutEdges(PartitionID part0, PartitionID part1) const {
             std::vector<HyperedgeID> cut_hes;
 
             for (HyperedgeID e : hg.hyperedges()) {
-                std::array<bool, 2> contains_part = {false, false};
-                for (NodeID u : hg.pinsOf(e)) {
-                    if (partition[u] == part0) { contains_part[0] = true; }
-                    if (partition[u] == part1) { contains_part[1] = true; }
-                }
-                if (contains_part[0] && contains_part[1]) {
+                if (pinsInPart(part0, e) > 0 && pinsInPart(part1, e) > 0) {
                     cut_hes.push_back(e);
                 }
             }
@@ -108,14 +61,27 @@ namespace whfc_rb {
             return cut_hes;
         }
 
-        double imbalance(CSRHypergraph& hg) {
-            std::vector<NodeWeight> vec_partitionWeights = partitionWeights(hg);
-            NodeWeight totalWeight = std::accumulate(vec_partitionWeights.begin(), vec_partitionWeights.end(), 0U);
-            NodeWeight maxPartWeight = *std::max_element(vec_partitionWeights.begin(), vec_partitionWeights.end());
+        void changePart(NodeID u, PartitionID newPart) {
+            if (partition[u] != newPart) {
+                PartitionID oldPart = partition[u];
+                partition[u] = newPart;
+
+                for (HyperedgeID e : hg.hyperedgesOf(u)) {
+                    vec_pinsInPart[e][oldPart]--;
+                    vec_pinsInPart[e][newPart]++;
+                }
+                vec_partWeights[oldPart] -= hg.nodeWeight(u);
+                vec_partWeights[newPart] += hg.nodeWeight(u);
+            }
+        }
+
+        double imbalance() {
+            NodeWeight totalWeight = std::accumulate(vec_partWeights.begin(), vec_partWeights.end(), 0U);
+            NodeWeight maxPartWeight = *std::max_element(vec_partWeights.begin(), vec_partWeights.end());
             return (static_cast<double>(maxPartWeight) * static_cast<double>(num_parts) / static_cast<double>(totalWeight)) - 1.0;
         }
         
-        size_t km1Objective(const CSRHypergraph& hg) const {
+        size_t km1Objective() const {
             size_t obj = 0;
             boost::dynamic_bitset<> has_pins_in_part(num_parts);
             for (HyperedgeID e : hg.hyperedges()) {
@@ -128,7 +94,7 @@ namespace whfc_rb {
             return obj;
         }
         
-        size_t cutObjective(const CSRHypergraph& hg) const {
+        size_t cutObjective() const {
             size_t obj = 0;
             for (HyperedgeID e : hg.hyperedges()) {
                 PartitionID p = invalidPartition;
@@ -148,8 +114,8 @@ namespace whfc_rb {
             return num_parts;
         }
 
-        void setNumParts(PartitionID num) {
-            num_parts = num;
+        CSRHypergraph& getGraph() {
+            return hg;
         }
 
         void print(std::ostream& out) {
@@ -160,9 +126,27 @@ namespace whfc_rb {
             out << std::endl << std::flush;
         }
 
+        void recompute() {
+            vec_pinsInPart = std::vector<std::vector<std::size_t>>(hg.numHyperedges(), std::vector<std::size_t>(num_parts, 0));
+            vec_partWeights = std::vector<NodeWeight>(num_parts, 0);
+
+            for (HyperedgeID e : hg.hyperedges()) {
+                for (NodeID u : hg.pinsOf(e)) {
+                    vec_pinsInPart[e][partition[u]]++;
+                }
+            }
+
+            for (NodeID u : hg.nodes()) {
+                vec_partWeights[partition[u]] += hg.nodeWeight(u);
+            }
+        }
+
     private:
         std::vector<PartitionID> partition;
+        CSRHypergraph& hg;
         PartitionID num_parts;
+        std::vector<std::vector<std::size_t>> vec_pinsInPart;
+        std::vector<NodeWeight> vec_partWeights;
 
     };
 }

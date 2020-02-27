@@ -17,8 +17,8 @@ namespace whfc_rb {
                 hfc.timer.active = false;
         }
 
-        bool refine(Partition& partition, CSRHypergraph& hg, double maxFractionPart0, double maxFractionPart1) {
-            std::vector<NodeWeight> partWeights = partition.partitionWeights(hg);
+        bool refine(Partition& partition, double maxFractionPart0, double maxFractionPart1) {
+            std::vector<NodeWeight> partWeights = partition.partitionWeights();
             NodeWeight totalWeight = partWeights[0] + partWeights[1];
 
             double maxW0 = 0.2 * partWeights[0];
@@ -30,7 +30,7 @@ namespace whfc_rb {
             double imbalanceBefore = std::max(partWeights[0] / (maxFractionPart0 * totalWeight), partWeights[1] / (maxFractionPart1 + totalWeight));
 
             timer.start("Extraction", "Refinement");
-            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(hg, partition, 0, 1, maxW0, maxW1);
+            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, 0, 1, maxW0, maxW1);
             timer.stop("Extraction");
 
 
@@ -58,7 +58,7 @@ namespace whfc_rb {
             double imbalanceAfter = std::max(hfc.cs.n.sourceReachableWeight / (maxFractionPart0 * totalWeight), hfc.cs.n.targetReachableWeight / (maxFractionPart1 + totalWeight));
 
             if (newCut < extractor_info.cutAtStake || (newCut == extractor_info.cutAtStake && imbalanceAfter < imbalanceBefore)) {
-                reassign(partition, hg, extractor_info);
+                reassign(partition, extractor_info);
                 return true;
             }
 
@@ -73,12 +73,12 @@ namespace whfc_rb {
 
         size_t instance_counter = 0;
 
-        void reassign(Partition& partition, CSRHypergraph& hg, FlowHypergraphBuilderExtractor::ExtractorInfo& info) {
+        void reassign(Partition& partition, FlowHypergraphBuilderExtractor::ExtractorInfo& info) {
             for (whfc::Node localID : extractor.localNodeIDs()) {
                 if (localID == info.source || localID == info.target) continue;
                 NodeID globalID = extractor.local2global(localID);
                 PartitionID newPart = hfc.cs.n.isSource(localID) ? 0 : 1;
-                partition[globalID] = newPart;
+                partition.changePart(globalID, newPart);
             }
         }
 

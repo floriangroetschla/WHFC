@@ -18,7 +18,9 @@ namespace whfc_rb {
         Partition run(CSRHypergraph& hg, double epsilon, std::string preset, uint k) {
             epsilon = std::pow(1.0 + epsilon, 1.0 / std::ceil(std::log2(k))) - 1.0;
 
-            return partition_recursively(hg, epsilon, preset, k, true);
+            Partition partition(k, hg);
+            partition_recursively(partition, epsilon, preset, k, true);
+            return partition;
         }
 
     private:
@@ -26,46 +28,46 @@ namespace whfc_rb {
         std::mt19937& mt;
         whfc::TimeReporter& timer;
 
-        Partition partition_recursively(CSRHypergraph& hg, double epsilon, std::string preset, uint k, bool alloc) {
+        void partition_recursively(Partition& partition, double epsilon, std::string preset, uint k, bool alloc) {
+            // insert assertions here
             if (k == 1) {
-                return Partition(hg.numNodes(), 1);
+                return;
             }
 
             std::array<int, 2> numParts;
-            Partition partition;
+            CSRHypergraph& hg = partition.getGraph();
 
             timer.start("PaToH", "RecursiveBisector");
             if (k % 2 == 0) {
                 numParts[0] = k / 2;
                 numParts[1] = k / 2;
-                partition = PaToHInterface::bisectWithPatoh(hg, mt(), epsilon, preset, alloc, false);
+                PaToHInterface::bisectWithPatoh(partition, mt(), epsilon, preset, alloc, false);
             } else {
                 numParts[0] = k / 2;
                 numParts[1] = numParts[0] + 1;
-                partition = PaToHInterface::bisectImbalancedWithPatoh(hg, mt(), float(numParts[1]) / float(numParts[0]), epsilon, preset, alloc, false);
+                PaToHInterface::bisectImbalancedWithPatoh(partition, mt(), float(numParts[1]) / float(numParts[0]), epsilon, preset, alloc, false);
             }
+
             timer.stop("PaToH");
 
             double maxFractionPart0 = (1.0 + epsilon) * numParts[0] / k;
             double maxFractionPart1 = (1.0 + epsilon) * numParts[1] / k;
 
             timer.start("Refinement", "RecursiveBisector");
-            refiner.refine(partition, hg, maxFractionPart0, maxFractionPart1);
+            refiner.refine(partition, maxFractionPart0, maxFractionPart1);
             timer.stop("Refinement");
-            //std::cout << "Refinement result: " << result << std::endl;
 
             if (k > 2) {
-                partition.setNumParts(k);
                 std::vector<int> new_ids(partition.size());
                 std::vector<int> carries(2, 0);
+                std::vector<Partition::PartitionID> vec_part(hg.numNodes());
                 for (uint i = 0; i < partition.size(); ++i) {
                     new_ids[i] = carries[partition[i]]++;
                 }
 
-                std::array<Partition, 2> sub_partitions;
-
                 for (uint partID = 0; partID < 2; ++partID) {
                     CSRHypergraph partHg;
+
                     for (HyperedgeID e : hg.hyperedges()) {
                         int hyperedgeSize = 0;
                         for (NodeID pin : hg.pinsOf(e)) {
@@ -93,19 +95,24 @@ namespace whfc_rb {
                     partHg.initNodes(carries[partID]);
                     partHg.computeVertexIncidences();
 
-                    sub_partitions[partID] = partition_recursively(partHg, epsilon, preset, numParts[partID], false);
+                    Partition subPartition(numParts[partID], partHg);
+
+                    partition_recursively(subPartition, epsilon, preset, numParts[partID], false);
+
+                    for (uint i = 0; i < partition.size(); ++i) {
+                        if (partition[i] == partID) {
+                            vec_part[i] = subPartition[new_ids[i]] + partID * numParts[0];
+                        }
+                    }
 
                 }
-
-                for (uint i = 0; i < partition.size(); ++i) {
-                    partition[i] = sub_partitions[partition[i]][new_ids[i]] + partition[i] * numParts[0];
-                }
+                partition.rebuild(vec_part);
             }
             
 			if (alloc) {
 				PaToHInterface::freePatoh();
 			}
-			return partition;
+			return;
         }
     };
 }
