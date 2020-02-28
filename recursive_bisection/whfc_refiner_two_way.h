@@ -10,7 +10,7 @@
 namespace whfc_rb {
     class WHFCRefinerTwoWay : public TwoWayRefinerInterface {
     public:
-        using PartitionID = Partition::PartitionID;
+        using PartitionID = PartitionBase::PartitionID;
 
         WHFCRefinerTwoWay(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937& mt, whfc::TimeReporter& timer) :
             extractor(maxNumNodes, maxNumEdges, maxNumPins, mt),
@@ -18,7 +18,7 @@ namespace whfc_rb {
                 hfc.timer.active = false;
         }
 
-        bool refine(Partition& partition, PartitionID part0, PartitionID part1, NodeWeight maxBlockWeight0, NodeWeight maxBlockWeight1) {
+        bool refine(PartitionBase& partition, PartitionID part0, PartitionID part1, NodeWeight maxBlockWeight0, NodeWeight maxBlockWeight1) {
             std::vector<NodeWeight> partWeights = partition.partitionWeights();
 
             double maxW0 = 0.2 * partWeights[part0];
@@ -69,7 +69,7 @@ namespace whfc_rb {
 
         size_t instance_counter = 0;
 
-        void reassign(Partition& partition, FlowHypergraphBuilderExtractor::ExtractorInfo& info, PartitionID part0, PartitionID part1) {
+        void reassign(PartitionBase& partition, FlowHypergraphBuilderExtractor::ExtractorInfo& info, PartitionID part0, PartitionID part1) {
             for (whfc::Node localID : extractor.localNodeIDs()) {
                 if (localID == info.source || localID == info.target) continue;
                 NodeID globalID = extractor.local2global(localID);

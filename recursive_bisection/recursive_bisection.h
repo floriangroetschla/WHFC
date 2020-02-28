@@ -7,7 +7,7 @@
 #include <random>
 
 namespace whfc_rb {
-    template<class TwoWayRefiner>
+    template<class TwoWayRefiner, typename std::enable_if<std::is_base_of<TwoWayRefinerInterface, TwoWayRefiner>::value>::type* = nullptr>
     class RecursiveBisector {
     public:
 
@@ -16,11 +16,12 @@ namespace whfc_rb {
 
         }
 
-        Partition run(CSRHypergraph& hg, double epsilon, std::string preset, uint k) {
+        template<class PartitionImpl>
+        PartitionImpl run(CSRHypergraph& hg, double epsilon, std::string preset, uint k) {
             epsilon = std::pow(1.0 + epsilon, 1.0 / std::ceil(std::log2(k))) - 1.0;
 
-            Partition partition(k, hg);
-            partition_recursively(partition, epsilon, preset, k, true);
+            PartitionImpl partition(k, hg);
+            partition_recursively<PartitionImpl>(partition, epsilon, preset, k, true);
             return partition;
         }
 
@@ -29,7 +30,8 @@ namespace whfc_rb {
         std::mt19937& mt;
         whfc::TimeReporter& timer;
 
-        void partition_recursively(Partition& partition, double epsilon, std::string preset, uint k, bool alloc) {
+        template <class PartitionImpl>
+        void partition_recursively(PartitionBase& partition, double epsilon, std::string preset, uint k, bool alloc) {
             // insert assertions here
             if (k == 1) {
                 return;
@@ -63,7 +65,7 @@ namespace whfc_rb {
             if (k > 2) {
                 std::vector<int> new_ids(partition.size());
                 std::vector<int> carries(2, 0);
-                std::vector<Partition::PartitionID> vec_part(hg.numNodes());
+                std::vector<PartitionBase::PartitionID> vec_part(hg.numNodes());
                 for (uint i = 0; i < partition.size(); ++i) {
                     new_ids[i] = carries[partition[i]]++;
                 }
@@ -98,9 +100,9 @@ namespace whfc_rb {
                     partHg.initNodes(carries[partID]);
                     partHg.computeVertexIncidences();
 
-                    Partition subPartition(numParts[partID], partHg);
+                    PartitionImpl subPartition(numParts[partID], partHg);
 
-                    partition_recursively(subPartition, epsilon, preset, numParts[partID], false);
+                    partition_recursively<PartitionImpl>(subPartition, epsilon, preset, numParts[partID], false);
 
                     for (uint i = 0; i < partition.size(); ++i) {
                         if (partition[i] == partID) {

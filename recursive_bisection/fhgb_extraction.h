@@ -3,7 +3,7 @@
 #include "../datastructure/flow_hypergraph_builder.h"
 #include "hypergraph.h"
 #include "../datastructure/queue.h"
-#include "partition.h"
+#include "partition_ca.h"
 
 namespace whfc_rb {
     class FlowHypergraphBuilderExtractor {
@@ -22,7 +22,7 @@ namespace whfc_rb {
             whfc::Flow cutAtStake;
         };
 
-        ExtractorInfo run(Partition& partition, const Partition::PartitionID part0, const Partition::PartitionID part1, NodeWeight maxW0, NodeWeight maxW1) {
+        ExtractorInfo run(PartitionBase& partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1, NodeWeight maxW0, NodeWeight maxW1) {
             CSRHypergraph& hg = partition.getGraph();
             initialize(hg.numNodes(), hg.numHyperedges());
 
@@ -77,7 +77,7 @@ namespace whfc_rb {
             w += hg.nodeWeight(node);
         }
 
-        whfc::NodeWeight BreadthFirstSearch(CSRHypergraph& hg, const std::vector<HyperedgeID>& cut_hes, const Partition& partition, uint partID, uint otherPartID, NodeWeight maxWeight, whfc::Node terminal) {
+        whfc::NodeWeight BreadthFirstSearch(CSRHypergraph& hg, const std::vector<HyperedgeID>& cut_hes, const PartitionBase& partition, uint partID, uint otherPartID, NodeWeight maxWeight, whfc::Node terminal) {
             whfc::NodeWeight w = 0;
 
             // Collect boundary vertices
@@ -120,7 +120,7 @@ namespace whfc_rb {
             return w;
         }
 
-        void processCutHyperedges(CSRHypergraph& hg, const std::vector<HyperedgeID>& cut_hes, const Partition& partition, const Partition::PartitionID part0, const Partition::PartitionID part1) {
+        void processCutHyperedges(CSRHypergraph& hg, const std::vector<HyperedgeID>& cut_hes, const PartitionBase& partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1) {
             for (HyperedgeID e : cut_hes) {
                 bool connectToSource = false;
                 bool connectToTarget = false;

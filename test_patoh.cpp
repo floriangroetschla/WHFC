@@ -18,7 +18,7 @@ int main(int argc, const char* argv[]) {
 
 
     whfc::TimeReporter timer;
-    whfc_rb::Partition partition(numParts, hg);
+    whfc_rb::PartitionBase partition(numParts, hg);
 
     timer.start("PaToH");
     PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset);

@@ -2,7 +2,7 @@
 
 #include "../recursive_bisection/hypergraph.h"
 #include "patoh.h"
-#include "../recursive_bisection/partition.h"
+#include "../recursive_bisection/partition_ca.h"
 
 
 class PaToHInterface {
@@ -18,7 +18,7 @@ public:
         bool free;
     };
 
-    static void bisectImbalancedWithPatoh(whfc_rb::Partition& partition,
+    static void bisectImbalancedWithPatoh(whfc_rb::PartitionBase& partition,
                                                       int seed,
                                                       float imbalanceFactor,
                                                       double epsilon=0.05,
@@ -33,7 +33,7 @@ public:
         runPatoh(partition, seed, p, preset);
     }
 
-    static void bisectWithPatoh(whfc_rb::Partition& partition,
+    static void bisectWithPatoh(whfc_rb::PartitionBase& partition,
                                             int seed,
                                             double epsilon=0.0,
                                             std::string preset = "D", bool alloc = true, bool free = true) {
@@ -44,7 +44,7 @@ public:
         runPatoh(partition, seed, p, preset);
     }
 
-    static void partitionWithPatoh(whfc_rb::Partition& partition, int seed, int numPartitions, double epsilon=0.05,
+    static void partitionWithPatoh(whfc_rb::PartitionBase& partition, int seed, int numPartitions, double epsilon=0.05,
                                                std::string preset = "D") {
         PatohParameters p;
         p.use_target_weights = false;
@@ -54,7 +54,7 @@ public:
     }
 
 
-    static void runPatoh(whfc_rb::Partition& partition, int seed, PatohParameters params, std::string str_preset = "D") {
+    static void runPatoh(whfc_rb::PartitionBase& partition, int seed, PatohParameters params, std::string str_preset = "D") {
         whfc_rb::CSRHypergraph& hg = partition.getGraph();
         // For output of PaToH
         //std::vector<whfc_rb::Partition::PartitionID > vec_partition(hg.numNodes());
@@ -106,7 +106,7 @@ public:
         if (params.free) {
             PaToH_Free();
         }
-        partition.recompute();
+        partition.initialize();
     }
 
     static int freePatoh() {
