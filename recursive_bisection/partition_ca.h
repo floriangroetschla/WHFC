@@ -10,11 +10,19 @@ namespace whfc_rb {
         using PartitionID = uint32_t;
         static constexpr PartitionID invalidPartition = std::numeric_limits<PartitionID>::max();
 
-        explicit PartitionCA(PartitionID num_parts, CSRHypergraph& hg) : PartitionBase(num_parts, hg), vec_pinsInPart(hg.numHyperedges(), std::vector<std::size_t>(num_parts, 0)), vec_partWeights(num_parts, 0) {
+        explicit PartitionCA(PartitionID num_parts, CSRHypergraph &hg) : PartitionBase(num_parts, hg),
+                                                                         vec_pinsInPart(hg.numHyperedges(),
+                                                                                        std::vector<std::size_t>(
+                                                                                                num_parts, 0)),
+                                                                         vec_partWeights(num_parts, 0) {
             assert(maxID() < num_parts);
             assert(partition.size() == hg.numNodes());
         }
-        explicit PartitionCA(std::vector<PartitionID> vec_partition, PartitionID num_parts, CSRHypergraph& hg) : PartitionBase(vec_partition, num_parts, hg), vec_pinsInPart(hg.numHyperedges(), std::vector<std::size_t>(num_parts, 0)), vec_partWeights(num_parts, 0) {
+
+        explicit PartitionCA(std::vector<PartitionID> vec_partition, PartitionID num_parts, CSRHypergraph &hg)
+                : PartitionBase(vec_partition, num_parts, hg),
+                  vec_pinsInPart(hg.numHyperedges(), std::vector<std::size_t>(num_parts, 0)),
+                  vec_partWeights(num_parts, 0) {
             assert(maxID() < num_parts);
             assert(partition.size() == hg.numNodes());
 
@@ -74,11 +82,13 @@ namespace whfc_rb {
         double imbalance() override {
             NodeWeight totalWeight = std::accumulate(vec_partWeights.begin(), vec_partWeights.end(), 0U);
             NodeWeight maxPartWeight = *std::max_element(vec_partWeights.begin(), vec_partWeights.end());
-            return (static_cast<double>(maxPartWeight) * static_cast<double>(num_parts) / static_cast<double>(totalWeight)) - 1.0;
+            return (static_cast<double>(maxPartWeight) * static_cast<double>(num_parts) /
+                    static_cast<double>(totalWeight)) - 1.0;
         }
 
         void initialize() override {
-            vec_pinsInPart = std::vector<std::vector<std::size_t>>(hg.numHyperedges(), std::vector<std::size_t>(num_parts, 0));
+            vec_pinsInPart = std::vector<std::vector<std::size_t>>(hg.numHyperedges(),
+                                                                   std::vector<std::size_t>(num_parts, 0));
             vec_partWeights = std::vector<NodeWeight>(num_parts, 0);
 
             for (HyperedgeID e : hg.hyperedges()) {

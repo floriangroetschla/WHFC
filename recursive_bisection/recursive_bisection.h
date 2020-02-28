@@ -7,17 +7,18 @@
 #include <random>
 
 namespace whfc_rb {
-    template<class TwoWayRefiner, typename std::enable_if<std::is_base_of<TwoWayRefinerInterface, TwoWayRefiner>::value>::type* = nullptr>
+    template<class TwoWayRefiner, typename std::enable_if<std::is_base_of<TwoWayRefinerInterface, TwoWayRefiner>::value>::type * = nullptr>
     class RecursiveBisector {
     public:
 
-        RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937& mt, whfc::TimeReporter& timer) :
-            refiner(maxNumNodes, maxNumEdges, maxNumPins, mt, timer), mt(mt), timer(timer) {
+        RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937 &mt,
+                          whfc::TimeReporter &timer) :
+                refiner(maxNumNodes, maxNumEdges, maxNumPins, mt, timer), mt(mt), timer(timer) {
 
         }
 
         template<class PartitionImpl>
-        PartitionImpl run(CSRHypergraph& hg, double epsilon, std::string preset, uint k) {
+        PartitionImpl run(CSRHypergraph &hg, double epsilon, std::string preset, uint k) {
             epsilon = std::pow(1.0 + epsilon, 1.0 / std::ceil(std::log2(k))) - 1.0;
 
             PartitionImpl partition(k, hg);
@@ -27,18 +28,18 @@ namespace whfc_rb {
 
     private:
         TwoWayRefiner refiner;
-        std::mt19937& mt;
-        whfc::TimeReporter& timer;
+        std::mt19937 &mt;
+        whfc::TimeReporter &timer;
 
-        template <class PartitionImpl>
-        void partition_recursively(PartitionBase& partition, double epsilon, std::string preset, uint k, bool alloc) {
+        template<class PartitionImpl>
+        void partition_recursively(PartitionBase &partition, double epsilon, std::string preset, uint k, bool alloc) {
             // insert assertions here
             if (k == 1) {
                 return;
             }
 
             std::array<int, 2> numParts;
-            CSRHypergraph& hg = partition.getGraph();
+            CSRHypergraph &hg = partition.getGraph();
 
             timer.start("PaToH", "RecursiveBisector");
             if (k % 2 == 0) {
@@ -48,15 +49,16 @@ namespace whfc_rb {
             } else {
                 numParts[0] = k / 2;
                 numParts[1] = numParts[0] + 1;
-                PaToHInterface::bisectImbalancedWithPatoh(partition, mt(), float(numParts[1]) / float(numParts[0]), epsilon, preset, alloc, false);
+                PaToHInterface::bisectImbalancedWithPatoh(partition, mt(), float(numParts[1]) / float(numParts[0]),
+                                                          epsilon, preset, alloc, false);
             }
 
             timer.stop("PaToH");
 
             NodeWeight maxWeight0 = (1.0 + epsilon) * static_cast<double>(numParts[0]) /
-                    static_cast<double>(k) * partition.totalWeight();
+                                    static_cast<double>(k) * partition.totalWeight();
             NodeWeight maxWeight1 = (1.0 + epsilon) * static_cast<double>(numParts[1]) /
-                    static_cast<double>(k) * partition.totalWeight();
+                                    static_cast<double>(k) * partition.totalWeight();
 
             timer.start("Refinement", "RecursiveBisector");
             refiner.refine(partition, 0, 1, maxWeight0, maxWeight1);
@@ -113,11 +115,11 @@ namespace whfc_rb {
                 }
                 partition.rebuild(vec_part);
             }
-            
-			if (alloc) {
-				PaToHInterface::freePatoh();
-			}
-			return;
+
+            if (alloc) {
+                PaToHInterface::freePatoh();
+            }
+            return;
         }
     };
 }

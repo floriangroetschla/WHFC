@@ -12,8 +12,10 @@ namespace whfc_rb {
 
         whfc::FlowHypergraphBuilder fhgb;
 
-        FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, std::mt19937& mt) :
-                fhgb(maxNumNodes, maxNumEdges, maxNumPins), queue(maxNumNodes + 2), globalToLocalID(maxNumNodes), mt(mt) { }
+        FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins,
+                                       std::mt19937 &mt) :
+                fhgb(maxNumNodes, maxNumEdges, maxNumPins), queue(maxNumNodes + 2), globalToLocalID(maxNumNodes),
+                mt(mt) {}
 
         struct ExtractorInfo {
             whfc::Node source;
@@ -22,8 +24,10 @@ namespace whfc_rb {
             whfc::Flow cutAtStake;
         };
 
-        ExtractorInfo run(PartitionBase& partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1, NodeWeight maxW0, NodeWeight maxW1) {
-            CSRHypergraph& hg = partition.getGraph();
+        ExtractorInfo
+        run(PartitionBase &partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
+            NodeWeight maxW0, NodeWeight maxW1) {
+            CSRHypergraph &hg = partition.getGraph();
             initialize(hg.numNodes(), hg.numHyperedges());
 
             std::vector<HyperedgeID> cut_hes = partition.getCutEdges(part0, part1);
@@ -57,8 +61,15 @@ namespace whfc_rb {
             return result;
         }
 
-        auto localNodeIDs() const { return boost::irange<whfc::Node>(whfc::Node(0), whfc::Node::fromOtherValueType(queue.queueEnd())); }
-        whfc::Node global2local(const NodeID x) const {  assert(visitedNode[x]); return globalToLocalID[x]; }
+        auto localNodeIDs() const {
+            return boost::irange<whfc::Node>(whfc::Node(0), whfc::Node::fromOtherValueType(queue.queueEnd()));
+        }
+
+        whfc::Node global2local(const NodeID x) const {
+            assert(visitedNode[x]);
+            return globalToLocalID[x];
+        }
+
         NodeID local2global(const whfc::Node x) const { return queue.elementAt(x); }
 
     private:
@@ -67,9 +78,9 @@ namespace whfc_rb {
         std::vector<bool> visitedHyperedge;
         std::vector<whfc::Node> globalToLocalID;
         ExtractorInfo result;
-        std::mt19937& mt;
+        std::mt19937 &mt;
 
-        void visitNode(const NodeID node, CSRHypergraph& hg, whfc::NodeWeight& w) {
+        void visitNode(const NodeID node, CSRHypergraph &hg, whfc::NodeWeight &w) {
             globalToLocalID[node] = whfc::Node::fromOtherValueType(fhgb.numNodes());
             queue.push(node);
             visitedNode[node] = true;
@@ -77,7 +88,9 @@ namespace whfc_rb {
             w += hg.nodeWeight(node);
         }
 
-        whfc::NodeWeight BreadthFirstSearch(CSRHypergraph& hg, const std::vector<HyperedgeID>& cut_hes, const PartitionBase& partition, uint partID, uint otherPartID, NodeWeight maxWeight, whfc::Node terminal) {
+        whfc::NodeWeight
+        BreadthFirstSearch(CSRHypergraph &hg, const std::vector<HyperedgeID> &cut_hes, const PartitionBase &partition,
+                           uint partID, uint otherPartID, NodeWeight maxWeight, whfc::Node terminal) {
             whfc::NodeWeight w = 0;
 
             // Collect boundary vertices
@@ -93,7 +106,8 @@ namespace whfc_rb {
             while (!queue.empty()) {
                 NodeID u = queue.pop();
                 for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                    if (!visitedHyperedge[e] && partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
+                    if (!visitedHyperedge[e] && partition.pinsInPart(otherPartID, e) == 0 &&
+                        partition.pinsInPart(partID, e) > 1) {
                         fhgb.startHyperedge(hg.hyperedgeWeight(e));
                         bool connectToTerminal = false;
                         for (NodeID v : hg.pinsOf(e)) {
@@ -120,7 +134,9 @@ namespace whfc_rb {
             return w;
         }
 
-        void processCutHyperedges(CSRHypergraph& hg, const std::vector<HyperedgeID>& cut_hes, const PartitionBase& partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1) {
+        void
+        processCutHyperedges(CSRHypergraph &hg, const std::vector<HyperedgeID> &cut_hes, const PartitionBase &partition,
+                             const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1) {
             for (HyperedgeID e : cut_hes) {
                 bool connectToSource = false;
                 bool connectToTarget = false;

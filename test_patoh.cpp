@@ -5,7 +5,7 @@
 #include "recursive_bisection/recursive_bisection.h"
 #include "util/timer.h"
 
-int main(int argc, const char* argv[]) {
+int main(int argc, const char *argv[]) {
 
     if (argc != 6) {
         throw std::runtime_error("Usage ./PaToH HypergraphFile epsilon k seed preset");

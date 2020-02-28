@@ -8,8 +8,8 @@
 #include "recursive_bisection/partition_base.h"
 #include "recursive_bisection/partition_ca.h"
 
-int main(int argc, const char* argv[]) {
-    
+int main(int argc, const char *argv[]) {
+
     if (argc != 6) {
         throw std::runtime_error("Usage ./RecursiveBisection HypergraphFile epsilon k seed preset");
     }
@@ -27,7 +27,8 @@ int main(int argc, const char* argv[]) {
 
     //whfc_rb::PartitionBase part(10, hg);
 
-    whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::WHFCRefinerTwoWay>(hg.numNodes(), hg.numHyperedges(), hg.numPins(), mt, timer);
+    whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::WHFCRefinerTwoWay>(
+            hg.numNodes(), hg.numHyperedges(), hg.numPins(), mt, timer);
     timer.start("RecursiveBisector");
     whfc_rb::PartitionCA partition = recursive_bisector.run<whfc_rb::PartitionCA>(hg, epsilon, patoh_preset, numParts);
     timer.stop("RecursiveBisector");

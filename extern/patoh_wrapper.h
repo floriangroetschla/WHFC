@@ -9,7 +9,9 @@ class PaToHInterface {
 public:
 
     struct PatohParameters {
-        explicit PatohParameters(double epsilon=0.0) : use_target_weights(false), target_weights(), epsilon(epsilon), k(2), alloc(true), free(true) {}
+        explicit PatohParameters(double epsilon = 0.0) : use_target_weights(false), target_weights(), epsilon(epsilon),
+                                                         k(2), alloc(true), free(true) {}
+
         bool use_target_weights;
         std::vector<float> target_weights;
         double epsilon;
@@ -18,25 +20,26 @@ public:
         bool free;
     };
 
-    static void bisectImbalancedWithPatoh(whfc_rb::PartitionBase& partition,
-                                                      int seed,
-                                                      float imbalanceFactor,
-                                                      double epsilon=0.05,
-                                                      std::string preset = "D", bool alloc = true, bool free = true) {
+    static void bisectImbalancedWithPatoh(whfc_rb::PartitionBase &partition,
+                                          int seed,
+                                          float imbalanceFactor,
+                                          double epsilon = 0.05,
+                                          std::string preset = "D", bool alloc = true, bool free = true) {
         PatohParameters p;
         p.use_target_weights = true;
         p.k = 2;
         p.epsilon = epsilon;
-        p.target_weights = { float(1), float(imbalanceFactor) };	// Note(Lars): I think these might be just upper bounds on the part weights.
+        p.target_weights = {float(1),
+                            float(imbalanceFactor)};    // Note(Lars): I think these might be just upper bounds on the part weights.
         p.alloc = alloc;
         p.free = free;
         runPatoh(partition, seed, p, preset);
     }
 
-    static void bisectWithPatoh(whfc_rb::PartitionBase& partition,
-                                            int seed,
-                                            double epsilon=0.0,
-                                            std::string preset = "D", bool alloc = true, bool free = true) {
+    static void bisectWithPatoh(whfc_rb::PartitionBase &partition,
+                                int seed,
+                                double epsilon = 0.0,
+                                std::string preset = "D", bool alloc = true, bool free = true) {
         PatohParameters p(epsilon);
         p.alloc = alloc;
         p.free = free;
@@ -44,8 +47,9 @@ public:
         runPatoh(partition, seed, p, preset);
     }
 
-    static void partitionWithPatoh(whfc_rb::PartitionBase& partition, int seed, int numPartitions, double epsilon=0.05,
-                                               std::string preset = "D") {
+    static void
+    partitionWithPatoh(whfc_rb::PartitionBase &partition, int seed, int numPartitions, double epsilon = 0.05,
+                       std::string preset = "D") {
         PatohParameters p;
         p.use_target_weights = false;
         p.k = numPartitions;
@@ -54,8 +58,9 @@ public:
     }
 
 
-    static void runPatoh(whfc_rb::PartitionBase& partition, int seed, PatohParameters params, std::string str_preset = "D") {
-        whfc_rb::CSRHypergraph& hg = partition.getGraph();
+    static void
+    runPatoh(whfc_rb::PartitionBase &partition, int seed, PatohParameters params, std::string str_preset = "D") {
+        whfc_rb::CSRHypergraph &hg = partition.getGraph();
         // For output of PaToH
         //std::vector<whfc_rb::Partition::PartitionID > vec_partition(hg.numNodes());
         std::vector<int> vec_partweights(params.k, 0);
@@ -80,20 +85,19 @@ public:
         }
 
         int c, n, nconst, *cwghts, *nwghts, *xpins, *pins, *partvec, cut, *partweights;
-        float* targetweights;
-        n = hg.numHyperedges();		// Note(Lars): Use static_cast<desired_type>( value )
+        float *targetweights;
+        n = hg.numHyperedges();        // Note(Lars): Use static_cast<desired_type>( value )
         c = hg.numNodes();
         nconst = 1;
-        partvec = reinterpret_cast<int*>(partition.data());
+        partvec = reinterpret_cast<int *>(partition.data());
         partweights = vec_partweights.data();
-        cwghts = reinterpret_cast<int*>(hg.nodeWeights().data());
-        nwghts = reinterpret_cast<int*>(hg.hyperedgeWeights().data());
-        pins = reinterpret_cast<int*>(hg.pins().data());
-        xpins = reinterpret_cast<int*>(hg.indexPins().data());
+        cwghts = reinterpret_cast<int *>(hg.nodeWeights().data());
+        nwghts = reinterpret_cast<int *>(hg.hyperedgeWeights().data());
+        pins = reinterpret_cast<int *>(hg.pins().data());
+        xpins = reinterpret_cast<int *>(hg.indexPins().data());
         if (params.use_target_weights) {
             targetweights = params.target_weights.data();
-        }
-        else {
+        } else {
             targetweights = nullptr;
         }
 

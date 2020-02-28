@@ -6,9 +6,11 @@ namespace whfc_rb {
         using PartitionID = uint32_t;
         static constexpr PartitionID invalidPartition = std::numeric_limits<PartitionID>::max();
 
-        PartitionBase(PartitionID num_parts, CSRHypergraph& hg) : partition(hg.numNodes(), 0), hg(hg), num_parts(num_parts) {}
+        PartitionBase(PartitionID num_parts, CSRHypergraph &hg) : partition(hg.numNodes(), 0), hg(hg),
+                                                                  num_parts(num_parts) {}
 
-        PartitionBase(std::vector<PartitionID> vec_partition, PartitionID num_parts, CSRHypergraph& hg) : partition(std::move(vec_partition)), hg(hg), num_parts(num_parts) {}
+        PartitionBase(std::vector<PartitionID> vec_partition, PartitionID num_parts, CSRHypergraph &hg) : partition(
+                std::move(vec_partition)), hg(hg), num_parts(num_parts) {}
 
         virtual ~PartitionBase() = default;
 
@@ -51,9 +53,9 @@ namespace whfc_rb {
             partition = std::move(vec_part);
         }
 
-        virtual const PartitionID& operator[](std::size_t idx) const { return partition[idx]; }
+        virtual const PartitionID &operator[](std::size_t idx) const { return partition[idx]; }
 
-        virtual PartitionID* data() { return partition.data(); }
+        virtual PartitionID *data() { return partition.data(); }
 
         virtual std::size_t pinsInPart(PartitionID id, HyperedgeID e) const {
             std::size_t count = 0;
@@ -90,7 +92,8 @@ namespace whfc_rb {
             std::vector<NodeWeight> vec_partitionWeights = partitionWeights();
             NodeWeight totalWeight = std::accumulate(vec_partitionWeights.begin(), vec_partitionWeights.end(), 0U);
             NodeWeight maxPartWeight = *std::max_element(vec_partitionWeights.begin(), vec_partitionWeights.end());
-            return (static_cast<double>(maxPartWeight) * static_cast<double>(num_parts) / static_cast<double>(totalWeight)) - 1.0;
+            return (static_cast<double>(maxPartWeight) * static_cast<double>(num_parts) /
+                    static_cast<double>(totalWeight)) - 1.0;
         }
 
         virtual size_t km1Objective() const {
@@ -98,7 +101,7 @@ namespace whfc_rb {
             boost::dynamic_bitset<> has_pins_in_part(num_parts);
             for (HyperedgeID e : hg.hyperedges()) {
                 for (NodeID u : hg.pinsOf(e)) {
-                    has_pins_in_part.set( partition[u] );
+                    has_pins_in_part.set(partition[u]);
                 }
                 obj += (has_pins_in_part.count() - 1) * hg.hyperedgeWeight(e);
                 has_pins_in_part.reset();
@@ -126,11 +129,11 @@ namespace whfc_rb {
             return num_parts;
         }
 
-        virtual CSRHypergraph& getGraph() {
+        virtual CSRHypergraph &getGraph() {
             return hg;
         }
 
-        virtual void print(std::ostream& out) {
+        virtual void print(std::ostream &out) {
             out << "Partition: ";
             for (uint i = 0; i < partition.size(); ++i) {
                 out << partition[i] << " ";
@@ -142,7 +145,7 @@ namespace whfc_rb {
 
     protected:
         std::vector<PartitionID> partition;
-        CSRHypergraph& hg;
+        CSRHypergraph &hg;
         PartitionID num_parts;
 
     };

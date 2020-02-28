@@ -12,22 +12,26 @@ namespace whfc_rb {
     public:
         using PartitionID = PartitionBase::PartitionID;
 
-        WHFCRefinerTwoWay(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937& mt, whfc::TimeReporter& timer) :
-            extractor(maxNumNodes, maxNumEdges, maxNumPins, mt),
-            hfc(extractor.fhgb, mt()), mt(mt), timer(timer) {
-                hfc.timer.active = false;
+        WHFCRefinerTwoWay(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937 &mt,
+                          whfc::TimeReporter &timer) :
+                extractor(maxNumNodes, maxNumEdges, maxNumPins, mt),
+                hfc(extractor.fhgb, mt()), mt(mt), timer(timer) {
+            hfc.timer.active = false;
         }
 
-        bool refine(PartitionBase& partition, PartitionID part0, PartitionID part1, NodeWeight maxBlockWeight0, NodeWeight maxBlockWeight1) {
+        bool refine(PartitionBase &partition, PartitionID part0, PartitionID part1, NodeWeight maxBlockWeight0,
+                    NodeWeight maxBlockWeight1) {
             std::vector<NodeWeight> partWeights = partition.partitionWeights();
 
             double maxW0 = 0.2 * partWeights[part0];
             double maxW1 = 0.2 * partWeights[part1];
 
-            double imbalanceBefore = std::max(partWeights[part0] / maxBlockWeight0, partWeights[part1] / maxBlockWeight1);
+            double imbalanceBefore = std::max(partWeights[part0] / maxBlockWeight0,
+                                              partWeights[part1] / maxBlockWeight1);
 
             timer.start("Extraction", "Refinement");
-            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1);
+            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0,
+                                                                                         maxW1);
             timer.stop("Extraction");
 
             // call WHFC to improve the bisection
@@ -51,9 +55,11 @@ namespace whfc_rb {
 
             whfc::Flow newCut = extractor_info.baseCut + hfc.cs.flowValue;
 
-            double imbalanceAfter = std::max(hfc.cs.n.sourceReachableWeight / maxBlockWeight0, hfc.cs.n.targetReachableWeight / maxBlockWeight1);
+            double imbalanceAfter = std::max(hfc.cs.n.sourceReachableWeight / maxBlockWeight0,
+                                             hfc.cs.n.targetReachableWeight / maxBlockWeight1);
 
-            if (newCut < extractor_info.cutAtStake || (newCut == extractor_info.cutAtStake && imbalanceAfter < imbalanceBefore)) {
+            if (newCut < extractor_info.cutAtStake ||
+                (newCut == extractor_info.cutAtStake && imbalanceAfter < imbalanceBefore)) {
                 reassign(partition, extractor_info, part0, part1);
                 return true;
             }
@@ -64,12 +70,13 @@ namespace whfc_rb {
     private:
         FlowHypergraphBuilderExtractor extractor;
         whfc::HyperFlowCutter<whfc::Dinic> hfc;
-        std::mt19937& mt;
-        whfc::TimeReporter& timer;
+        std::mt19937 &mt;
+        whfc::TimeReporter &timer;
 
         size_t instance_counter = 0;
 
-        void reassign(PartitionBase& partition, FlowHypergraphBuilderExtractor::ExtractorInfo& info, PartitionID part0, PartitionID part1) {
+        void reassign(PartitionBase &partition, FlowHypergraphBuilderExtractor::ExtractorInfo &info, PartitionID part0,
+                      PartitionID part1) {
             for (whfc::Node localID : extractor.localNodeIDs()) {
                 if (localID == info.source || localID == info.target) continue;
                 NodeID globalID = extractor.local2global(localID);
@@ -78,9 +85,9 @@ namespace whfc_rb {
             }
         }
 
-        void writeSnapshot(FlowHypergraphBuilderExtractor::ExtractorInfo& extractor_info) {
+        void writeSnapshot(FlowHypergraphBuilderExtractor::ExtractorInfo &extractor_info) {
             whfc::WHFC_IO::WHFCInformation i = {
-                    { hfc.cs.maxBlockWeight(0), hfc.cs.maxBlockWeight(1) },
+                    {hfc.cs.maxBlockWeight(0), hfc.cs.maxBlockWeight(1)},
                     extractor_info.cutAtStake - extractor_info.baseCut,
                     extractor_info.source,
                     extractor_info.target
