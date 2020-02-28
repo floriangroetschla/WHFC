@@ -3,10 +3,11 @@
 #include "../extern/patoh_wrapper.h"
 #include "../io/hmetis_io.h"
 #include "hypergraph.h"
-#include "refinement.h"
+#include "whfc_refiner_two_way.h"
 #include <random>
 
 namespace whfc_rb {
+    template<class TwoWayRefiner>
     class RecursiveBisector {
     public:
 
@@ -24,7 +25,7 @@ namespace whfc_rb {
         }
 
     private:
-        WHFCRefiner refiner;
+        TwoWayRefiner refiner;
         std::mt19937& mt;
         whfc::TimeReporter& timer;
 

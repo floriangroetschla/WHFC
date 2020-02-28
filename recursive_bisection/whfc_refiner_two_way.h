@@ -5,13 +5,14 @@
 #include "../algorithm/dinic.h"
 #include "../io/whfc_io.h"
 #include <random>
+#include "two_way_refiner_interface.h"
 
 namespace whfc_rb {
-    class WHFCRefiner {
+    class WHFCRefinerTwoWay : public TwoWayRefinerInterface {
     public:
-        using PartitionID = int;
+        using PartitionID = Partition::PartitionID;
 
-        WHFCRefiner(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937& mt, whfc::TimeReporter& timer) :
+        WHFCRefinerTwoWay(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937& mt, whfc::TimeReporter& timer) :
             extractor(maxNumNodes, maxNumEdges, maxNumPins, mt),
             hfc(extractor.fhgb, mt()), mt(mt), timer(timer) {
                 hfc.timer.active = false;
@@ -19,7 +20,6 @@ namespace whfc_rb {
 
         bool refine(Partition& partition, PartitionID part0, PartitionID part1, NodeWeight maxBlockWeight0, NodeWeight maxBlockWeight1) {
             std::vector<NodeWeight> partWeights = partition.partitionWeights();
-            NodeWeight totalWeight = partWeights[part0] + partWeights[part1];
 
             double maxW0 = 0.2 * partWeights[part0];
             double maxW1 = 0.2 * partWeights[part1];
