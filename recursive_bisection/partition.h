@@ -9,9 +9,8 @@ namespace whfc_rb {
         using PartitionID = uint32_t;
         static constexpr PartitionID invalidPartition = std::numeric_limits<PartitionID>::max();
 
-        //explicit Partition() : partition(), num_parts(1) {}
         explicit Partition(PartitionID num_parts, CSRHypergraph& hg) : partition(hg.numNodes(), 0), hg(hg), num_parts(num_parts), vec_pinsInPart(hg.numHyperedges(), std::vector<std::size_t>(num_parts, 0)), vec_partWeights(num_parts, 0) {
-            //recompute();
+
         }
         explicit Partition(std::vector<PartitionID> vec_partition, PartitionID num_parts, CSRHypergraph& hg) : partition(std::move(vec_partition)), hg(hg), num_parts(num_parts), vec_pinsInPart(hg.numHyperedges(), std::vector<std::size_t>(num_parts, 0)), vec_partWeights(num_parts, 0) {
             // insert assertions here
@@ -20,6 +19,10 @@ namespace whfc_rb {
 
         std::size_t size() const {
             return partition.size();
+        }
+
+        NodeWeight totalWeight() const {
+            return std::accumulate(vec_partWeights.begin(), vec_partWeights.end(), 0U);
         }
 
         NodeWeight partWeight(PartitionID id) const {

@@ -50,11 +50,13 @@ namespace whfc_rb {
 
             timer.stop("PaToH");
 
-            double maxFractionPart0 = (1.0 + epsilon) * numParts[0] / k;
-            double maxFractionPart1 = (1.0 + epsilon) * numParts[1] / k;
+            NodeWeight maxWeight0 = (1.0 + epsilon) * static_cast<double>(numParts[0]) /
+                    static_cast<double>(k) * partition.totalWeight();
+            NodeWeight maxWeight1 = (1.0 + epsilon) * static_cast<double>(numParts[1]) /
+                    static_cast<double>(k) * partition.totalWeight();
 
             timer.start("Refinement", "RecursiveBisector");
-            refiner.refine(partition, maxFractionPart0, maxFractionPart1);
+            refiner.refine(partition, 0, 1, maxWeight0, maxWeight1);
             timer.stop("Refinement");
 
             if (k > 2) {

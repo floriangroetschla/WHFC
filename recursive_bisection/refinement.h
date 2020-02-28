@@ -17,22 +17,18 @@ namespace whfc_rb {
                 hfc.timer.active = false;
         }
 
-        bool refine(Partition& partition, double maxFractionPart0, double maxFractionPart1) {
+        bool refine(Partition& partition, PartitionID part0, PartitionID part1, NodeWeight maxBlockWeight0, NodeWeight maxBlockWeight1) {
             std::vector<NodeWeight> partWeights = partition.partitionWeights();
-            NodeWeight totalWeight = partWeights[0] + partWeights[1];
+            NodeWeight totalWeight = partWeights[part0] + partWeights[part1];
 
-            double maxW0 = 0.2 * partWeights[0];
-            double maxW1 = 0.2 * partWeights[1];
+            double maxW0 = 0.2 * partWeights[part0];
+            double maxW1 = 0.2 * partWeights[part1];
 
-            whfc::NodeWeight maxBlockWeight0 = std::ceil(maxFractionPart0 * totalWeight);
-            whfc::NodeWeight maxBlockWeight1 = std::ceil(maxFractionPart1 * totalWeight);
-
-            double imbalanceBefore = std::max(partWeights[0] / (maxFractionPart0 * totalWeight), partWeights[1] / (maxFractionPart1 + totalWeight));
+            double imbalanceBefore = std::max(partWeights[part0] / maxBlockWeight0, partWeights[part1] / maxBlockWeight1);
 
             timer.start("Extraction", "Refinement");
-            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, 0, 1, maxW0, maxW1);
+            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1);
             timer.stop("Extraction");
-
 
             // call WHFC to improve the bisection
             hfc.reset();
@@ -55,10 +51,10 @@ namespace whfc_rb {
 
             whfc::Flow newCut = extractor_info.baseCut + hfc.cs.flowValue;
 
-            double imbalanceAfter = std::max(hfc.cs.n.sourceReachableWeight / (maxFractionPart0 * totalWeight), hfc.cs.n.targetReachableWeight / (maxFractionPart1 + totalWeight));
+            double imbalanceAfter = std::max(hfc.cs.n.sourceReachableWeight / maxBlockWeight0, hfc.cs.n.targetReachableWeight / maxBlockWeight1);
 
             if (newCut < extractor_info.cutAtStake || (newCut == extractor_info.cutAtStake && imbalanceAfter < imbalanceBefore)) {
-                reassign(partition, extractor_info);
+                reassign(partition, extractor_info, part0, part1);
                 return true;
             }
 
@@ -73,11 +69,11 @@ namespace whfc_rb {
 
         size_t instance_counter = 0;
 
-        void reassign(Partition& partition, FlowHypergraphBuilderExtractor::ExtractorInfo& info) {
+        void reassign(Partition& partition, FlowHypergraphBuilderExtractor::ExtractorInfo& info, PartitionID part0, PartitionID part1) {
             for (whfc::Node localID : extractor.localNodeIDs()) {
                 if (localID == info.source || localID == info.target) continue;
                 NodeID globalID = extractor.local2global(localID);
-                PartitionID newPart = hfc.cs.n.isSource(localID) ? 0 : 1;
+                PartitionID newPart = hfc.cs.n.isSource(localID) ? part0 : part1;
                 partition.changePart(globalID, newPart);
             }
         }
