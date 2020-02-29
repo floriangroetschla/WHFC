@@ -23,6 +23,7 @@ namespace whfc_rb {
 
             PartitionImpl partition(k, hg);
             partition_recursively<PartitionImpl>(partition, epsilon, preset, k, true);
+            partition.initialize();
             return partition;
         }
 
@@ -65,6 +66,7 @@ namespace whfc_rb {
             timer.stop("Refinement");
 
             if (k > 2) {
+                timer.start("GraphAndPartitionBuilding", "RecursiveBisector");
                 std::vector<int> new_ids(partition.size());
                 std::vector<int> carries(2, 0);
                 std::vector<PartitionBase::PartitionID> vec_part(hg.numNodes());
@@ -103,8 +105,9 @@ namespace whfc_rb {
                     partHg.computeVertexIncidences();
 
                     PartitionImpl subPartition(numParts[partID], partHg);
-
+                    timer.stop("GraphAndPartitionBuilding");
                     partition_recursively<PartitionImpl>(subPartition, epsilon, preset, numParts[partID], false);
+                    timer.start("GraphAndPartitionBuilding", "RecursiveBisector");
 
                     for (uint i = 0; i < partition.size(); ++i) {
                         if (partition[i] == partID) {
@@ -113,7 +116,8 @@ namespace whfc_rb {
                     }
 
                 }
-                partition.rebuild(vec_part);
+                partition.replace(vec_part);
+                timer.stop("GraphAndPartitionBuilding");
             }
 
             if (alloc) {

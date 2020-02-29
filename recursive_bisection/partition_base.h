@@ -48,7 +48,7 @@ namespace whfc_rb {
             return weights;
         }
 
-        virtual void rebuild(std::vector<PartitionID> vec_part) {
+        virtual void replace(std::vector<PartitionID> vec_part) {
             // asserts?
             partition = std::move(vec_part);
         }

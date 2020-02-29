@@ -30,30 +30,35 @@ namespace whfc_rb {
         }
 
         NodeWeight totalWeight() const override {
+            if (!datastructures_initialized) throw std::runtime_error("Uninitialized datastructures");
             return std::accumulate(vec_partWeights.begin(), vec_partWeights.end(), 0U);
         }
 
         NodeWeight partWeight(PartitionID id) const override {
+            if (!datastructures_initialized) throw std::runtime_error("Uninitialized datastructures");
             return vec_partWeights[id];
         }
 
         const std::vector<NodeWeight> partitionWeights() const override {
+            if (!datastructures_initialized) throw std::runtime_error("Uninitialized datastructures");
             return vec_partWeights;
         }
 
-        void rebuild(std::vector<PartitionID> vec_part) override {
+        void replace(std::vector<PartitionID> vec_part) override {
             assert(vec_part.size() == partition.size());
             assert(*std::max_element(vec_part.begin(), vec_part.end()) < num_parts);
 
             partition = std::move(vec_part);
-            initialize();
+            datastructures_initialized = false;
         }
 
         std::size_t pinsInPart(PartitionID id, HyperedgeID e) const override {
+            if (!datastructures_initialized) throw std::runtime_error("Uninitialized datastructures");
             return vec_pinsInPart[e][id];
         }
 
         std::vector<HyperedgeID> getCutEdges(PartitionID part0, PartitionID part1) const override {
+            if (!datastructures_initialized) throw std::runtime_error("Uninitialized datastructures");
             std::vector<HyperedgeID> cut_hes;
 
             for (HyperedgeID e : hg.hyperedges()) {
@@ -66,6 +71,7 @@ namespace whfc_rb {
         }
 
         void changePart(NodeID u, PartitionID newPart) override {
+            if (!datastructures_initialized) throw std::runtime_error("Uninitialized datastructures");
             if (partition[u] != newPart) {
                 PartitionID oldPart = partition[u];
                 partition[u] = newPart;
@@ -80,6 +86,7 @@ namespace whfc_rb {
         }
 
         double imbalance() override {
+            if (!datastructures_initialized) throw std::runtime_error("Uninitialized datastructures");
             NodeWeight totalWeight = std::accumulate(vec_partWeights.begin(), vec_partWeights.end(), 0U);
             NodeWeight maxPartWeight = *std::max_element(vec_partWeights.begin(), vec_partWeights.end());
             return (static_cast<double>(maxPartWeight) * static_cast<double>(num_parts) /
@@ -100,11 +107,13 @@ namespace whfc_rb {
             for (NodeID u : hg.nodes()) {
                 vec_partWeights[partition[u]] += hg.nodeWeight(u);
             }
+            datastructures_initialized = true;
         }
 
     private:
         std::vector<std::vector<std::size_t>> vec_pinsInPart;
         std::vector<NodeWeight> vec_partWeights;
+        bool datastructures_initialized = false;
 
         PartitionID maxID() {
             return *std::max_element(partition.begin(), partition.end());
