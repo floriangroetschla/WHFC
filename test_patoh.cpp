@@ -17,12 +17,12 @@ int main(int argc, const char *argv[]) {
     std::string patoh_preset = argv[5];
 
 
-    whfc::TimeReporter timer;
+    whfc::TimeReporter timer("Total");
     whfc_rb::PartitionBase partition(numParts, hg);
 
-    timer.start("PaToH");
+    timer.start("Total");
     PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset);
-    timer.stop("PaToH");
+    timer.stop("Total");
     timer.report(std::cout);
     //partition.print(std::cout);
     std::cout << "Imbalance: " << partition.imbalance() << std::endl;

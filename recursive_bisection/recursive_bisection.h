@@ -42,7 +42,7 @@ namespace whfc_rb {
             std::array<int, 2> numParts;
             CSRHypergraph &hg = partition.getGraph();
 
-            timer.start("PaToH", "RecursiveBisector");
+            timer.start("PaToH", "Total");
             if (k % 2 == 0) {
                 numParts[0] = k / 2;
                 numParts[1] = k / 2;
@@ -61,12 +61,12 @@ namespace whfc_rb {
             NodeWeight maxWeight1 = (1.0 + epsilon) * static_cast<double>(numParts[1]) /
                                     static_cast<double>(k) * partition.totalWeight();
 
-            timer.start("Refinement", "RecursiveBisector");
+            timer.start("Refinement", "Total");
             refiner.refine(partition, 0, 1, maxWeight0, maxWeight1);
             timer.stop("Refinement");
 
             if (k > 2) {
-                timer.start("GraphAndPartitionBuilding", "RecursiveBisector");
+                timer.start("GraphAndPartitionBuilding", "Total");
                 std::vector<int> new_ids(partition.size());
                 std::vector<int> carries(2, 0);
                 std::vector<PartitionBase::PartitionID> vec_part(hg.numNodes());
@@ -107,7 +107,7 @@ namespace whfc_rb {
                     PartitionImpl subPartition(numParts[partID], partHg);
                     timer.stop("GraphAndPartitionBuilding");
                     partition_recursively<PartitionImpl>(subPartition, epsilon, preset, numParts[partID], false);
-                    timer.start("GraphAndPartitionBuilding", "RecursiveBisector");
+                    timer.start("GraphAndPartitionBuilding", "Total");
 
                     for (uint i = 0; i < partition.size(); ++i) {
                         if (partition[i] == partID) {

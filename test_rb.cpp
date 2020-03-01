@@ -30,31 +30,31 @@ int main(int argc, const char *argv[]) {
     std::string mode = argv[6];
     std::mt19937 mt(seed);
 
-    whfc::TimeReporter timer("RecursiveBisector");
+    whfc::TimeReporter timer("Total");
 
     if (!mode.compare("RBONLY")) {
         std::cout << "Using mode RBONLY" << std::endl;
         whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::NullRefiner>(
                 hg.numNodes(), hg.numHyperedges(), hg.numPins(), mt, timer);
-        timer.start("RecursiveBisector");
+        timer.start("Total");
         whfc_rb::PartitionBase partition = recursive_bisector.run<whfc_rb::PartitionBase>(hg, epsilon, patoh_preset, numParts);
-        timer.stop("RecursiveBisector");
+        timer.stop("Total");
         printStatistics(partition, timer);
     } else if (!mode.compare("RBPARTITIONBASE")) {
         std::cout << "Using mode RBPARTITIONBASE" << std::endl;
         whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::WHFCRefinerTwoWay>(
                 hg.numNodes(), hg.numHyperedges(), hg.numPins(), mt, timer);
-        timer.start("RecursiveBisector");
+        timer.start("Total");
         whfc_rb::PartitionBase partition = recursive_bisector.run<whfc_rb::PartitionBase>(hg, epsilon, patoh_preset, numParts);
-        timer.stop("RecursiveBisector");
+        timer.stop("Total");
         printStatistics(partition, timer);
     } else if (!mode.compare("RBPARTITIONCA")) {
         std::cout << "Using mode RBPARTITIONCA" << std::endl;
         whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::WHFCRefinerTwoWay>(
                 hg.numNodes(), hg.numHyperedges(), hg.numPins(), mt, timer);
-        timer.start("RecursiveBisector");
+        timer.start("Total");
         whfc_rb::PartitionCA partition = recursive_bisector.run<whfc_rb::PartitionCA>(hg, epsilon, patoh_preset, numParts);
-        timer.stop("RecursiveBisector");
+        timer.stop("Total");
         printStatistics(partition, timer);
     } else {
         throw std::runtime_error("Mode must be one of: RBONLY, RBPARTITIONBASE, RBPARTITIONCA");
