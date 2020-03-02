@@ -53,9 +53,9 @@ namespace whfc_rb {
             partition = std::move(vec_part);
         }
 
-        virtual const PartitionID &operator[](std::size_t idx) const { return partition[idx]; }
+        const PartitionID &operator[](std::size_t idx) const { return partition[idx]; }
 
-        virtual PartitionID *data() { return partition.data(); }
+        PartitionID *data() { return partition.data(); }
 
         virtual std::size_t pinsInPart(PartitionID id, HyperedgeID e) const {
             std::size_t count = 0;
