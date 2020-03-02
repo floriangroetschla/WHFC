@@ -52,21 +52,22 @@ namespace whfc_rb {
     class CSRHypergraph {
     public:
         CSRHypergraph(const NodeID numNodes = 0, const HyperedgeID numHyperedges = 0) :
-                Vertices(numNodes +
-                         1), /* +1 is a hack to abuse the first_out array for the prefix sum without reverse sweep reset */
+                Vertices(numNodes),
                 E(numHyperedges), node_weights(numNodes, 1), hyperedge_weights(numHyperedges, 1) {
             // this constructor only prepares the CSRHypergraph object for reading from a hMetis file
         }
 
         void initNodes(NodeID numNodes) {
-            Vertices = CSR<NodeID, HyperedgeID>(numNodes + 1);
+            Vertices = CSR<NodeID, HyperedgeID>(numNodes);
         }
 
         const_range<std::vector<HyperedgeID> > hyperedgesOf(const NodeID u) const {
+                    assert(vertices_initialized);
             return Vertices.incidentElementsOf(u);
         }
 
         Index degree(const NodeID u) const {
+            assert(vertices_initialized);
             return Vertices.degree(u);
         }
 
@@ -103,6 +104,7 @@ namespace whfc_rb {
         }
 
         std::vector<HyperedgeID> &vertexIncidences() {
+            assert(vertices_initialized);
             return Vertices.incidence;
         }
 
@@ -142,6 +144,9 @@ namespace whfc_rb {
             // still need to compute Vertices.first_out
             // and Vertices.incidence
 
+            // +1 is a hack to abuse the first_out array for the prefix sum without reverse sweep reset
+            Vertices.first_out.push_back(0);
+
             for (NodeID u : pins()) {
                 Vertices.first_out[u + 2]++;
             }
@@ -158,6 +163,7 @@ namespace whfc_rb {
             }
 
             Vertices.first_out.pop_back();    // remove the last element
+            vertices_initialized = true;
         }
 
         void printNodes(std::ostream &out) {
@@ -198,6 +204,7 @@ namespace whfc_rb {
         CSR<HyperedgeID, NodeID> E;
         std::vector<NodeWeight> node_weights;
         std::vector<HyperedgeWeight> hyperedge_weights;
+        bool vertices_initialized = false;
     };
 
 }    // namespace whfc_rb

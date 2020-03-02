@@ -32,33 +32,22 @@ int main(int argc, const char *argv[]) {
 
     whfc::TimeReporter timer("Total");
 
+    whfc_rb::PartitionConfig config;
+
     if (!mode.compare("RBONLY")) {
         std::cout << "Using mode RBONLY" << std::endl;
-        whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::NullRefiner>(
-                hg.numNodes(), hg.numHyperedges(), hg.numPins(), mt, timer);
-        timer.start("Total");
-        whfc_rb::PartitionBase partition = recursive_bisector.run<whfc_rb::PartitionBase>(hg, epsilon, patoh_preset, numParts);
-        timer.stop("Total");
-        printStatistics(partition, timer);
-    } else if (!mode.compare("RBPARTITIONBASE")) {
-        std::cout << "Using mode RBPARTITIONBASE" << std::endl;
-        whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::WHFCRefinerTwoWay>(
-                hg.numNodes(), hg.numHyperedges(), hg.numPins(), mt, timer);
-        timer.start("Total");
-        whfc_rb::PartitionBase partition = recursive_bisector.run<whfc_rb::PartitionBase>(hg, epsilon, patoh_preset, numParts);
-        timer.stop("Total");
-        printStatistics(partition, timer);
-    } else if (!mode.compare("RBPARTITIONCA")) {
-        std::cout << "Using mode RBPARTITIONCA" << std::endl;
-        whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::WHFCRefinerTwoWay>(
-                hg.numNodes(), hg.numHyperedges(), hg.numPins(), mt, timer);
-        timer.start("Total");
-        whfc_rb::PartitionCA partition = recursive_bisector.run<whfc_rb::PartitionCA>(hg, epsilon, patoh_preset, numParts);
-        timer.stop("Total");
-        printStatistics(partition, timer);
+        config.refine = false;
+    } else if (!mode.compare("RBWHFC")) {
+        std::cout << "Using mode RBWHFC" << std::endl;
+        config.refine = true;
     } else {
-        throw std::runtime_error("Mode must be one of: RBONLY, RBPARTITIONBASE, RBPARTITIONCA");
+        throw std::runtime_error("Mode must be one of: RBONlY, RBWHFC");
     }
 
+    whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector(hg.numNodes(), hg.numHyperedges(), hg.numPins(), mt, timer, config);
+    timer.start("Total");
+    whfc_rb::PartitionBase partition = recursive_bisector.run(hg, epsilon, patoh_preset, numParts);
+    timer.stop("Total");
+    printStatistics(partition, timer);
 }
 

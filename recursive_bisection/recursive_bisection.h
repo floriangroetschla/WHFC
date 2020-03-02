@@ -5,34 +5,33 @@
 #include "hypergraph.h"
 #include "whfc_refiner_two_way.h"
 #include <random>
+#include "config.h"
 
 namespace whfc_rb {
-    template<class TwoWayRefiner, typename std::enable_if<std::is_base_of<TwoWayRefinerInterface, TwoWayRefiner>::value>::type * = nullptr>
     class RecursiveBisector {
     public:
 
         RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937 &mt,
-                          whfc::TimeReporter &timer) :
-                refiner(maxNumNodes, maxNumEdges, maxNumPins, mt, timer), mt(mt), timer(timer) {
+                          whfc::TimeReporter &timer, PartitionConfig& config) :
+                refiner(maxNumNodes, maxNumEdges, maxNumPins, mt, timer), mt(mt), timer(timer), config(config) {
 
         }
 
-        template<class PartitionImpl>
-        PartitionImpl run(CSRHypergraph &hg, double epsilon, std::string preset, uint k) {
+        PartitionBase run(CSRHypergraph &hg, double epsilon, std::string preset, uint k) {
             epsilon = std::pow(1.0 + epsilon, 1.0 / std::ceil(std::log2(k))) - 1.0;
 
-            PartitionImpl partition(k, hg);
-            partition_recursively<PartitionImpl>(partition, epsilon, preset, k, true);
+            PartitionBase partition(k, hg);
+            partition_recursively(partition, epsilon, preset, k, true);
             partition.initialize();
             return partition;
         }
 
     private:
-        TwoWayRefiner refiner;
+        WHFCRefinerTwoWay refiner;
         std::mt19937 &mt;
         whfc::TimeReporter &timer;
+        PartitionConfig& config;
 
-        template<class PartitionImpl>
         void partition_recursively(PartitionBase &partition, double epsilon, std::string preset, uint k, bool alloc) {
             // insert assertions here
             if (k == 1) {
@@ -61,9 +60,11 @@ namespace whfc_rb {
             NodeWeight maxWeight1 = (1.0 + epsilon) * static_cast<double>(numParts[1]) /
                                     static_cast<double>(k) * partition.totalWeight();
 
-            timer.start("Refinement", "Total");
-            refiner.refine(partition, 0, 1, maxWeight0, maxWeight1);
-            timer.stop("Refinement");
+            if (config.refine) {
+                timer.start("Refinement", "Total");
+                refiner.refine(partition, 0, 1, maxWeight0, maxWeight1);
+                timer.stop("Refinement");
+            }
 
             if (k > 2) {
                 timer.start("GraphAndPartitionBuilding", "Total");
@@ -102,11 +103,14 @@ namespace whfc_rb {
                     }
 
                     partHg.initNodes(carries[partID]);
-                    partHg.computeVertexIncidences();
 
-                    PartitionImpl subPartition(numParts[partID], partHg);
+                    if (config.refine) {
+                        partHg.computeVertexIncidences();
+                    }
+
+                    PartitionBase subPartition(numParts[partID], partHg);
                     timer.stop("GraphAndPartitionBuilding");
-                    partition_recursively<PartitionImpl>(subPartition, epsilon, preset, numParts[partID], false);
+                    partition_recursively(subPartition, epsilon, preset, numParts[partID], false);
                     timer.start("GraphAndPartitionBuilding", "Total");
 
                     for (uint i = 0; i < partition.size(); ++i) {
