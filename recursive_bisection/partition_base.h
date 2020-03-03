@@ -14,11 +14,11 @@ namespace whfc_rb {
 
         virtual ~PartitionBase() = default;
 
-        virtual std::size_t size() const {
+        std::size_t size() const {
             return partition.size();
         }
 
-        virtual NodeWeight totalWeight() const {
+        NodeWeight totalWeight() const {
             NodeWeight weight = 0;
 
             for (NodeID u : hg.nodes()) {
@@ -28,7 +28,7 @@ namespace whfc_rb {
             return weight;
         }
 
-        virtual NodeWeight partWeight(PartitionID id) const {
+        NodeWeight partWeight(PartitionID id) const {
             NodeWeight weight(0);
 
             for (NodeID u : hg.nodes()) {
@@ -38,7 +38,7 @@ namespace whfc_rb {
             return weight;
         }
 
-        virtual const std::vector<NodeWeight> partitionWeights() const {
+        const std::vector<NodeWeight> partitionWeights() const {
             std::vector<NodeWeight> weights(num_parts, 0);
 
             for (NodeID u : hg.nodes()) {
@@ -57,7 +57,7 @@ namespace whfc_rb {
 
         PartitionID *data() { return partition.data(); }
 
-        virtual std::size_t pinsInPart(PartitionID id, HyperedgeID e) const {
+        std::size_t pinsInPart(PartitionID id, HyperedgeID e) const {
             std::size_t count = 0;
             for (NodeID u : hg.pinsOf(e)) {
                 if (partition[u] == id) {
@@ -84,7 +84,7 @@ namespace whfc_rb {
             return cut_hes;
         }
 
-        virtual void changePart(NodeID u, PartitionID newPart) {
+        void changePart(NodeID u, PartitionID newPart) {
             partition[u] = newPart;
         }
 
@@ -125,11 +125,11 @@ namespace whfc_rb {
             return obj;
         }
 
-        virtual PartitionID numParts() {
+        PartitionID numParts() {
             return num_parts;
         }
 
-        virtual CSRHypergraph &getGraph() {
+        CSRHypergraph &getGraph() {
             return hg;
         }
 

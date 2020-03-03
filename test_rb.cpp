@@ -33,6 +33,7 @@ int main(int argc, const char *argv[]) {
     whfc::TimeReporter timer("Total");
 
     whfc_rb::PartitionConfig config;
+    config.patoh_preset = patoh_preset;
 
     if (!mode.compare("RBONLY")) {
         std::cout << "Using mode RBONLY" << std::endl;
@@ -46,7 +47,7 @@ int main(int argc, const char *argv[]) {
 
     whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector(hg.numNodes(), hg.numHyperedges(), hg.numPins(), mt, timer, config);
     timer.start("Total");
-    whfc_rb::PartitionBase partition = recursive_bisector.run(hg, epsilon, patoh_preset, numParts);
+    whfc_rb::PartitionBase partition = recursive_bisector.run(hg, epsilon, numParts);
     timer.stop("Total");
     printStatistics(partition, timer);
 }

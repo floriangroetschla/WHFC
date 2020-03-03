@@ -17,11 +17,11 @@ namespace whfc_rb {
 
         }
 
-        PartitionBase run(CSRHypergraph &hg, double epsilon, std::string preset, uint k) {
+        PartitionBase run(CSRHypergraph &hg, double epsilon, uint k) {
             epsilon = std::pow(1.0 + epsilon, 1.0 / std::ceil(std::log2(k))) - 1.0;
 
             PartitionBase partition(k, hg);
-            partition_recursively(partition, epsilon, preset, k, true);
+            partition_recursively(partition, epsilon, k, true);
             partition.initialize();
             return partition;
         }
@@ -32,7 +32,7 @@ namespace whfc_rb {
         whfc::TimeReporter &timer;
         PartitionConfig& config;
 
-        void partition_recursively(PartitionBase &partition, double epsilon, std::string preset, uint k, bool alloc) {
+        void partition_recursively(PartitionBase &partition, double epsilon, uint k, bool alloc) {
             // insert assertions here
             if (k == 1) {
                 return;
@@ -45,12 +45,12 @@ namespace whfc_rb {
             if (k % 2 == 0) {
                 numParts[0] = k / 2;
                 numParts[1] = k / 2;
-                PaToHInterface::bisectWithPatoh(partition, mt(), epsilon, preset, alloc, false);
+                PaToHInterface::bisectWithPatoh(partition, mt(), epsilon, config.patoh_preset, alloc, false);
             } else {
                 numParts[0] = k / 2;
                 numParts[1] = numParts[0] + 1;
                 PaToHInterface::bisectImbalancedWithPatoh(partition, mt(), float(numParts[1]) / float(numParts[0]),
-                                                          epsilon, preset, alloc, false);
+                                                          epsilon, config.patoh_preset, alloc, false);
             }
 
             timer.stop("PaToH");
@@ -110,7 +110,7 @@ namespace whfc_rb {
 
                     PartitionBase subPartition(numParts[partID], partHg);
                     timer.stop("GraphAndPartitionBuilding");
-                    partition_recursively(subPartition, epsilon, preset, numParts[partID], false);
+                    partition_recursively(subPartition, epsilon, numParts[partID], false);
                     timer.start("GraphAndPartitionBuilding", "Total");
 
                     for (uint i = 0; i < partition.size(); ++i) {

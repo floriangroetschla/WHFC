@@ -11,9 +11,7 @@ namespace whfc_rb {
         static constexpr PartitionID invalidPartition = std::numeric_limits<PartitionID>::max();
 
         explicit PartitionCA(PartitionID num_parts, CSRHypergraph &hg) : PartitionBase(num_parts, hg),
-                                                                         vec_pinsInPart(hg.numHyperedges(),
-                                                                                        std::vector<std::size_t>(
-                                                                                                num_parts, 0)),
+                                                                         vec_pinsInPart(hg.numHyperedges() * num_parts, 0),
                                                                          vec_partWeights(num_parts, 0) {
             assert(maxID() < num_parts);
             assert(partition.size() == hg.numNodes());
@@ -21,7 +19,7 @@ namespace whfc_rb {
 
         explicit PartitionCA(std::vector<PartitionID> vec_partition, PartitionID num_parts, CSRHypergraph &hg)
                 : PartitionBase(vec_partition, num_parts, hg),
-                  vec_pinsInPart(hg.numHyperedges(), std::vector<std::size_t>(num_parts, 0)),
+                  vec_pinsInPart(hg.numHyperedges() * num_parts, 0),
                   vec_partWeights(num_parts, 0) {
             assert(maxID() < num_parts);
             assert(partition.size() == hg.numNodes());
@@ -29,17 +27,17 @@ namespace whfc_rb {
             initialize();
         }
 
-        NodeWeight totalWeight() const override {
+        NodeWeight totalWeight() const {
             assert(datastructures_initialized);
             return std::accumulate(vec_partWeights.begin(), vec_partWeights.end(), 0U);
         }
 
-        NodeWeight partWeight(PartitionID id) const override {
+        NodeWeight partWeight(PartitionID id) const {
             assert(datastructures_initialized);
             return vec_partWeights[id];
         }
 
-        const std::vector<NodeWeight> partitionWeights() const override {
+        const std::vector<NodeWeight> partitionWeights() const {
             assert(datastructures_initialized);
             return vec_partWeights;
         }
@@ -52,9 +50,9 @@ namespace whfc_rb {
             datastructures_initialized = false;
         }
 
-        std::size_t pinsInPart(PartitionID id, HyperedgeID e) const override {
+        std::size_t pinsInPart(PartitionID id, HyperedgeID e) const {
             assert(datastructures_initialized);
-            return vec_pinsInPart[e][id];
+            return vec_pinsInPart[id * num_parts + e];
         }
 
         std::vector<HyperedgeID> getCutEdges(PartitionID part0, PartitionID part1) const override {
@@ -70,15 +68,15 @@ namespace whfc_rb {
             return cut_hes;
         }
 
-        void changePart(NodeID u, PartitionID newPart) override {
+        void changePart(NodeID u, PartitionID newPart) {
             assert(datastructures_initialized);
             if (partition[u] != newPart) {
                 PartitionID oldPart = partition[u];
                 partition[u] = newPart;
 
                 for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                    vec_pinsInPart[e][oldPart]--;
-                    vec_pinsInPart[e][newPart]++;
+                    vec_pinsInPart[oldPart * num_parts + e]--;
+                    vec_pinsInPart[newPart * num_parts + e]++;
                 }
                 vec_partWeights[oldPart] -= hg.nodeWeight(u);
                 vec_partWeights[newPart] += hg.nodeWeight(u);
@@ -94,13 +92,12 @@ namespace whfc_rb {
         }
 
         void initialize() override {
-            vec_pinsInPart = std::vector<std::vector<std::size_t>>(hg.numHyperedges(),
-                                                                   std::vector<std::size_t>(num_parts, 0));
+            vec_pinsInPart = std::vector<std::size_t >(hg.numHyperedges() * num_parts, 0);
             vec_partWeights = std::vector<NodeWeight>(num_parts, 0);
 
             for (HyperedgeID e : hg.hyperedges()) {
                 for (NodeID u : hg.pinsOf(e)) {
-                    vec_pinsInPart[e][partition[u]]++;
+                    vec_pinsInPart[partition[u] * num_parts + e]++;
                 }
             }
 
@@ -111,7 +108,7 @@ namespace whfc_rb {
         }
 
     private:
-        std::vector<std::vector<std::size_t>> vec_pinsInPart;
+        std::vector<std::size_t> vec_pinsInPart;
         std::vector<NodeWeight> vec_partWeights;
         bool datastructures_initialized = false;
 
