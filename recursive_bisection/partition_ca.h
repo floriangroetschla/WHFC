@@ -75,12 +75,17 @@ namespace whfc_rb {
                 partition[u] = newPart;
 
                 for (HyperedgeID e : hg.hyperedgesOf(u)) {
+                    if (vec_pinsInPart[oldPart * num_parts + e] == 1 && vec_pinsInPart[newPart * num_parts + e] > 0) {
+                        km1 -= hg.hyperedgeWeight(e);
+                    } else if (vec_pinsInPart[oldPart * num_parts + e] > 1 && vec_pinsInPart[newPart * num_parts + e] == 0) {
+                        km1 += hg.hyperedgeWeight(e);
+                    }
+
                     vec_pinsInPart[oldPart * num_parts + e]--;
                     vec_pinsInPart[newPart * num_parts + e]++;
                 }
                 vec_partWeights[oldPart] -= hg.nodeWeight(u);
                 vec_partWeights[newPart] += hg.nodeWeight(u);
-
             }
         }
 
@@ -103,14 +108,19 @@ namespace whfc_rb {
             vec_pinsInPart = std::vector<std::size_t >(hg.numHyperedges() * num_parts, 0);
             vec_partWeights = std::vector<NodeWeight>(num_parts, 0);
             vec_cutWeights = std::vector<NodeWeight>(num_parts * (num_parts - 1) / 2, 0);
+            km1 = 0;
 
+            boost::dynamic_bitset<> has_pins_in_part(num_parts);
             for (HyperedgeID e : hg.hyperedges()) {
                 std::vector<NodeID> partitionsOfEdge;
                 for (NodeID u : hg.pinsOf(e)) {
+                    has_pins_in_part.set(partition[u]);
                     vec_pinsInPart[partition[u] * num_parts + e]++;
                     if (std::find(partitionsOfEdge.begin(), partitionsOfEdge.end(), partition[u]) == partitionsOfEdge.end()) {
                         partitionsOfEdge.push_back(partition[u]);
                     }
+                    km1 += (has_pins_in_part.count() - 1) * hg.hyperedgeWeight(e);
+                    has_pins_in_part.reset();
                 }
                 for (uint i = 0; i < partitionsOfEdge.size() - 1; ++i) {
                     for (uint j = i + 1; j < partitionsOfEdge.size(); ++j) {
@@ -129,6 +139,7 @@ namespace whfc_rb {
         std::vector<std::size_t> vec_pinsInPart;
         std::vector<NodeWeight> vec_partWeights;
         std::vector<NodeWeight> vec_cutWeights;
+        NodeWeight km1 = 0;
         bool datastructures_initialized = false;
 
         PartitionID maxID() {
