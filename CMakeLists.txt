@@ -26,3 +26,6 @@ target_link_libraries(PaToH ${CMAKE_SOURCE_DIR}/extern/libpatoh.a)
 add_executable(RecursiveBisection test_rb.cpp)
 target_link_libraries(RecursiveBisection ${CMAKE_SOURCE_DIR}/extern/libpatoh.a)
 
+add_executable(KWayRefinement test_kway.cpp)
+target_link_libraries(KWayRefinement ${CMAKE_SOURCE_DIR}/extern/libpatoh.a)
+

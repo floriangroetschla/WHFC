@@ -19,7 +19,8 @@ namespace whfc_rb {
             hfc.timer.active = false;
         }
 
-        bool refine(PartitionBase &partition, PartitionID part0, PartitionID part1, NodeWeight maxBlockWeight0,
+        template<class PartitionImpl>
+        bool refine(PartitionImpl &partition, PartitionID part0, PartitionID part1, NodeWeight maxBlockWeight0,
                     NodeWeight maxBlockWeight1) {
             std::vector<NodeWeight> partWeights = partition.partitionWeights();
 
@@ -58,6 +59,8 @@ namespace whfc_rb {
             double imbalanceAfter = std::max(hfc.cs.n.sourceReachableWeight / maxBlockWeight0,
                                              hfc.cs.n.targetReachableWeight / maxBlockWeight1);
 
+            assert(hfc.cs.n.sourceReachableWeight < maxBlockWeight0 && hfc.cs.n.targetReachableWeight < maxBlockWeight1);
+
             if (newCut < extractor_info.cutAtStake ||
                 (newCut == extractor_info.cutAtStake && imbalanceAfter < imbalanceBefore)) {
                 reassign(partition, extractor_info, part0, part1);
@@ -75,7 +78,8 @@ namespace whfc_rb {
 
         size_t instance_counter = 0;
 
-        void reassign(PartitionBase &partition, FlowHypergraphBuilderExtractor::ExtractorInfo &info, PartitionID part0,
+        template<class PartitionImpl>
+        void reassign(PartitionImpl &partition, FlowHypergraphBuilderExtractor::ExtractorInfo &info, PartitionID part0,
                       PartitionID part1) {
             for (whfc::Node localID : extractor.localNodeIDs()) {
                 if (localID == info.source || localID == info.target) continue;

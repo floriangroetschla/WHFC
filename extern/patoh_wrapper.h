@@ -20,7 +20,8 @@ public:
         bool free;
     };
 
-    static void bisectImbalancedWithPatoh(whfc_rb::PartitionBase &partition,
+    template<class PartitionImpl>
+    static void bisectImbalancedWithPatoh(PartitionImpl &partition,
                                           int seed,
                                           float imbalanceFactor,
                                           double epsilon = 0.05,
@@ -36,7 +37,8 @@ public:
         runPatoh(partition, seed, p, preset);
     }
 
-    static void bisectWithPatoh(whfc_rb::PartitionBase &partition,
+    template<class PartitionImpl>
+    static void bisectWithPatoh(PartitionImpl &partition,
                                 int seed,
                                 double epsilon = 0.0,
                                 std::string preset = "D", bool alloc = true, bool free = true) {
@@ -47,8 +49,8 @@ public:
         runPatoh(partition, seed, p, preset);
     }
 
-    static void
-    partitionWithPatoh(whfc_rb::PartitionBase &partition, int seed, int numPartitions, double epsilon = 0.05,
+    template<class PartitionImpl>
+    static void partitionWithPatoh(PartitionImpl &partition, int seed, int numPartitions, double epsilon = 0.05,
                        std::string preset = "D") {
         PatohParameters p;
         p.use_target_weights = false;
@@ -57,9 +59,8 @@ public:
         runPatoh(partition, seed, p, preset);
     }
 
-
-    static void
-    runPatoh(whfc_rb::PartitionBase &partition, int seed, PatohParameters params, std::string str_preset = "D") {
+    template<class PartitionImpl>
+    static void runPatoh(PartitionImpl &partition, int seed, PatohParameters params, std::string str_preset = "D") {
         whfc_rb::CSRHypergraph &hg = partition.getGraph();
         // For output of PaToH
         //std::vector<whfc_rb::Partition::PartitionID > vec_partition(hg.numNodes());

@@ -52,7 +52,7 @@ namespace whfc_rb {
 
         std::size_t pinsInPart(PartitionID id, HyperedgeID e) const {
             assert(datastructures_initialized);
-            return vec_pinsInPart[id * num_parts + e];
+            return vec_pinsInPart[id * hg.numHyperedges() + e];
         }
 
         std::vector<HyperedgeID> getCutEdges(PartitionID part0, PartitionID part1) const override {
@@ -75,14 +75,14 @@ namespace whfc_rb {
                 partition[u] = newPart;
 
                 for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                    if (vec_pinsInPart[oldPart * num_parts + e] == 1 && vec_pinsInPart[newPart * num_parts + e] > 0) {
+                    if (vec_pinsInPart[oldPart * hg.numHyperedges() + e] == 1 && vec_pinsInPart[newPart * hg.numHyperedges() + e] > 0) {
                         km1 -= hg.hyperedgeWeight(e);
-                    } else if (vec_pinsInPart[oldPart * num_parts + e] > 1 && vec_pinsInPart[newPart * num_parts + e] == 0) {
+                    } else if (vec_pinsInPart[oldPart * hg.numHyperedges() + e] > 1 && vec_pinsInPart[newPart * hg.numHyperedges() + e] == 0) {
                         km1 += hg.hyperedgeWeight(e);
                     }
 
-                    vec_pinsInPart[oldPart * num_parts + e]--;
-                    vec_pinsInPart[newPart * num_parts + e]++;
+                    vec_pinsInPart[oldPart * hg.numHyperedges() + e]--;
+                    vec_pinsInPart[newPart * hg.numHyperedges() + e]++;
                 }
                 vec_partWeights[oldPart] -= hg.nodeWeight(u);
                 vec_partWeights[newPart] += hg.nodeWeight(u);
@@ -105,7 +105,7 @@ namespace whfc_rb {
         }
 
         void initialize() override {
-            vec_pinsInPart = std::vector<std::size_t >(hg.numHyperedges() * num_parts, 0);
+            vec_pinsInPart = std::vector<std::size_t>(hg.numHyperedges() * num_parts, 0);
             vec_partWeights = std::vector<NodeWeight>(num_parts, 0);
             vec_cutWeights = std::vector<NodeWeight>(num_parts * (num_parts - 1) / 2, 0);
             km1 = 0;
@@ -115,7 +115,7 @@ namespace whfc_rb {
                 std::vector<NodeID> partitionsOfEdge;
                 for (NodeID u : hg.pinsOf(e)) {
                     has_pins_in_part.set(partition[u]);
-                    vec_pinsInPart[partition[u] * num_parts + e]++;
+                    vec_pinsInPart[partition[u] * hg.numHyperedges() + e]++;
                     if (std::find(partitionsOfEdge.begin(), partitionsOfEdge.end(), partition[u]) == partitionsOfEdge.end()) {
                         partitionsOfEdge.push_back(partition[u]);
                     }

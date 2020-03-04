@@ -15,8 +15,8 @@ namespace whfc_rb {
 
         virtual ~TwoWayRefinerInterface() = default;
 
-        virtual bool
-        refine(PartitionBase &partition, PartitionBase::PartitionID part0, PartitionBase::PartitionID part1,
-               NodeWeight maxBlockWeight0, NodeWeight maxBlockWeight1) = 0;
+        template<class PartitionImpl>
+         bool refine(PartitionImpl &partition, PartitionBase::PartitionID part0, PartitionBase::PartitionID part1,
+               NodeWeight maxBlockWeight0, NodeWeight maxBlockWeight1);
     };
 }

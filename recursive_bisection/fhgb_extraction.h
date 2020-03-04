@@ -24,8 +24,8 @@ namespace whfc_rb {
             whfc::Flow cutAtStake;
         };
 
-        ExtractorInfo
-        run(PartitionBase &partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
+        template<class PartitionImpl>
+        ExtractorInfo run(PartitionImpl &partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
             NodeWeight maxW0, NodeWeight maxW1) {
             CSRHypergraph &hg = partition.getGraph();
             initialize(hg.numNodes(), hg.numHyperedges());
@@ -35,6 +35,7 @@ namespace whfc_rb {
             // shuffle cut edges
             std::shuffle(cut_hes.begin(), cut_hes.end(), mt);
 
+            assert(queue.empty());
 
             // Add source node and run BFS in part0
             fhgb.addNode(whfc::NodeWeight(0));
@@ -53,8 +54,8 @@ namespace whfc_rb {
 
             std::vector<NodeWeight> totalWeights = partition.partitionWeights();
 
-            fhgb.nodeWeight(result.source) = totalWeights[0] - w0;
-            fhgb.nodeWeight(result.target) = totalWeights[1] - w1;
+            fhgb.nodeWeight(result.source) = totalWeights[part0] - w0;
+            fhgb.nodeWeight(result.target) = totalWeights[part1] - w1;
 
             fhgb.finalize();
 
@@ -88,8 +89,8 @@ namespace whfc_rb {
             w += hg.nodeWeight(node);
         }
 
-        whfc::NodeWeight
-        BreadthFirstSearch(CSRHypergraph &hg, const std::vector<HyperedgeID> &cut_hes, const PartitionBase &partition,
+        template<class PartitionImpl>
+        whfc::NodeWeight BreadthFirstSearch(CSRHypergraph &hg, const std::vector<HyperedgeID> &cut_hes, const PartitionImpl &partition,
                            uint partID, uint otherPartID, NodeWeight maxWeight, whfc::Node terminal) {
             whfc::NodeWeight w = 0;
 
@@ -126,18 +127,21 @@ namespace whfc_rb {
                         if (connectToTerminal) {
                             fhgb.addPin(terminal);
                         }
+                        visitedHyperedge[e] = true;
                     }
-                    visitedHyperedge[e] = true;
+
                 }
             }
 
             return w;
         }
 
-        void
-        processCutHyperedges(CSRHypergraph &hg, const std::vector<HyperedgeID> &cut_hes, const PartitionBase &partition,
+        template<class PartitionImpl>
+        void processCutHyperedges(CSRHypergraph &hg, const std::vector<HyperedgeID> &cut_hes, const PartitionImpl &partition,
                              const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1) {
             for (HyperedgeID e : cut_hes) {
+                assert(!visitedHyperedge[e]);
+                assert(partition.pinsInPart(part0, e) > 0 && partition.pinsInPart(part1, e) > 0);
                 bool connectToSource = false;
                 bool connectToTarget = false;
                 result.cutAtStake += hg.hyperedgeWeight(e);
@@ -173,9 +177,11 @@ namespace whfc_rb {
             fhgb.clear();
             queue.clear();
             visitedNode.clear();
-            visitedNode.resize(numNodes, false);
+            //visitedNode.resize(numNodes, false);
+            visitedNode = std::vector<bool>(numNodes, false);
             visitedHyperedge.clear();
-            visitedHyperedge.resize(numHyperedges, false);
+            //visitedHyperedge.resize(numHyperedges, false);
+            visitedHyperedge = std::vector<bool>(numHyperedges, false);
             result = {whfc::Node::fromOtherValueType(0), whfc::Node::fromOtherValueType(0), 0, 0};
         }
     };
