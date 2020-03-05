@@ -181,7 +181,7 @@ namespace whfc_rb {
             queue.clear();
             visitedNode.clear();
             //visitedNode.resize(numNodes, false);
-            visitedNode = std::vector<bool>(numNodes, false);
+            visitedNode = std::vector<bool>(numNodes, false);   // Note(Lars): Not sure this is fine on large instances. Use timestamps or clearlist instead?
             visitedHyperedge.clear();
             //visitedHyperedge.resize(numHyperedges, false);
             visitedHyperedge = std::vector<bool>(numHyperedges, false);

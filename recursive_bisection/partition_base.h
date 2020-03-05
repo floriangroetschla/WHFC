@@ -24,7 +24,7 @@ namespace whfc_rb {
             return partition.size();
         }
 
-        NodeWeight totalWeight() const {
+        NodeWeight totalWeight() const {    // Note(Lars): that's not really a property of a partition. Also: compute once and store. You can propagate it through the Recursive Bisection
             NodeWeight weight = 0;
 
             for (NodeID u : hg.nodes()) {
@@ -139,6 +139,7 @@ namespace whfc_rb {
             return hg;
         }
 
+        // Note (Lars): this should be HyperedgeWeight. occurs in some other places as well.
         NodeWeight km1AfterChanges(std::vector<PartitionChangeElement> &partChanges) const {
             NodeWeight newkm1 = km1Objective();
             for (PartitionChangeElement partChange : partChanges) {

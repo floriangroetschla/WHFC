@@ -12,6 +12,8 @@ namespace whfc_rb {
     public:
         using PartitionID = PartitionBase::PartitionID;
 
+
+        // Note (Lars): what is this indentation?
         WHFCRefinerTwoWay(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937 &mt,
                           whfc::TimeReporter &timer) :
                 extractor(maxNumNodes, maxNumEdges, maxNumPins, mt),
@@ -31,8 +33,7 @@ namespace whfc_rb {
                                               partWeights[part1] / maxBlockWeight1);
 
             timer.start("Extraction", "Refinement");
-            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0,
-                                                                                         maxW1);
+            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1);
             timer.stop("Extraction");
 
             // call WHFC to improve the bisection
@@ -41,7 +42,7 @@ namespace whfc_rb {
             hfc.cs.setMaxBlockWeight(1, maxBlockWeight1);
             hfc.upperFlowBound = extractor_info.cutAtStake - extractor_info.baseCut;
 
-            if (extractor_info.cutAtStake - extractor_info.baseCut == 0) return false;
+            if (extractor_info.cutAtStake == extractor_info.baseCut) return false;
 
             static constexpr bool write_snapshot = false;
             if constexpr (write_snapshot) {
@@ -73,7 +74,7 @@ namespace whfc_rb {
                         partChanges.push_back({globalID, newPart});
                     }
                 }
-                NodeWeight km1After = partition.km1AfterChanges(partChanges);
+                NodeWeight km1After = partition.km1AfterChanges(partChanges);       // Note (Lars): what is this? you already know km1After == (oldCut - newCut)
                 if (km1After < km1Before || (km1After == km1Before && imbalanceAfter < imbalanceBefore)) {
                     // TODO: factor out this function call
                     reassign(partition, extractor_info, part0, part1);
