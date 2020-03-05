@@ -13,8 +13,7 @@ namespace whfc_rb {
         explicit PartitionCA(PartitionID num_parts, CSRHypergraph &hg) : PartitionBase(num_parts, hg),
                                                                          vec_pinsInPart(hg.numHyperedges() * num_parts,
                                                                                         0),
-                                                                         vec_partWeights(num_parts, 0), vec_cutWeights(
-                        num_parts * (num_parts - 1) / 2) {
+                                                                         vec_partWeights(num_parts, 0) {
             assert(maxID() < num_parts);
             assert(partition.size() == hg.numNodes());
         }
@@ -22,7 +21,7 @@ namespace whfc_rb {
         explicit PartitionCA(std::vector<PartitionID> vec_partition, PartitionID num_parts, CSRHypergraph &hg)
                 : PartitionBase(vec_partition, num_parts, hg),
                   vec_pinsInPart(hg.numHyperedges() * num_parts, 0),
-                  vec_partWeights(num_parts, 0), vec_cutWeights(num_parts * (num_parts - 1) / 2) {
+                  vec_partWeights(num_parts, 0) {
             assert(maxID() < num_parts);
             assert(partition.size() == hg.numNodes());
 
@@ -93,12 +92,6 @@ namespace whfc_rb {
             }
         }
 
-        NodeWeight &cutWeight(PartitionID part0, PartitionID part1) {
-            assert(part0 != part1 && part0 < num_parts && part1 < num_parts);
-
-            if (part0 < part1) std::swap(part0, part1);
-            return (vec_cutWeights[(part0 * (part0 - 1) / 2) + part1]);
-        }
 
         NodeWeight km1AfterChanges(std::vector<PartitionChangeElement> &partChanges) const {
             NodeWeight newkm1 = km1;
@@ -124,27 +117,16 @@ namespace whfc_rb {
         void initialize() override {
             vec_pinsInPart = std::vector<std::size_t>(hg.numHyperedges() * num_parts, 0);
             vec_partWeights = std::vector<NodeWeight>(num_parts, 0);
-            vec_cutWeights = std::vector<NodeWeight>(num_parts * (num_parts - 1) / 2, 0);
             km1 = 0;
 
             boost::dynamic_bitset<> has_pins_in_part(num_parts);
             for (HyperedgeID e : hg.hyperedges()) {
-                std::vector<NodeID> partitionsOfEdge;
                 for (NodeID u : hg.pinsOf(e)) {
                     has_pins_in_part.set(partition[u]);
                     vec_pinsInPart[partition[u] * hg.numHyperedges() + e]++;
-                    if (std::find(partitionsOfEdge.begin(), partitionsOfEdge.end(), partition[u]) ==
-                        partitionsOfEdge.end()) {
-                        partitionsOfEdge.push_back(partition[u]);
-                    }
                 }
                 km1 += (has_pins_in_part.count() - 1) * hg.hyperedgeWeight(e);
                 has_pins_in_part.reset();
-                for (uint i = 0; i < partitionsOfEdge.size() - 1; ++i) {
-                    for (uint j = i + 1; j < partitionsOfEdge.size(); ++j) {
-                        cutWeight(partitionsOfEdge[i], partitionsOfEdge[j]) += hg.hyperedgeWeight(e);
-                    }
-                }
             }
 
             for (NodeID u : hg.nodes()) {
@@ -156,7 +138,6 @@ namespace whfc_rb {
     private:
         std::vector<std::size_t> vec_pinsInPart;
         std::vector<NodeWeight> vec_partWeights;
-        std::vector<NodeWeight> vec_cutWeights;
         NodeWeight km1 = 0;
         bool datastructures_initialized = false;
 
