@@ -15,6 +15,8 @@ namespace whfc_rb {
             NodeWeight maxWeight = (1.0 + epsilon) * partition.totalWeight() / static_cast<double>(partition.numParts());
             partActive.set();
             partActiveNextRound.reset();
+
+            // Note(Lars): support random order? the maintenance code is probably not too running time intensive
             while (partActive.count() > 0) {
                 for (uint part0 = 0; part0 < partActive.size() - 1; ++part0) {
                     if (partActive[part0]) {

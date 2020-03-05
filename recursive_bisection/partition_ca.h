@@ -60,6 +60,11 @@ namespace whfc_rb {
             assert(datastructures_initialized);
             std::vector<HyperedgeID> cut_hes;
 
+            // Note(Lars): this is probably not fine for the k-way pairwise refinement
+            // for the refinement of a bisection, extracting the cut hyperedges like this is fine, because we do it once
+            // we should at least try lazy maintenance of pairwise cut hyperedge vectors
+            // this is also something you should test one some larger instances (i.e. not setC)
+
             for (HyperedgeID e : hg.hyperedges()) {
                 if (pinsInPart(part0, e) > 0 && pinsInPart(part1, e) > 0) {
                     cut_hes.push_back(e);
