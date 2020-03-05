@@ -9,7 +9,7 @@
 #include "recursive_bisection/partition_ca.h"
 #include "recursive_bisection/null_refiner.h"
 
-void printStatistics(whfc_rb::PartitionBase& partition, whfc::TimeReporter& timer) {
+void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
     timer.report(std::cout);
     std::cout << "Imbalance: " << partition.imbalance() << std::endl;
     std::cout << "Num_parts: " << partition.numParts() << std::endl;
@@ -45,7 +45,8 @@ int main(int argc, const char *argv[]) {
         throw std::runtime_error("Mode must be one of: RBONlY, RBWHFC");
     }
 
-    whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector(hg.numNodes(), hg.numHyperedges(), hg.numPins(), mt, timer, config);
+    whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector(hg.numNodes(), hg.numHyperedges(),
+                                                                               hg.numPins(), mt, timer, config);
     timer.start("Total");
     whfc_rb::PartitionBase partition = recursive_bisector.run(hg, epsilon, numParts);
     timer.stop("Total");

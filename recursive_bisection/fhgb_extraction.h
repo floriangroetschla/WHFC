@@ -25,7 +25,8 @@ namespace whfc_rb {
         };
 
         template<class PartitionImpl>
-        ExtractorInfo run(PartitionImpl &partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
+        ExtractorInfo
+        run(PartitionImpl &partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
             NodeWeight maxW0, NodeWeight maxW1) {
             CSRHypergraph &hg = partition.getGraph();
             initialize(hg.numNodes(), hg.numHyperedges());
@@ -90,7 +91,8 @@ namespace whfc_rb {
         }
 
         template<class PartitionImpl>
-        whfc::NodeWeight BreadthFirstSearch(CSRHypergraph &hg, const std::vector<HyperedgeID> &cut_hes, const PartitionImpl &partition,
+        whfc::NodeWeight
+        BreadthFirstSearch(CSRHypergraph &hg, const std::vector<HyperedgeID> &cut_hes, const PartitionImpl &partition,
                            uint partID, uint otherPartID, NodeWeight maxWeight, whfc::Node terminal) {
             whfc::NodeWeight w = 0;
 
@@ -137,7 +139,8 @@ namespace whfc_rb {
         }
 
         template<class PartitionImpl>
-        void processCutHyperedges(CSRHypergraph &hg, const std::vector<HyperedgeID> &cut_hes, const PartitionImpl &partition,
+        void
+        processCutHyperedges(CSRHypergraph &hg, const std::vector<HyperedgeID> &cut_hes, const PartitionImpl &partition,
                              const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1) {
             for (HyperedgeID e : cut_hes) {
                 assert(!visitedHyperedge[e]);

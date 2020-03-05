@@ -51,7 +51,7 @@ public:
 
     template<class PartitionImpl>
     static void partitionWithPatoh(PartitionImpl &partition, int seed, int numPartitions, double epsilon = 0.05,
-                       std::string preset = "D") {
+                                   std::string preset = "D") {
         PatohParameters p;
         p.use_target_weights = false;
         p.k = numPartitions;

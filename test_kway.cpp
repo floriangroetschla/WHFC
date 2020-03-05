@@ -10,7 +10,7 @@
 #include "recursive_bisection/null_refiner.h"
 #include "recursive_bisection/k_way_refiner.h"
 
-void printStatistics(whfc_rb::PartitionBase& partition, whfc::TimeReporter& timer) {
+void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
     timer.report(std::cout);
     std::cout << "Imbalance: " << partition.imbalance() << std::endl;
     std::cout << "Num_parts: " << partition.numParts() << std::endl;
@@ -32,11 +32,17 @@ int main(int argc, const char *argv[]) {
 
     whfc::TimeReporter timer("Total");
 
+    timer.start("Total");
+    timer.start("PaToH", "Total");
     whfc_rb::PartitionCA partition(numParts, hg);
     PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset);
+    timer.stop("PaToH");
 
+    timer.start("Refinement", "Total");
     whfc_rb::KWayRefiner refiner(partition, timer, mt);
     refiner.refine(epsilon);
+    timer.stop("Refinement");
+    timer.stop("Total");
 
     printStatistics(partition, timer);
 }

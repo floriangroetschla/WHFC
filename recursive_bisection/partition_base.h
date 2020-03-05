@@ -4,6 +4,12 @@ namespace whfc_rb {
     class PartitionBase {
     public:
         using PartitionID = uint32_t;
+
+        struct PartitionChangeElement {
+            NodeID u;
+            PartitionID newPart;
+        };
+
         static constexpr PartitionID invalidPartition = std::numeric_limits<PartitionID>::max();
 
         PartitionBase(PartitionID num_parts, CSRHypergraph &hg) : partition(hg.numNodes(), 0), hg(hg),
@@ -133,6 +139,14 @@ namespace whfc_rb {
             return hg;
         }
 
+        NodeWeight km1AfterChanges(std::vector<PartitionChangeElement> &partChanges) const {
+            NodeWeight newkm1 = km1Objective();
+            for (PartitionChangeElement partChange : partChanges) {
+                km1Update(newkm1, partChange);
+            }
+            return newkm1;
+        }
+
         virtual void print(std::ostream &out) {
             out << "Partition: ";
             for (uint i = 0; i < partition.size(); ++i) {
@@ -147,6 +161,23 @@ namespace whfc_rb {
         std::vector<PartitionID> partition;
         CSRHypergraph &hg;
         PartitionID num_parts;
+
+    private:
+        void km1Update(NodeWeight &value, PartitionChangeElement &partChange) const {
+            if (partChange.newPart != partition[partChange.u]) {
+                NodeID oldPart = partition[partChange.u];
+                NodeID newPart = partChange.newPart;
+                for (HyperedgeID e : hg.hyperedgesOf(partChange.u)) {
+                    if (pinsInPart(oldPart, e) == 1 &&
+                        pinsInPart(newPart, e) > 0) {
+                        value -= hg.hyperedgeWeight(e);
+                    } else if (pinsInPart(oldPart, e) > 1 &&
+                               pinsInPart(newPart, e) == 0) {
+                        value += hg.hyperedgeWeight(e);
+                    }
+                }
+            }
+        }
 
     };
 }

@@ -62,7 +62,7 @@ namespace whfc_rb {
         }
 
         const_range<std::vector<HyperedgeID> > hyperedgesOf(const NodeID u) const {
-                    assert(vertices_initialized);
+            assert(vertices_initialized);
             return Vertices.incidentElementsOf(u);
         }
 

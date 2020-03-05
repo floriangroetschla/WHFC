@@ -3,8 +3,10 @@
 namespace whfc_rb {
     class KWayRefiner {
     public:
-        explicit KWayRefiner(PartitionCA& partition, whfc::TimeReporter& timer, std::mt19937& mt) : partition(partition), partActive(partition.numParts(), true)
-        , timer(timer), mt(mt), twoWayRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), mt, timer) {}
+        explicit KWayRefiner(PartitionCA &partition, whfc::TimeReporter &timer, std::mt19937 &mt) : partition(
+                partition), partActive(partition.numParts(), true), timer(timer), mt(mt), twoWayRefiner(
+                partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(),
+                mt, timer) {}
 
         void refine(double epsilon) {
             while (true) {
@@ -25,9 +27,11 @@ namespace whfc_rb {
                 }
 
                 if (foundPair) {
-                    NodeWeight maxWeight = (1.0 + epsilon) * partition.totalWeight() / static_cast<double>(partition.numParts());
-
-                    bool refinementResult = twoWayRefiner.refine(partition, block0, block1, maxWeight, maxWeight);
+                    NodeWeight maxWeight =
+                            (1.0 + epsilon) * partition.totalWeight() / static_cast<double>(partition.numParts());
+                    bool refinementResult = twoWayRefiner.refine(partition, block0, block1, maxWeight, maxWeight, true);
+                    std::cout << "Refinement of part " << block0 << " and " << block1 << " resulted in "
+                              << refinementResult << std::endl;
                     if (!refinementResult) {
                         partActive[block0] = false;
                         partActive[block1] = false;
@@ -39,9 +43,9 @@ namespace whfc_rb {
         }
 
     private:
-        PartitionCA& partition;
+        PartitionCA &partition;
         std::vector<bool> partActive;
-        whfc::TimeReporter& timer;
+        whfc::TimeReporter &timer;
         std::mt19937 &mt;
         WHFCRefinerTwoWay twoWayRefiner;
     };
