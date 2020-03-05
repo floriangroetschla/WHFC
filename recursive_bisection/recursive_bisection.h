@@ -18,8 +18,6 @@ namespace whfc_rb {
         }
 
         PartitionBase run(CSRHypergraph &hg, double epsilon, uint k) {
-            epsilon = std::pow(1.0 + epsilon, 1.0 / std::ceil(std::log2(k))) - 1.0;
-
             PartitionBase partition(k, hg);
             partition_recursively(partition, epsilon, k, true);
             partition.initialize();
@@ -38,6 +36,8 @@ namespace whfc_rb {
                 return;
             }
 
+            double epsilon_for_patoh = std::pow(1.0 + epsilon, 1.0 / std::ceil(std::log2(k))) - 1.0;
+
             std::array<int, 2> numParts;
             CSRHypergraph &hg = partition.getGraph();
 
@@ -45,12 +45,12 @@ namespace whfc_rb {
             if (k % 2 == 0) {
                 numParts[0] = k / 2;
                 numParts[1] = k / 2;
-                PaToHInterface::bisectWithPatoh(partition, mt(), epsilon, config.patoh_preset, alloc, false);
+                PaToHInterface::bisectWithPatoh(partition, mt(), epsilon_for_patoh, config.patoh_preset, alloc, false);
             } else {
                 numParts[0] = k / 2;
                 numParts[1] = numParts[0] + 1;
                 PaToHInterface::bisectImbalancedWithPatoh(partition, mt(), float(numParts[1]) / float(numParts[0]),
-                                                          epsilon, config.patoh_preset, alloc, false);
+                                                          epsilon_for_patoh, config.patoh_preset, alloc, false);
             }
 
             timer.stop("PaToH");
@@ -68,6 +68,13 @@ namespace whfc_rb {
 
             if (k > 2) {
                 timer.start("GraphAndPartitionBuilding", "Total");
+
+                std::vector<NodeWeight> vec_partitionWeights = partition.partitionWeights();
+                NodeWeight totalWeight = vec_partitionWeights[0] + vec_partitionWeights[1];
+                NodeWeight maxPartWeight = std::max(vec_partitionWeights[0], vec_partitionWeights[1]);
+                double achievedEpsilon = (static_cast<double>(maxPartWeight) * 2.0 / static_cast<double>(totalWeight)) - 1.0;
+                double newEpsilon = (1.0 + epsilon) / (1.0 + achievedEpsilon) - 1.0;
+
                 std::vector<int> new_ids(partition.size());
                 std::vector<int> carries(2, 0);
                 std::vector<PartitionBase::PartitionID> vec_part(hg.numNodes());
@@ -110,7 +117,7 @@ namespace whfc_rb {
 
                     PartitionBase subPartition(numParts[partID], partHg);
                     timer.stop("GraphAndPartitionBuilding");
-                    partition_recursively(subPartition, epsilon, numParts[partID], false);
+                    partition_recursively(subPartition, newEpsilon, numParts[partID], false);
                     timer.start("GraphAndPartitionBuilding", "Total");
 
                     for (uint i = 0; i < partition.size(); ++i) {
