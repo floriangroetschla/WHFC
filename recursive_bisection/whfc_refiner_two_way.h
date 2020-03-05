@@ -59,8 +59,8 @@ namespace whfc_rb {
             double imbalanceAfter = std::max(hfc.cs.n.sourceReachableWeight / maxBlockWeight0,
                                              hfc.cs.n.targetReachableWeight / maxBlockWeight1);
 
-            assert(hfc.cs.n.sourceReachableWeight < maxBlockWeight0 &&
-                   hfc.cs.n.targetReachableWeight < maxBlockWeight1);
+            assert(hfc.cs.n.sourceReachableWeight <= maxBlockWeight0 &&
+                   hfc.cs.n.targetReachableWeight <= maxBlockWeight1);
 
             if (globalOptimization) {
                 NodeWeight km1Before = partition.km1Objective();
