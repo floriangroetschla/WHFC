@@ -16,21 +16,23 @@ namespace whfc_rb {
             partActive.set();
             partActiveNextRound.reset();
             uint iterations = 0;
+            std::vector<std::pair<PartitionBase::PartitionID, PartitionBase::PartitionID>> partitionPairs;
 
-            // Note(Lars): support random order? the maintenance code is probably not too running time intensive
             while (partActive.count() > 0 && iterations < maxIterations) {
-                for (uint part0 = 0; part0 < partActive.size() - 1; ++part0) {
-                    if (partActive[part0]) {
-                        for (uint part1 = part0 + 1; part1 < partActive.size(); ++part1) {
-                            iterations++;
-                            bool refinementResult = twoWayRefiner.refine(partition, part0, part1, maxWeight, maxWeight);
-                            if (refinementResult) {
-                                // Schedule for next round
-                                partActiveNextRound.set(part0);
-                                partActiveNextRound.set(part1);
-                            }
-                        }
+                fillPartitionPairs(partitionPairs);
+                std::shuffle(partitionPairs.begin(), partitionPairs.end(), mt);
+
+                for (auto partitionPair : partitionPairs) {
+                    PartitionBase::PartitionID part0 = partitionPair.first;
+                    PartitionBase::PartitionID part1 = partitionPair.second;
+                    std::cout << part0 << ", " << part1 << std::endl;
+                    bool refinementResult = twoWayRefiner.refine(partition, part0, part1, maxWeight, maxWeight);
+                    if (refinementResult) {
+                        // Schedule for next round
+                        partActiveNextRound.set(part0);
+                        partActiveNextRound.set(part1);
                     }
+                    iterations++;
                 }
                 std::swap(partActive, partActiveNextRound);
                 partActiveNextRound.reset();
@@ -44,5 +46,16 @@ namespace whfc_rb {
         whfc::TimeReporter &timer;
         std::mt19937 &mt;
         WHFCRefinerTwoWay twoWayRefiner;
+
+        void fillPartitionPairs(std::vector<std::pair<PartitionBase::PartitionID, PartitionBase::PartitionID>>& partitionPairs) {
+            partitionPairs.clear();
+            for (PartitionBase::PartitionID part0 = 0; part0 < partActive.size() - 1; ++part0) {
+                if (partActive[part0]) {
+                    for (PartitionBase::PartitionID part1 = part0 + 1; part1 < partActive.size(); ++part1) {
+                        partitionPairs.push_back(std::pair<PartitionBase::PartitionID, PartitionBase::PartitionID>(part0, part1));
+                    }
+                }
+            }
+        }
     };
 }
