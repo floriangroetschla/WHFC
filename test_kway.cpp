@@ -40,7 +40,7 @@ int main(int argc, const char *argv[]) {
 
     timer.start("Refinement", "Total");
     whfc_rb::KWayRefiner refiner(partition, timer, mt);
-    refiner.refine(epsilon);
+    refiner.refine(epsilon, 200);
     timer.stop("Refinement");
     timer.stop("Total");
 

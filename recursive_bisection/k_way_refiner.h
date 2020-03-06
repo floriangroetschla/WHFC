@@ -11,21 +11,19 @@ namespace whfc_rb {
                 partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(),
                 mt, timer) {}
 
-        void refine(double epsilon) {
+        void refine(double epsilon, uint maxIterations) {
             NodeWeight maxWeight = (1.0 + epsilon) * partition.totalWeight() / static_cast<double>(partition.numParts());
             partActive.set();
             partActiveNextRound.reset();
             uint iterations = 0;
 
             // Note(Lars): support random order? the maintenance code is probably not too running time intensive
-            while (partActive.count() > 0 && iterations < 100) {
+            while (partActive.count() > 0 && iterations < maxIterations) {
                 for (uint part0 = 0; part0 < partActive.size() - 1; ++part0) {
                     if (partActive[part0]) {
                         for (uint part1 = part0 + 1; part1 < partActive.size(); ++part1) {
                             iterations++;
                             bool refinementResult = twoWayRefiner.refine(partition, part0, part1, maxWeight, maxWeight);
-                            std::cout << "Refinement of part " << part0 << " and " << part1 << " resulted in "
-                                      << refinementResult << std::endl;
                             if (refinementResult) {
                                 // Schedule for next round
                                 partActiveNextRound.set(part0);
