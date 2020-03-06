@@ -23,7 +23,7 @@ namespace whfc_rb {
 
         template<class PartitionImpl>
         bool refine(PartitionImpl &partition, PartitionID part0, PartitionID part1, NodeWeight maxBlockWeight0,
-                    NodeWeight maxBlockWeight1, bool globalOptimization) {
+                    NodeWeight maxBlockWeight1) {
             std::vector<NodeWeight> partWeights = partition.partitionWeights();
 
             double maxW0 = 0.2 * partWeights[part0];
@@ -63,31 +63,11 @@ namespace whfc_rb {
             assert(hfc.cs.n.sourceReachableWeight <= maxBlockWeight0 &&
                    hfc.cs.n.targetReachableWeight <= maxBlockWeight1);
 
-            if (globalOptimization) {
-                NodeWeight km1Before = partition.km1Objective();
-                std::vector<PartitionBase::PartitionChangeElement> partChanges;
-                for (whfc::Node localID : extractor.localNodeIDs()) {
-                    if (localID == extractor_info.source || localID == extractor_info.target) continue;
-                    NodeID globalID = extractor.local2global(localID);
-                    PartitionID newPart = hfc.cs.n.isSource(localID) ? part0 : part1;
-                    if (newPart != partition[globalID]) {
-                        partChanges.push_back({globalID, newPart});
-                    }
-                }
-                NodeWeight km1After = partition.km1AfterChanges(partChanges);       // Note (Lars): what is this? you already know km1After == (oldCut - newCut)
-                if (km1After < km1Before || (km1After == km1Before && imbalanceAfter < imbalanceBefore)) {
-                    // TODO: factor out this function call
-                    reassign(partition, extractor_info, part0, part1);
-                }
-            } else {
-                if (newCut < extractor_info.cutAtStake ||
-                    (newCut == extractor_info.cutAtStake && imbalanceAfter < imbalanceBefore)) {
-                    // TODO: this one too
-                    reassign(partition, extractor_info, part0, part1);
-                    return true;
-                }
+            if (newCut < extractor_info.cutAtStake ||
+                (newCut == extractor_info.cutAtStake && imbalanceAfter < imbalanceBefore)) {
+                reassign(partition, extractor_info, part0, part1);
+                return true;
             }
-
 
             return false;
         }

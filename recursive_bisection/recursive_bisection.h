@@ -62,7 +62,7 @@ namespace whfc_rb {
 
             if (config.refine) {
                 timer.start("Refinement", "Total");
-                refiner.refine(partition, 0, 1, maxWeight0, maxWeight1, false);
+                refiner.refine(partition, 0, 1, maxWeight0, maxWeight1);
                 timer.stop("Refinement");
             }
 
