@@ -73,7 +73,7 @@ namespace whfc_rb {
             return count;
         }
 
-        virtual std::vector<HyperedgeID> getCutEdges(PartitionID part0, PartitionID part1) const {
+        virtual std::vector<HyperedgeID> getCutEdges(PartitionID part0, PartitionID part1) {
             std::vector<HyperedgeID> cut_hes;
 
             for (HyperedgeID e : hg.hyperedges()) {
