@@ -55,12 +55,12 @@ namespace whfc_rb {
 
             timer.stop("PaToH");
 
-            NodeWeight maxWeight0 = (1.0 + epsilon) * static_cast<double>(numParts[0]) /
-                                    static_cast<double>(k) * partition.totalWeight();
-            NodeWeight maxWeight1 = (1.0 + epsilon) * static_cast<double>(numParts[1]) /
-                                    static_cast<double>(k) * partition.totalWeight();
 
             if (config.refine) {
+                NodeWeight maxWeight0 = (1.0 + epsilon_for_patoh) * static_cast<double>(numParts[0]) /
+                                        static_cast<double>(k) * partition.totalWeight();
+                NodeWeight maxWeight1 = (1.0 + epsilon_for_patoh) * static_cast<double>(numParts[1]) /
+                                        static_cast<double>(k) * partition.totalWeight();
                 timer.start("Refinement", "Total");
                 refiner.refine(partition, 0, 1, maxWeight0, maxWeight1);
                 timer.stop("Refinement");
