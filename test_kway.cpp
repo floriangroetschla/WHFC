@@ -9,6 +9,7 @@
 #include "recursive_bisection/partition_ca.h"
 #include "recursive_bisection/null_refiner.h"
 #include "recursive_bisection/k_way_refiner.h"
+#include <tbb/tbb.h>
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
     timer.report(std::cout);
@@ -20,15 +21,17 @@ void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &time
 
 int main(int argc, const char *argv[]) {
 
-    if (argc != 6) {
-        throw std::runtime_error("Usage ./KWayRefinement HypergraphFile epsilon k seed preset");
+    if (argc != 7) {
+        throw std::runtime_error("Usage ./KWayRefinement HypergraphFile epsilon k seed preset maxIterations");
     }
     whfc_rb::CSRHypergraph hg = whfc::HMetisIO::readCSRHypergraph(argv[1]);
     double epsilon = std::stod(argv[2]);
     uint numParts = std::stoul(argv[3]);
     int seed = std::stoi(argv[4]);
     std::string patoh_preset = argv[5];
+    uint maxIterations = std::stoi(argv[6]);
     std::mt19937 mt(seed);
+
 
     whfc::TimeReporter timer("Total");
 
@@ -40,7 +43,7 @@ int main(int argc, const char *argv[]) {
 
     timer.start("Refinement", "Total");
     whfc_rb::KWayRefiner refiner(partition, timer, mt);
-    refiner.refine(epsilon, 200);
+    refiner.refine(epsilon, maxIterations);
     timer.stop("Refinement");
     timer.stop("Total");
 

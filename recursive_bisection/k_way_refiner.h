@@ -25,7 +25,6 @@ namespace whfc_rb {
                 for (auto partitionPair : partitionPairs) {
                     PartitionBase::PartitionID part0 = partitionPair.first;
                     PartitionBase::PartitionID part1 = partitionPair.second;
-                    std::cout << part0 << ", " << part1 << std::endl;
                     bool refinementResult = twoWayRefiner.refine(partition, part0, part1, maxWeight, maxWeight);
                     if (refinementResult) {
                         // Schedule for next round
