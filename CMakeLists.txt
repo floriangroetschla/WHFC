@@ -8,6 +8,8 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -mtune=native -march
 set(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -lm")
 #set(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -fno-omit-frame-pointer")
 
+add_subdirectory(${CMAKE_SOURCE_DIR}/tbb)
+
 add_executable(WHFC main.cpp)
 
 add_executable(TESTS run_tests.cpp)
@@ -28,4 +30,9 @@ target_link_libraries(RecursiveBisection ${CMAKE_SOURCE_DIR}/extern/libpatoh.a)
 
 add_executable(KWayRefinement test_kway.cpp)
 target_link_libraries(KWayRefinement ${CMAKE_SOURCE_DIR}/extern/libpatoh.a)
+target_link_libraries(KWayRefinement tbb)
+
+add_executable(KWayRefinementParallel test_kway_parallel.cpp)
+target_link_libraries(KWayRefinementParallel ${CMAKE_SOURCE_DIR}/extern/libpatoh.a)
+target_link_libraries(KWayRefinementParallel tbb)
 

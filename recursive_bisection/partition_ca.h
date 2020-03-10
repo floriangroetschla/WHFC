@@ -164,7 +164,6 @@ namespace whfc_rb {
         bool datastructures_initialized = false;
 
         std::size_t& pinsInPart(PartitionID id, HyperedgeID e) {
-            assert(datastructures_initialized);
             return vec_pinsInPart[id * hg.numHyperedges() + e];
         }
 
