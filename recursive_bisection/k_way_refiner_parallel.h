@@ -34,16 +34,18 @@ namespace whfc_rb {
                     part1--;
                 }
 
+                std::mt19937 mt_local(mt());
+                whfc::TimeReporter timer_local; // Timer not useful yet
+                timer_local.active = false;
+                tbb::enumerable_thread_specific<WHFCRefinerTwoWay> localRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), std::ref(mt_local), std::ref(timer_local));
                 tbb::parallel_do(tasks,
-                        [maxIterations](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder)
+                        [maxIterations, &localRefiner](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder)
                         {
                             assert(element.refiner.partitionScheduled[element.part0]);
                             assert(element.refiner.partitionScheduled[element.part1]);
 
                             if (element.refiner.iterationCounter < maxIterations) {
-                                std::mt19937 mt(element.refiner.mt());
-                                whfc::TimeReporter timer; // Timer not useful yet
-                                WHFCRefinerTwoWay refiner(element.refiner.partition.getGraph().numNodes(), element.refiner.partition.getGraph().numHyperedges(), element.refiner.partition.getGraph().numPins(), mt, timer);
+                                WHFCRefinerTwoWay& refiner = localRefiner.local();
                                 bool refinementResult = refiner.refine(element.refiner.partition, element.part0, element.part1, element.maxWeight, element.maxWeight);
                                 if (refinementResult) {
                                     // Schedule for next round
