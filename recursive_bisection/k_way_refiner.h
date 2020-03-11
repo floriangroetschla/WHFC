@@ -23,6 +23,7 @@ namespace whfc_rb {
                 std::shuffle(partitionPairs.begin(), partitionPairs.end(), mt);
 
                 for (auto partitionPair : partitionPairs) {
+                    if (iterations >= maxIterations) break;
                     PartitionBase::PartitionID part0 = partitionPair.first;
                     PartitionBase::PartitionID part1 = partitionPair.second;
                     bool refinementResult = twoWayRefiner.refine(partition, part0, part1, maxWeight, maxWeight);
