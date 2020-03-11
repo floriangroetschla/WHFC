@@ -35,32 +35,35 @@ namespace whfc_rb {
                 }
 
                 tbb::parallel_do(tasks,
-                        [](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder)
+                        [maxIterations](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder)
                         {
                             assert(element.refiner.partitionScheduled[element.part0]);
                             assert(element.refiner.partitionScheduled[element.part1]);
 
-                            std::mt19937 mt(element.refiner.mt());
-                            whfc::TimeReporter timer;
-                            WHFCRefinerTwoWay refiner(element.refiner.partition.getGraph().numNodes(), element.refiner.partition.getGraph().numHyperedges(), element.refiner.partition.getGraph().numPins(), mt, timer);
-                            bool refinementResult = refiner.refine(element.refiner.partition, element.part0, element.part1, element.maxWeight, element.maxWeight);
-                            if (refinementResult) {
-                                // Schedule for next round
-                                element.refiner.partActiveNextRound.set(element.part0);
-                                element.refiner.partActiveNextRound.set(element.part1);
-                            }
+                            if (element.refiner.iterationCounter < maxIterations) {
+                                std::mt19937 mt(element.refiner.mt());
+                                whfc::TimeReporter timer; // Timer not useful yet
+                                WHFCRefinerTwoWay refiner(element.refiner.partition.getGraph().numNodes(), element.refiner.partition.getGraph().numHyperedges(), element.refiner.partition.getGraph().numPins(), mt, timer);
+                                bool refinementResult = refiner.refine(element.refiner.partition, element.part0, element.part1, element.maxWeight, element.maxWeight);
+                                if (refinementResult) {
+                                    // Schedule for next round
+                                    element.refiner.partActiveNextRound.set(element.part0);
+                                    element.refiner.partActiveNextRound.set(element.part1);
+                                }
 
-                            element.refiner.blockPair(element.part0, element.part1) = TaskStatus::FINISHED;
+                                element.refiner.blockPair(element.part0, element.part1) = TaskStatus::FINISHED;
 
-                            if (!element.refiner.addNewTasks(element.part0, feeder, element.maxWeight)) {
-                                element.refiner.partitionScheduled[element.part0] = false;
+                                if (!element.refiner.addNewTasks(element.part0, feeder, element.maxWeight)) {
+                                    element.refiner.partitionScheduled[element.part0] = false;
+                                }
+                                if (!element.refiner.addNewTasks(element.part1, feeder, element.maxWeight)) {
+                                    element.refiner.partitionScheduled[element.part1] = false;
+                                }
+                                element.refiner.iterationCounter++;
                             }
-                            if (!element.refiner.addNewTasks(element.part1, feeder, element.maxWeight)) {
-                                element.refiner.partitionScheduled[element.part1] = false;
-                            }
-                            element.refiner.iterationCounter++;
                         });
 
+                //assert(allPairsProcessed()); only if maxIterations allows it
                 std::swap(partActive, partActiveNextRound);
                 partActiveNextRound.reset();
             }
@@ -102,6 +105,13 @@ namespace whfc_rb {
                 }
             }
             return foundPair;
+        }
+
+        bool allPairsProcessed() {
+            for (uint i = 0; i < blockPairStatus.size(); ++i) {
+                if (blockPairStatus[i] != TaskStatus::FINISHED) return false;
+            }
+            return true;
         }
 
         void resetBlockPairStatus() {

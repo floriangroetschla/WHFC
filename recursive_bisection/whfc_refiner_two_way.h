@@ -50,7 +50,7 @@ namespace whfc_rb {
             }
 
             timer.start("WHFC", "Refinement");
-            bool hfc_result = hfc.runUntilBalancedOrFlowBoundExceeded(extractor_info.source, extractor_info.target);
+            bool hfc_result = hfc.enumerateCutsUntilBalancedOrFlowBoundExceeded(extractor_info.source, extractor_info.target);
             timer.stop("WHFC");
 
             if (!hfc_result) return false;
