@@ -9,6 +9,7 @@ namespace whfc_rb {
     class PartitionCA : public PartitionBase {
     public:
         static constexpr PartitionID invalidPartition = std::numeric_limits<PartitionID>::max();
+        static constexpr bool precomputeCuts = false;
 
         explicit PartitionCA(PartitionID num_parts, CSRHypergraph &hg) : PartitionBase(num_parts, hg),
                                                                          vec_pinsInPart(hg.numHyperedges() * num_parts,
@@ -60,17 +61,20 @@ namespace whfc_rb {
             assert(datastructures_initialized);
             std::vector<HyperedgeID> cut_hes;
 
-            // Note(Lars): this is probably not fine for the k-way pairwise refinement
-            // for the refinement of a bisection, extracting the cut hyperedges like this is fine, because we do it once
-            // we should at least try lazy maintenance of pairwise cut hyperedge vectors
-            // this is also something you should test one some larger instances (i.e. not setC)
-
-            for (HyperedgeID e : cutEdges(part0, part1)) {
-                if (pinsInPart(part0, e) > 0 && pinsInPart(part1, e) > 0 && std::find(cut_hes.begin(), cut_hes.end(), e) == cut_hes.end()) {
-                    cut_hes.push_back(e);
+            if constexpr (precomputeCuts) {
+                for (HyperedgeID e : cutEdges(part0, part1)) {
+                    if (pinsInPart(part0, e) > 0 && pinsInPart(part1, e) > 0 && std::find(cut_hes.begin(), cut_hes.end(), e) == cut_hes.end()) {
+                        cut_hes.push_back(e);
+                    }
+                }
+                cutEdges(part0, part1) = cut_hes;
+            } else {
+                for (HyperedgeID e : hg.hyperedges()) {
+                    if (pinsInPart(part0, e) > 0 && pinsInPart(part1, e) > 0) {
+                        cut_hes.push_back(e);
+                    }
                 }
             }
-            cutEdges(part0, part1) = cut_hes;
 
             return cut_hes;
         }
@@ -90,10 +94,12 @@ namespace whfc_rb {
                     }
 
                     // Update cuts
-                    if (pinsInPart(newPart, e) == 0) {
-                        for (PartitionID pid = 0; pid < num_parts; ++pid) {
-                            if (pid != newPart && pinsInPart(pid, e) > 0) {
-                                cutEdges(pid, newPart).push_back(e);
+                    if constexpr (precomputeCuts) {
+                        if (pinsInPart(newPart, e) == 0) {
+                            for (PartitionID pid = 0; pid < num_parts; ++pid) {
+                                if (pid != newPart && pinsInPart(pid, e) > 0) {
+                                    cutEdges(pid, newPart).push_back(e);
+                                }
                             }
                         }
                     }
@@ -143,9 +149,12 @@ namespace whfc_rb {
                 }
                 km1 += (has_pins_in_part.count() - 1) * hg.hyperedgeWeight(e);
                 has_pins_in_part.reset();
-                for (uint i = 0; i < partitionsOfEdge.size() - 1; ++i) {
-                    for (uint j = i + 1; j < partitionsOfEdge.size(); ++j) {
-                        cutEdges(partitionsOfEdge[i], partitionsOfEdge[j]).push_back(e);
+
+                if constexpr (precomputeCuts) {
+                    for (uint i = 0; i < partitionsOfEdge.size() - 1; ++i) {
+                        for (uint j = i + 1; j < partitionsOfEdge.size(); ++j) {
+                            cutEdges(partitionsOfEdge[i], partitionsOfEdge[j]).push_back(e);
+                        }
                     }
                 }
             }
