@@ -9,7 +9,6 @@
 #include "recursive_bisection/partition_ca.h"
 #include "recursive_bisection/null_refiner.h"
 #include "recursive_bisection/k_way_refiner.h"
-#include <tbb/tbb.h>
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
     timer.report(std::cout);
