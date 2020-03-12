@@ -4,11 +4,12 @@
 #include <atomic>
 #include <tbb/parallel_do.h>
 #include <mutex>
+#include "partition_threadsafe.h"
 
 namespace whfc_rb {
     class KWayRefinerParallel {
     public:
-        explicit KWayRefinerParallel(PartitionCA &partition, whfc::TimeReporter &timer, std::mt19937 &mt) : partition(
+        explicit KWayRefinerParallel(PartitionThreadsafe &partition, whfc::TimeReporter &timer, std::mt19937 &mt) : partition(
                 partition), partActive(partition.numParts()), partActiveNextRound(partition.numParts()), blockPairStatus(partition.numParts() * (partition.numParts() - 1) / 2), partitionScheduled(partition.numParts()), timer(timer), mt(mt) {}
 
         void refine(double epsilon, uint maxIterations) {
@@ -74,7 +75,7 @@ namespace whfc_rb {
     private:
         enum class TaskStatus {UNSCHEDULED, SCHEDULED, FINISHED};
 
-        PartitionCA &partition;
+        PartitionThreadsafe &partition;
         boost::dynamic_bitset<> partActive;
         boost::dynamic_bitset<> partActiveNextRound;
         std::vector<std::atomic<TaskStatus>> blockPairStatus;

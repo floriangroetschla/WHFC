@@ -11,6 +11,7 @@
 #include "recursive_bisection/k_way_refiner.h"
 #include <tbb/tbb.h>
 #include "recursive_bisection/k_way_refiner_parallel.h"
+#include "recursive_bisection/partition_threadsafe.h"
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
     timer.report(std::cout);
@@ -38,7 +39,7 @@ int main(int argc, const char *argv[]) {
 
     timer.start("Total");
     timer.start("PaToH", "Total");
-    whfc_rb::PartitionCA partition(numParts, hg);
+    whfc_rb::PartitionThreadsafe partition(numParts, hg);
     PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset);
     timer.stop("PaToH");
 

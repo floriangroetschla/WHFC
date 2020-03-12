@@ -6,23 +6,23 @@
 
 namespace whfc_rb {
 
-    class PartitionCA : public PartitionBase {
+    class PartitionThreadsafe : public PartitionBase {
     public:
         static constexpr PartitionID invalidPartition = std::numeric_limits<PartitionID>::max();
-        static constexpr bool precomputeCuts = false;
+        static constexpr bool precomputeCuts = true;
 
-        explicit PartitionCA(PartitionID num_parts, CSRHypergraph &hg) : PartitionBase(num_parts, hg),
-                                                                         vec_pinsInPart(hg.numHyperedges() * num_parts,
-                                                                                        0),
-                                                                         vec_partWeights(num_parts, 0), vec_cutEdges(num_parts * (num_parts - 1) / 2) {
+        explicit PartitionThreadsafe(PartitionID num_parts, CSRHypergraph &hg) : PartitionBase(num_parts, hg),
+                                                                         vec_pinsInPart(hg.numHyperedges() * num_parts),
+                                                                         vec_partWeights(num_parts), vec_cutEdges(num_parts * (num_parts - 1) / 2),
+                                                                         cutEdgeLocks(num_parts * (num_parts - 1) / 2) {
             assert(maxID() < num_parts);
             assert(partition.size() == hg.numNodes());
         }
 
-        explicit PartitionCA(std::vector<PartitionID> vec_partition, PartitionID num_parts, CSRHypergraph &hg)
+        explicit PartitionThreadsafe(std::vector<PartitionID> vec_partition, PartitionID num_parts, CSRHypergraph &hg)
                 : PartitionBase(vec_partition, num_parts, hg),
-                  vec_pinsInPart(hg.numHyperedges() * num_parts, 0),
-                  vec_partWeights(num_parts, 0), vec_cutEdges(num_parts * (num_parts - 1) / 2) {
+                  vec_pinsInPart(hg.numHyperedges() * num_parts),
+                  vec_partWeights(num_parts), vec_cutEdges(num_parts * (num_parts - 1) / 2) {
             assert(maxID() < num_parts);
             assert(partition.size() == hg.numNodes());
 
@@ -41,7 +41,13 @@ namespace whfc_rb {
 
         const std::vector<NodeWeight> partitionWeights() const {
             assert(datastructures_initialized);
-            return vec_partWeights;
+
+            std::vector<NodeWeight> weights(vec_partWeights.size());
+            for (uint i = 0; i < vec_partWeights.size(); ++i) {
+                weights[i] = vec_partWeights[i].load();
+            }
+
+            return weights;
         }
 
         void replace(std::vector<PartitionID> vec_part) override {
@@ -67,7 +73,9 @@ namespace whfc_rb {
                         cut_hes.push_back(e);
                     }
                 }
+                cutEdgeLock(part0, part1).lock();
                 cutEdges(part0, part1) = cut_hes;
+                cutEdgeLock(part0, part1).unlock();
             } else {
                 for (HyperedgeID e : hg.hyperedges()) {
                     if (pinsInPart(part0, e) > 0 && pinsInPart(part1, e) > 0) {
@@ -86,19 +94,14 @@ namespace whfc_rb {
                 partition[u] = newPart;
 
                 for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                    // Update km1
-                    if (pinsInPart(oldPart, e) == 1 && pinsInPart(newPart, e) > 0) {
-                        km1 -= hg.hyperedgeWeight(e);
-                    } else if (pinsInPart(oldPart, e) > 1 && pinsInPart(newPart, e) == 0) {
-                        km1 += hg.hyperedgeWeight(e);
-                    }
-
                     // Update cuts
                     if constexpr (precomputeCuts) {
                         if (pinsInPart(newPart, e) == 0) {
                             for (PartitionID pid = 0; pid < num_parts; ++pid) {
                                 if (pid != newPart && pinsInPart(pid, e) > 0) {
+                                    cutEdgeLock(pid, newPart).lock();
                                     cutEdges(pid, newPart).push_back(e);
+                                    cutEdgeLock(pid, newPart).unlock();
                                 }
                             }
                         }
@@ -112,16 +115,18 @@ namespace whfc_rb {
             }
         }
 
-        size_t km1Objective() const override {
-            assert(km1 == PartitionBase::km1Objective());
-            return km1;
-        }
-
         std::vector<HyperedgeID>& cutEdges(PartitionID part0, PartitionID part1) {
             assert(part0 != part1 && part0 < num_parts && part1 < num_parts);
 
             if (part0 < part1) std::swap(part0, part1);
             return (vec_cutEdges[(part0 * (part0 - 1) / 2) + part1]);
+        }
+
+        std::mutex& cutEdgeLock(PartitionID part0, PartitionID part1) {
+            assert(part0 != part1 && part0 < num_parts && part1 < num_parts);
+
+            if (part0 < part1) std::swap(part0, part1);
+            return (cutEdgeLocks[(part0 * (part0 - 1) / 2) + part1]);
         }
 
         double imbalance() override {
@@ -133,23 +138,22 @@ namespace whfc_rb {
         }
 
         void initialize() override {
-            vec_pinsInPart = std::vector<std::size_t>(hg.numHyperedges() * num_parts, 0);
-            vec_partWeights = std::vector<NodeWeight>(num_parts, 0);
+            for (uint i = 0; i < vec_pinsInPart.size(); ++i) {
+                vec_pinsInPart[i] = 0;
+            }
+            for (uint i = 0; i < vec_partWeights.size(); ++i) {
+                vec_partWeights[i] = 0;
+            }
             vec_cutEdges = std::vector<std::vector<HyperedgeID>>(num_parts * (num_parts - 1) / 2);
-            km1 = 0;
 
-            boost::dynamic_bitset<> has_pins_in_part(num_parts);
             for (HyperedgeID e : hg.hyperedges()) {
                 std::vector<NodeID> partitionsOfEdge;
                 for (NodeID u : hg.pinsOf(e)) {
-                    has_pins_in_part.set(partition[u]);
                     pinsInPart(partition[u], e)++;
                     if (std::find(partitionsOfEdge.begin(), partitionsOfEdge.end(), partition[u]) == partitionsOfEdge.end()) {
                         partitionsOfEdge.push_back(partition[u]);
                     }
                 }
-                km1 += (has_pins_in_part.count() - 1) * hg.hyperedgeWeight(e);
-                has_pins_in_part.reset();
 
                 if constexpr (precomputeCuts) {
                     for (uint i = 0; i < partitionsOfEdge.size() - 1; ++i) {
@@ -167,13 +171,13 @@ namespace whfc_rb {
         }
 
     private:
-        std::vector<std::size_t> vec_pinsInPart;
-        std::vector<NodeWeight> vec_partWeights;
+        std::vector<std::atomic<std::size_t>> vec_pinsInPart;
+        std::vector<std::atomic<NodeWeight>> vec_partWeights;
         std::vector<std::vector<HyperedgeID>> vec_cutEdges;
-        NodeWeight km1 = 0;
+        std::vector<std::mutex> cutEdgeLocks;
         bool datastructures_initialized = false;
 
-        std::size_t& pinsInPart(PartitionID id, HyperedgeID e) {
+        std::atomic<std::size_t>& pinsInPart(PartitionID id, HyperedgeID e) {
             return vec_pinsInPart[id * hg.numHyperedges() + e];
         }
 
