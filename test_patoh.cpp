@@ -7,14 +7,15 @@
 
 int main(int argc, const char *argv[]) {
 
-    if (argc != 6) {
-        throw std::runtime_error("Usage ./PaToH HypergraphFile epsilon k seed preset");
+    if (argc != 7) {
+        throw std::runtime_error("Usage ./PaToH HypergraphFile epsilon k seed preset objective");
     }
     std::string graph_path = argv[1];
     double epsilon = std::stod(argv[2]);
     uint numParts = std::stoul(argv[3]);
     int seed = std::stoi(argv[4]);
     std::string patoh_preset = argv[5];
+    std::string objective = argv[6];
 
     whfc_rb::CSRHypergraph hg = whfc::HMetisIO::readCSRHypergraph(graph_path);
     
@@ -22,7 +23,7 @@ int main(int argc, const char *argv[]) {
     whfc_rb::PartitionBase partition(numParts, hg);
 
     timer.start("Total");
-    PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset);
+    PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset, objective);
     timer.stop("Total");
 //    timer.report(std::cout);
     //partition.print(std::cout);
@@ -36,7 +37,7 @@ int main(int argc, const char *argv[]) {
                 << epsilon << ","
                 << partition.imbalance() << ","
                 << whfc::inSeconds(timer.get("Total")).count() << ","
-                << "km1" << ","
+                << objective << ","
                 << partition.km1Objective() << ","
                 << partition.cutObjective() << ","
                 << "no" << std::endl;

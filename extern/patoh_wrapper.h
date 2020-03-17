@@ -51,29 +51,34 @@ public:
 
     template<class PartitionImpl>
     static void partitionWithPatoh(PartitionImpl &partition, int seed, int numPartitions, double epsilon = 0.05,
-                                   std::string preset = "D") {
+                                   std::string preset = "D", std::string objective = "km1") {
         PatohParameters p;
         p.use_target_weights = false;
         p.k = numPartitions;
         p.epsilon = epsilon;
-        runPatoh(partition, seed, p, preset);
+        runPatoh(partition, seed, p, preset, objective);
     }
 
     template<class PartitionImpl>
-    static void runPatoh(PartitionImpl &partition, int seed, PatohParameters params, std::string str_preset = "D") {
+    static void runPatoh(PartitionImpl &partition, int seed, PatohParameters params, std::string str_preset = "D", std::string str_objective = "km1") {
         whfc_rb::CSRHypergraph &hg = partition.getGraph();
         // For output of PaToH
         //std::vector<whfc_rb::Partition::PartitionID > vec_partition(hg.numNodes());
         std::vector<int> vec_partweights(params.k, 0);
 
-        PaToH_Parameters args;
+        int objective = -1;
+        if (str_objective == "km1") { objective = PATOH_CONPART; }
+        else if (str_objective == "cut") { objective = PATOH_CUTPART; }
+        else { throw std::runtime_error("Unknown objective function for PaToH"); }        
+
         int preset = -1;
         if (str_preset == "D") { preset = PATOH_SUGPARAM_DEFAULT; }
         else if (str_preset == "Q") { preset = PATOH_SUGPARAM_QUALITY; }
         else if (str_preset == "S") { preset = PATOH_SUGPARAM_SPEED; }
         else { throw std::runtime_error("Unknown PaToH preset" + str_preset); }
 
-        PaToH_Initialize_Parameters(&args, PATOH_CONPART, preset);
+        PaToH_Parameters args;
+        PaToH_Initialize_Parameters(&args, objective, preset);
 
         args._k = params.k;
         args.doinitperm = 0;
