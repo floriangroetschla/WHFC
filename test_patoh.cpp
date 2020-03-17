@@ -2,7 +2,6 @@
 #include "io/hmetis_io.h"
 #include <iostream>
 #include "extern/patoh_wrapper.h"
-#include "recursive_bisection/recursive_bisection.h"
 #include "util/timer.h"
 
 int main(int argc, const char *argv[]) {
