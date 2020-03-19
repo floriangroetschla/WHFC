@@ -12,7 +12,7 @@ namespace whfc_rb {
         explicit KWayRefinerParallel(PartitionThreadsafe &partition, whfc::TimeReporter &timer, std::mt19937 &mt) : partition(
                 partition), partActive(partition.numParts()), partActiveNextRound(partition.numParts()), blockPairStatus(partition.numParts() * (partition.numParts() - 1) / 2), partitionScheduled(partition.numParts()), timer(timer), mt(mt) {}
 
-        void refine(double epsilon, uint maxIterations) {
+        uint refine(double epsilon, uint maxIterations) {
             NodeWeight maxWeight = (1.0 + epsilon) * partition.totalWeight() / static_cast<double>(partition.numParts());
             partActive.set();
             partActiveNextRound.reset();
@@ -25,7 +25,7 @@ namespace whfc_rb {
                 resetBlockPairStatus();
                 while (part0 < part1) {
                     if (partActive[part0] || partActive[part1]) {
-                        WorkElement element = {*this, part0, part1, maxWeight};
+                        WorkElement element = {part0, part1};
                         tasks.push_back(element);
                         blockPair(part0, part1) = TaskStatus::SCHEDULED;
                         partitionScheduled[part0] = true;
@@ -40,29 +40,29 @@ namespace whfc_rb {
                 timer_local.active = false;
                 tbb::enumerable_thread_specific<WHFCRefinerTwoWay> localRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), std::ref(mt_local), std::ref(timer_local));
                 tbb::parallel_do(tasks,
-                        [maxIterations, &localRefiner](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder)
+                        [maxIterations, &localRefiner, this, maxWeight](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder)
                         {
-                            assert(element.refiner.partitionScheduled[element.part0]);
-                            assert(element.refiner.partitionScheduled[element.part1]);
+                            assert(this->partitionScheduled[element.part0]);
+                            assert(this->partitionScheduled[element.part1]);
 
-                            if (element.refiner.iterationCounter < maxIterations) {
+                            if (this->iterationCounter < maxIterations) {
                                 WHFCRefinerTwoWay& refiner = localRefiner.local();
-                                bool refinementResult = refiner.refine(element.refiner.partition, element.part0, element.part1, element.maxWeight, element.maxWeight);
+                                bool refinementResult = refiner.refine(this->partition, element.part0, element.part1, maxWeight,maxWeight);
                                 if (refinementResult) {
                                     // Schedule for next round
-                                    element.refiner.partActiveNextRound.set(element.part0);
-                                    element.refiner.partActiveNextRound.set(element.part1);
+                                    this->partActiveNextRound.set(element.part0);
+                                    this->partActiveNextRound.set(element.part1);
                                 }
 
-                                element.refiner.blockPair(element.part0, element.part1) = TaskStatus::FINISHED;
+                                this->blockPair(element.part0, element.part1) = TaskStatus::FINISHED;
 
-                                if (!element.refiner.addNewTasks(element.part0, feeder, element.maxWeight)) {
-                                    element.refiner.partitionScheduled[element.part0] = false;
+                                if (!this->addNewTasks(element.part0, feeder, maxWeight)) {
+                                    this->partitionScheduled[element.part0] = false;
                                 }
-                                if (!element.refiner.addNewTasks(element.part1, feeder, element.maxWeight)) {
-                                    element.refiner.partitionScheduled[element.part1] = false;
+                                if (!this->addNewTasks(element.part1, feeder, maxWeight)) {
+                                    this->partitionScheduled[element.part1] = false;
                                 }
-                                element.refiner.iterationCounter++;
+                                this->iterationCounter++;
                             }
                         });
 
@@ -70,6 +70,7 @@ namespace whfc_rb {
                 std::swap(partActive, partActiveNextRound);
                 partActiveNextRound.reset();
             }
+            return iterationCounter.load();
         }
 
     private:
@@ -85,10 +86,8 @@ namespace whfc_rb {
         std::atomic<uint> iterationCounter = 0;
 
         struct WorkElement {
-            KWayRefinerParallel& refiner;
             PartitionBase::PartitionID part0;
             PartitionBase::PartitionID part1;
-            NodeWeight maxWeight;
         };
 
         bool addNewTasks(PartitionBase::PartitionID part, tbb::parallel_do_feeder<WorkElement>& feeder, NodeWeight maxWeight) {
@@ -98,7 +97,7 @@ namespace whfc_rb {
                     if (!partitionScheduled[pid].exchange(true)) {
                         if (blockPair(part, pid) == TaskStatus::UNSCHEDULED) {
                             blockPair(part, pid) = TaskStatus::SCHEDULED;
-                            feeder.add({*this, part, pid, maxWeight});
+                            feeder.add({part, pid});
                             foundPair = true;
                             break;
                         } else {
