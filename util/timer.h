@@ -8,6 +8,7 @@
 #include <vector>
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 
 namespace whfc {
 	using Interval = std::chrono::duration<double>;
@@ -116,6 +117,28 @@ namespace whfc {
 			running.clear();
 			times.clear();
 			tree.clear();
+		}
+
+		void merge(TimeReporter& other_timer, const Identifier& id_this_timer, const Identifier& id_other_timer) {
+		    if ((id_this_timer == top_level_category || times.find(id_this_timer) != times.end()) &&
+		        (id_other_timer == other_timer.top_level_category || other_timer.times.find(id_other_timer) != other_timer.times.end())) {
+		        for (Identifier child : other_timer.tree[id_other_timer]) {
+		            if (std::find(tree[id_this_timer].begin(), tree[id_this_timer].end(), child) == tree[id_this_timer].end()) {
+		                auto result = times.find(child);
+		                if (result == times.end()) {
+		                    registerCategory(child, id_this_timer);
+		                } else {
+		                    throw std::logic_error("Category " + child + " already present at another tree node");
+		                }
+		            }
+		            times.at(child) += other_timer.times[child];
+		        }
+		        for (Identifier child : other_timer.tree[id_other_timer]) {
+		            merge(other_timer, child, child);
+		        }
+		    } else {
+		        throw std::logic_error("Timer does not have category " + id_other_timer);
+		    }
 		}
 		
 		bool active = true;
