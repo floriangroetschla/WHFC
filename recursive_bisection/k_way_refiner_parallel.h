@@ -18,6 +18,12 @@ namespace whfc_rb {
             partActiveNextRound.reset();
             iterationCounter = 0;
 
+            std::mt19937 mt_local(mt());
+            whfc::TimeReporter timer_dummy; // Timer not useful yet
+            timer_dummy.active = false;
+            tbb::enumerable_thread_specific<WHFCRefinerTwoWay> localRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), std::ref(mt_local), std::ref(timer_dummy));
+            tbb::enumerable_thread_specific<whfc::TimeReporter> timer_local;
+
             while (partActive.count() > 0 && iterationCounter < maxIterations) {
                 std::vector<WorkElement> tasks;
                 PartitionBase::PartitionID part0 = 0;
@@ -35,19 +41,19 @@ namespace whfc_rb {
                     part1--;
                 }
 
-                std::mt19937 mt_local(mt());
-                whfc::TimeReporter timer_local; // Timer not useful yet
-                timer_local.active = false;
-                tbb::enumerable_thread_specific<WHFCRefinerTwoWay> localRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), std::ref(mt_local), std::ref(timer_local));
                 tbb::parallel_do(tasks,
-                        [maxIterations, &localRefiner, this, maxWeight](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder)
+                        [maxIterations, &localRefiner, &timer_local, this, maxWeight](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder)
                         {
                             assert(this->partitionScheduled[element.part0]);
                             assert(this->partitionScheduled[element.part1]);
 
                             if (this->iterationCounter < maxIterations) {
                                 WHFCRefinerTwoWay& refiner = localRefiner.local();
+                                whfc::TimeReporter& timer = timer_local.local();
+                                timer.start("RefinementBlockPair");
                                 bool refinementResult = refiner.refine(this->partition, element.part0, element.part1, maxWeight,maxWeight);
+                                timer.stop("RefinementBlockPair");
+                                timer.start("Finding_new_pairs");
                                 if (refinementResult) {
                                     // Schedule for next round
                                     this->partActiveNextRound.set(element.part0);
@@ -63,6 +69,7 @@ namespace whfc_rb {
                                     this->partitionScheduled[element.part1] = false;
                                 }
                                 this->iterationCounter++;
+                                timer.stop("Finding_new_pairs");
                             }
                         });
 
@@ -70,6 +77,10 @@ namespace whfc_rb {
                 std::swap(partActive, partActiveNextRound);
                 partActiveNextRound.reset();
             }
+            for (auto local_timer = timer_local.begin(); local_timer != timer_local.end(); local_timer++) {
+                timer.merge(*local_timer, "Refinement", "total");
+            }
+
             return iterationCounter.load();
         }
 
