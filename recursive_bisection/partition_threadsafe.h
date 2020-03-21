@@ -60,7 +60,7 @@ namespace whfc_rb {
 
         std::size_t pinsInPart(PartitionID id, HyperedgeID e) const {
             assert(datastructures_initialized);
-            return vec_pinsInPart[id * hg.numHyperedges() + e];
+            return vec_pinsInPart[e * num_parts + id];
         }
 
         std::vector<HyperedgeID> getCutEdges(PartitionID part0, PartitionID part1) override {
@@ -178,7 +178,7 @@ namespace whfc_rb {
         bool datastructures_initialized = false;
 
         std::atomic<std::size_t>& pinsInPart(PartitionID id, HyperedgeID e) {
-            return vec_pinsInPart[id * hg.numHyperedges() + e];
+            return vec_pinsInPart[e * num_parts + id];
         }
 
         PartitionID maxID() {
