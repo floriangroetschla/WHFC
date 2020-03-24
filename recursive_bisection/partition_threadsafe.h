@@ -9,7 +9,7 @@ namespace whfc_rb {
     class PartitionThreadsafe : public PartitionBase {
     public:
         static constexpr PartitionID invalidPartition = std::numeric_limits<PartitionID>::max();
-        static constexpr bool precomputeCuts = true;
+        static constexpr bool precomputeCuts = false;
 
         explicit PartitionThreadsafe(PartitionID num_parts, CSRHypergraph &hg) : PartitionBase(num_parts, hg),
                                                                          vec_pinsInPart(hg.numHyperedges() * num_parts),
