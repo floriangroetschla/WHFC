@@ -31,7 +31,7 @@ int main(int argc, const char *argv[]) {
     uint maxIterations = std::stoi(argv[6]);
     std::mt19937 mt(seed);
 
-
+    whfc_rb::PartitionConfig config = {true, patoh_preset, true, false};
     whfc::TimeReporter timer("Total");
 
     timer.start("Total");
@@ -41,7 +41,7 @@ int main(int argc, const char *argv[]) {
     timer.stop("PaToH");
 
     timer.start("Refinement", "Total");
-    whfc_rb::KWayRefiner refiner(partition, timer, mt);
+    whfc_rb::KWayRefiner refiner(partition, timer, mt, config);
     refiner.refine(epsilon, maxIterations);
     timer.stop("Refinement");
     timer.stop("Total");

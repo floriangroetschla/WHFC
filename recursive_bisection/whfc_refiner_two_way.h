@@ -6,6 +6,7 @@
 #include "../io/whfc_io.h"
 #include <random>
 #include "two_way_refiner_interface.h"
+#include "config.h"
 
 namespace whfc_rb {
     class WHFCRefinerTwoWay : public TwoWayRefinerInterface {
@@ -15,7 +16,7 @@ namespace whfc_rb {
 
         // Note (Lars): what is this indentation?
         WHFCRefinerTwoWay(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937 &mt,
-                          whfc::TimeReporter &timer) :
+                          whfc::TimeReporter* timer) :
                 extractor(maxNumNodes, maxNumEdges, maxNumPins, mt),
                 hfc(extractor.fhgb, mt()), mt(mt), timer(timer) {
             hfc.timer.active = false;
@@ -23,7 +24,7 @@ namespace whfc_rb {
 
         template<class PartitionImpl>
         bool refine(PartitionImpl &partition, PartitionID part0, PartitionID part1, NodeWeight maxBlockWeight0,
-                    NodeWeight maxBlockWeight1) {
+                    NodeWeight maxBlockWeight1, PartitionConfig& config) {
             std::vector<NodeWeight> partWeights = partition.partitionWeights();
 
             double maxW0 = 0.2 * partWeights[part0];
@@ -32,9 +33,9 @@ namespace whfc_rb {
             double imbalanceBefore = std::max(partWeights[part0] / maxBlockWeight0,
                                               partWeights[part1] / maxBlockWeight1);
 
-            timer.start("Extraction", "Refinement");
-            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1, hfc.cs.borderNodes.distance);
-            timer.stop("Extraction");
+            timer->start("Extraction", "Refinement");
+            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1, config, hfc.cs.borderNodes.distance);
+            timer->stop("Extraction");
 
             // call WHFC to improve the bisection
             hfc.reset();
@@ -49,9 +50,9 @@ namespace whfc_rb {
                 writeSnapshot(extractor_info);
             }
 
-            timer.start("WHFC", "Refinement");
+            timer->start("WHFC", "Refinement");
             bool hfc_result = hfc.enumerateCutsUntilBalancedOrFlowBoundExceeded(extractor_info.source, extractor_info.target);
-            timer.stop("WHFC");
+            timer->stop("WHFC");
 
             if (!hfc_result) return false;
 
@@ -72,11 +73,15 @@ namespace whfc_rb {
             return false;
         }
 
+        void setTimer(whfc::TimeReporter* new_timer) {
+            timer = new_timer;
+        }
+
     private:
         FlowHypergraphBuilderExtractor extractor;
         whfc::HyperFlowCutter<whfc::Dinic> hfc;
         std::mt19937 &mt;
-        whfc::TimeReporter &timer;
+        whfc::TimeReporter* timer;
 
         size_t instance_counter = 0;
 

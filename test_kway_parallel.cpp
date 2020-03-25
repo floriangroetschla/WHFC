@@ -40,14 +40,16 @@ int main(int argc, const char *argv[]) {
 
     whfc::TimeReporter timer("Total");
 
+    whfc_rb::PartitionConfig config = {true, patoh_preset, true, false};
+
     timer.start("Total");
     timer.start("PaToH", "Total");
-    whfc_rb::PartitionThreadsafe partition(numParts, hg);
+    whfc_rb::PartitionThreadsafe partition(numParts, hg, config);
     PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset);
     timer.stop("PaToH");
 
     timer.start("Refinement", "Total");
-    whfc_rb::KWayRefinerParallel refiner(partition, timer, mt);
+    whfc_rb::KWayRefinerParallel refiner(partition, timer, mt, config);
     uint iterations = refiner.refine(epsilon, maxIterations);
     timer.stop("Refinement");
     timer.stop("Total");

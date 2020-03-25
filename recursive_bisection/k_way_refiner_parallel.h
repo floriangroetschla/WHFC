@@ -9,8 +9,8 @@
 namespace whfc_rb {
     class KWayRefinerParallel {
     public:
-        explicit KWayRefinerParallel(PartitionThreadsafe &partition, whfc::TimeReporter &timer, std::mt19937 &mt) : partition(
-                partition), partActive(partition.numParts()), partActiveNextRound(partition.numParts()), blockPairStatus(partition.numParts() * (partition.numParts() - 1) / 2), partitionScheduled(partition.numParts()), timer(timer), mt(mt) {}
+        explicit KWayRefinerParallel(PartitionThreadsafe &partition, whfc::TimeReporter &timer, std::mt19937 &mt, PartitionConfig& config) : partition(
+                partition), partActive(partition.numParts()), partActiveNextRound(partition.numParts()), blockPairStatus(partition.numParts() * (partition.numParts() - 1) / 2), partitionScheduled(partition.numParts()), timer(timer), mt(mt), config(config) {}
 
         uint refine(double epsilon, uint maxIterations) {
             NodeWeight maxWeight = (1.0 + epsilon) * partition.totalWeight() / static_cast<double>(partition.numParts());
@@ -20,8 +20,8 @@ namespace whfc_rb {
 
             std::mt19937 mt_local(mt());
             whfc::TimeReporter timer_dummy; // Timer not useful yet
-            timer_dummy.active = false;
-            tbb::enumerable_thread_specific<WHFCRefinerTwoWay> localRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), std::ref(mt_local), std::ref(timer_dummy));
+            timer_dummy.active = true;
+            tbb::enumerable_thread_specific<WHFCRefinerTwoWay> localRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), std::ref(mt_local), &timer_dummy);
             tbb::enumerable_thread_specific<whfc::TimeReporter> timer_local;
 
             while (partActive.count() > 0 && iterationCounter < maxIterations) {
@@ -49,11 +49,11 @@ namespace whfc_rb {
 
                             if (this->iterationCounter < maxIterations) {
                                 WHFCRefinerTwoWay& refiner = localRefiner.local();
-                                whfc::TimeReporter& timer = timer_local.local();
-                                timer.start("RefinementBlockPair");
-                                bool refinementResult = refiner.refine(this->partition, element.part0, element.part1, maxWeight,maxWeight);
-                                timer.stop("RefinementBlockPair");
-                                timer.start("Finding_new_pairs");
+                                whfc::TimeReporter& localTimer = timer_local.local();
+                                refiner.setTimer(&localTimer);
+                                localTimer.start("Refinement");
+                                bool refinementResult = refiner.refine(this->partition, element.part0, element.part1, maxWeight, maxWeight, this->config);
+                                localTimer.stop("Refinement");
                                 if (refinementResult) {
                                     // Schedule for next round
                                     this->partActiveNextRound.set(element.part0);
@@ -69,7 +69,6 @@ namespace whfc_rb {
                                     this->partitionScheduled[element.part1] = false;
                                 }
                                 this->iterationCounter++;
-                                timer.stop("Finding_new_pairs");
                             }
                         });
 
@@ -78,7 +77,7 @@ namespace whfc_rb {
                 partActiveNextRound.reset();
             }
             for (auto local_timer = timer_local.begin(); local_timer != timer_local.end(); local_timer++) {
-                timer.merge(*local_timer, "Refinement", "total");
+                timer.merge(*local_timer, "Refinement", "Refinement");
             }
 
             return iterationCounter.load();
@@ -95,6 +94,7 @@ namespace whfc_rb {
         whfc::TimeReporter &timer;
         std::mt19937 &mt;
         std::atomic<uint> iterationCounter = 0;
+        PartitionConfig& config;
 
         struct WorkElement {
             PartitionBase::PartitionID part0;

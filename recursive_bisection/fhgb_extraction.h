@@ -5,6 +5,7 @@
 #include "../datastructure/queue.h"
 #include "partition_ca.h"
 #include "../datastructure/node_border.h"
+#include "config.h"
 
 namespace whfc_rb {
     class FlowHypergraphBuilderExtractor {
@@ -28,9 +29,10 @@ namespace whfc_rb {
         template<class PartitionImpl>
         ExtractorInfo
         run(PartitionImpl &partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
-            NodeWeight maxW0, NodeWeight maxW1, whfc::DistanceFromCut& distanceFromCut) {
+            NodeWeight maxW0, NodeWeight maxW1, PartitionConfig& config, whfc::DistanceFromCut& distanceFromCut) {
             CSRHypergraph &hg = partition.getGraph();
             initialize(hg.numNodes(), hg.numHyperedges());
+            whfc::HopDistance delta = config.distancePiercing ? 1 : 0;
 
             std::vector<HyperedgeID> cut_hes = partition.getCutEdges(part0, part1);
 
@@ -43,14 +45,14 @@ namespace whfc_rb {
             fhgb.addNode(whfc::NodeWeight(0));
             queue.push(invalid_node);
             queue.reinitialize();
-            whfc::NodeWeight w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -1, distanceFromCut);
+            whfc::NodeWeight w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut);
 
             // Add target node and run BFS in part1
             result.target = whfc::Node::fromOtherValueType(fhgb.numNodes());
             fhgb.addNode(whfc::NodeWeight(0));
             queue.push(invalid_node);
             queue.reinitialize();
-            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, 1, distanceFromCut);
+            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut);
 
             processCutHyperedges(hg, cut_hes, partition, part0, part1);
 

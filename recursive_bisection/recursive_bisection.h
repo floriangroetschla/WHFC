@@ -12,8 +12,8 @@ namespace whfc_rb {
     public:
 
         RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937 &mt,
-                          whfc::TimeReporter &timer, PartitionConfig &config) :
-                refiner(maxNumNodes, maxNumEdges, maxNumPins, mt, timer), mt(mt), timer(timer), config(config) {
+                          whfc::TimeReporter& timer, PartitionConfig &config) :
+                refiner(maxNumNodes, maxNumEdges, maxNumPins, mt, &timer), mt(mt), timer(timer), config(config) {
 
         }
 
@@ -62,7 +62,7 @@ namespace whfc_rb {
                 NodeWeight maxWeight1 = (1.0 + epsilon_for_patoh) * static_cast<double>(numParts[1]) /
                                         static_cast<double>(k) * partition.totalWeight();
                 timer.start("Refinement", "Total");
-                refiner.refine(partition, 0, 1, maxWeight0, maxWeight1);
+                refiner.refine(partition, 0, 1, maxWeight0, maxWeight1, config);
                 timer.stop("Refinement");
             }
 
