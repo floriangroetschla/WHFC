@@ -33,7 +33,7 @@ namespace whfc_rb {
                                               partWeights[part1] / maxBlockWeight1);
 
             timer.start("Extraction", "Refinement");
-            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1);
+            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1, hfc.cs.borderNodes.distance);
             timer.stop("Extraction");
 
             // call WHFC to improve the bisection

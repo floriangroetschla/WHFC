@@ -4,6 +4,7 @@
 #include "hypergraph.h"
 #include "../datastructure/queue.h"
 #include "partition_ca.h"
+#include "../datastructure/node_border.h"
 
 namespace whfc_rb {
     class FlowHypergraphBuilderExtractor {
@@ -27,7 +28,7 @@ namespace whfc_rb {
         template<class PartitionImpl>
         ExtractorInfo
         run(PartitionImpl &partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
-            NodeWeight maxW0, NodeWeight maxW1) {
+            NodeWeight maxW0, NodeWeight maxW1, whfc::DistanceFromCut& distanceFromCut) {
             CSRHypergraph &hg = partition.getGraph();
             initialize(hg.numNodes(), hg.numHyperedges());
 
@@ -42,14 +43,14 @@ namespace whfc_rb {
             fhgb.addNode(whfc::NodeWeight(0));
             queue.push(invalid_node);
             queue.reinitialize();
-            whfc::NodeWeight w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source);
+            whfc::NodeWeight w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -1, distanceFromCut);
 
             // Add target node and run BFS in part1
             result.target = whfc::Node::fromOtherValueType(fhgb.numNodes());
             fhgb.addNode(whfc::NodeWeight(0));
             queue.push(invalid_node);
             queue.reinitialize();
-            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target);
+            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, 1, distanceFromCut);
 
             processCutHyperedges(hg, cut_hes, partition, part0, part1);
 
@@ -93,21 +94,28 @@ namespace whfc_rb {
         template<class PartitionImpl>
         whfc::NodeWeight
         BreadthFirstSearch(CSRHypergraph &hg, const std::vector<HyperedgeID> &cut_hes, const PartitionImpl &partition,
-                           uint partID, uint otherPartID, NodeWeight maxWeight, whfc::Node terminal) {
+                           uint partID, uint otherPartID, NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta, whfc::DistanceFromCut& distanceFromCut) {
             whfc::NodeWeight w = 0;
+            whfc::HopDistance d = delta;
 
             // Collect boundary vertices
             for (HyperedgeID e : cut_hes) {
                 for (NodeID v : hg.pinsOf(e)) {
                     if (!visitedNode[v] && partition[v] == partID && w + hg.nodeWeight(v) <= maxWeight) {
                         visitNode(v, hg, w);
+                        distanceFromCut[globalToLocalID[v]] = d;
                     }
                 }
             }
 
             // Do the actual breadth first search
             while (!queue.empty()) {
+                if (queue.currentLayerEmpty()) {
+                    queue.finishNextLayer();
+                    d += delta;
+                }
                 NodeID u = queue.pop();
+
                 for (HyperedgeID e : hg.hyperedgesOf(u)) {
                     if (!visitedHyperedge[e] && partition.pinsInPart(otherPartID, e) == 0 &&
                         partition.pinsInPart(partID, e) > 1) {
@@ -117,6 +125,7 @@ namespace whfc_rb {
                             if (partition[v] == partID) {
                                 if (!visitedNode[v] && w + hg.nodeWeight(v) <= maxWeight) {
                                     visitNode(v, hg, w);
+                                    distanceFromCut[globalToLocalID[v]] = d;
                                 }
 
                                 if (visitedNode[v]) {
@@ -134,6 +143,9 @@ namespace whfc_rb {
 
                 }
             }
+
+            d += delta;
+            distanceFromCut[terminal] = d;
 
             return w;
         }
