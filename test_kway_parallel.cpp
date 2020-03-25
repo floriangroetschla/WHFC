@@ -12,6 +12,7 @@
 #include <tbb/tbb.h>
 #include "recursive_bisection/k_way_refiner_parallel.h"
 #include "recursive_bisection/partition_threadsafe.h"
+#include "recursive_bisection/tbb_thread_pinning.h"
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
     timer.report(std::cout);
@@ -37,6 +38,8 @@ int main(int argc, const char *argv[]) {
     uint maxIterations = numParts * numParts;
 
     tbb::task_scheduler_init init(numThreads);
+    whfc_rb::pinning_observer pinner;
+    pinner.observe(true);
 
     whfc::TimeReporter timer("Total");
 
