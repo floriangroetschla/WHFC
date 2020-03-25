@@ -6,7 +6,7 @@
 namespace whfc_rb {
     class KWayRefiner {
     public:
-        explicit KWayRefiner(PartitionCA &partition, whfc::TimeReporter& timer, std::mt19937 &mt, PartitionConfig& config) : partition(
+        explicit KWayRefiner(PartitionCA &partition, whfc::TimeReporter& timer, std::mt19937 &mt, const PartitionConfig& config) : partition(
                 partition), partActive(partition.numParts()), partActiveNextRound(partition.numParts()), timer(timer), mt(mt), twoWayRefiner(
                 partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(),
                 mt, &timer), config(config) {}
@@ -46,7 +46,7 @@ namespace whfc_rb {
         whfc::TimeReporter &timer;
         std::mt19937 &mt;
         WHFCRefinerTwoWay twoWayRefiner;
-        PartitionConfig& config;
+        const PartitionConfig& config;
 
         void fillPartitionPairs(std::vector<std::pair<PartitionBase::PartitionID, PartitionBase::PartitionID>>& partitionPairs) {
             partitionPairs.clear();

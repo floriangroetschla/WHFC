@@ -9,7 +9,7 @@
 namespace whfc_rb {
     class KWayRefinerParallel {
     public:
-        explicit KWayRefinerParallel(PartitionThreadsafe &partition, whfc::TimeReporter &timer, std::mt19937 &mt, PartitionConfig& config) : partition(
+        explicit KWayRefinerParallel(PartitionThreadsafe &partition, whfc::TimeReporter &timer, std::mt19937 &mt, const PartitionConfig& config) : partition(
                 partition), partActive(partition.numParts()), partActiveNextRound(partition.numParts()), blockPairStatus(partition.numParts() * (partition.numParts() - 1) / 2), partitionScheduled(partition.numParts()), timer(timer), mt(mt), config(config) {}
 
         uint refine(double epsilon, uint maxIterations) {
@@ -94,7 +94,7 @@ namespace whfc_rb {
         whfc::TimeReporter &timer;
         std::mt19937 &mt;
         std::atomic<uint> iterationCounter = 0;
-        PartitionConfig& config;
+        const PartitionConfig& config;
 
         struct WorkElement {
             PartitionBase::PartitionID part0;

@@ -12,7 +12,7 @@ namespace whfc_rb {
     public:
 
         RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937 &mt,
-                          whfc::TimeReporter& timer, PartitionConfig &config) :
+                          whfc::TimeReporter& timer, const PartitionConfig &config) :
                 refiner(maxNumNodes, maxNumEdges, maxNumPins, mt, &timer), mt(mt), timer(timer), config(config) {
 
         }
@@ -28,7 +28,7 @@ namespace whfc_rb {
         WHFCRefinerTwoWay refiner;
         std::mt19937 &mt;
         whfc::TimeReporter &timer;
-        PartitionConfig &config;
+        const PartitionConfig &config;
 
         void partition_recursively(PartitionBase &partition, double epsilon, uint k, bool alloc) {
             // insert assertions here

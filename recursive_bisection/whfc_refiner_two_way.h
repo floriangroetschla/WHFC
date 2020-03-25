@@ -24,7 +24,7 @@ namespace whfc_rb {
 
         template<class PartitionImpl>
         bool refine(PartitionImpl &partition, PartitionID part0, PartitionID part1, NodeWeight maxBlockWeight0,
-                    NodeWeight maxBlockWeight1, PartitionConfig& config) {
+                    NodeWeight maxBlockWeight1, const PartitionConfig& config) {
             std::vector<NodeWeight> partWeights = partition.partitionWeights();
 
             double maxW0 = 0.2 * partWeights[part0];

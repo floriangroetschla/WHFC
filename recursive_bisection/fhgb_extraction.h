@@ -29,7 +29,7 @@ namespace whfc_rb {
         template<class PartitionImpl>
         ExtractorInfo
         run(PartitionImpl &partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
-            NodeWeight maxW0, NodeWeight maxW1, PartitionConfig& config, whfc::DistanceFromCut& distanceFromCut) {
+            NodeWeight maxW0, NodeWeight maxW1, const PartitionConfig& config, whfc::DistanceFromCut& distanceFromCut) {
             CSRHypergraph &hg = partition.getGraph();
             initialize(hg.numNodes(), hg.numHyperedges());
             whfc::HopDistance delta = config.distancePiercing ? 1 : 0;

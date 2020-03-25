@@ -10,7 +10,7 @@ namespace whfc_rb {
     public:
         static constexpr PartitionID invalidPartition = std::numeric_limits<PartitionID>::max();
 
-        explicit PartitionThreadsafe(PartitionID num_parts, CSRHypergraph &hg, PartitionConfig& config) : PartitionBase(num_parts, hg),
+        explicit PartitionThreadsafe(PartitionID num_parts, CSRHypergraph &hg, const PartitionConfig& config) : PartitionBase(num_parts, hg),
                                                                          vec_pinsInPart(hg.numHyperedges() * num_parts),
                                                                          vec_partWeights(num_parts), vec_cutEdges(num_parts * (num_parts - 1) / 2),
                                                                          cutEdgeLocks(num_parts * (num_parts - 1) / 2), config(config) {
@@ -175,7 +175,7 @@ namespace whfc_rb {
         std::vector<std::vector<HyperedgeID>> vec_cutEdges;
         std::vector<std::mutex> cutEdgeLocks;
         bool datastructures_initialized = false;
-        PartitionConfig& config;
+        const PartitionConfig& config;
 
         std::atomic<std::size_t>& pinsInPart(PartitionID id, HyperedgeID e) {
             return vec_pinsInPart[e * num_parts + id];
