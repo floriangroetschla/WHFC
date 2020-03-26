@@ -16,7 +16,7 @@ namespace whfc_rb {
 
         FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins,
                                        std::mt19937 &mt) :
-                fhgb(maxNumNodes, maxNumEdges, maxNumPins), queue(maxNumNodes + 2), globalToLocalID(maxNumNodes),
+                fhgb(maxNumNodes, maxNumEdges, maxNumPins), queue(maxNumNodes + 2), visitedNode(maxNumNodes), visitedHyperedge(maxNumEdges), globalToLocalID(maxNumNodes),
                 mt(mt) {}
 
         struct ExtractorInfo {
@@ -34,7 +34,9 @@ namespace whfc_rb {
             initialize(hg.numNodes(), hg.numHyperedges());
             whfc::HopDistance delta = config.distancePiercing ? 1 : 0;
 
-            std::vector<HyperedgeID> cut_hes = partition.getCutEdges(part0, part1);
+            std::vector<HyperedgeID> cut_hes_vector;
+            std::vector<HyperedgeID>& cut_hes = partition.getCutEdges(part0, part1, visitedHyperedge, cut_hes_vector);
+            visitedHyperedge.reset();
 
             // shuffle cut edges
             std::shuffle(cut_hes.begin(), cut_hes.end(), mt);
@@ -79,8 +81,8 @@ namespace whfc_rb {
 
     private:
         LayeredQueue<NodeID> queue;
-        std::vector<bool> visitedNode;
-        std::vector<bool> visitedHyperedge;
+        boost::dynamic_bitset<> visitedNode;
+        boost::dynamic_bitset<> visitedHyperedge;
         std::vector<whfc::Node> globalToLocalID;
         ExtractorInfo result;
         std::mt19937 &mt;
@@ -193,12 +195,8 @@ namespace whfc_rb {
         void initialize(uint numNodes, uint numHyperedges) {
             fhgb.clear();
             queue.clear();
-            visitedNode.clear();
-            //visitedNode.resize(numNodes, false);
-            visitedNode = std::vector<bool>(numNodes, false);   // Note(Lars): Not sure this is fine on large instances. Use timestamps or clearlist instead?
-            visitedHyperedge.clear();
-            //visitedHyperedge.resize(numHyperedges, false);
-            visitedHyperedge = std::vector<bool>(numHyperedges, false);
+            visitedNode.reset();
+            visitedHyperedge.reset();
             result = {whfc::Node::fromOtherValueType(0), whfc::Node::fromOtherValueType(0), 0, 0};
         }
     };

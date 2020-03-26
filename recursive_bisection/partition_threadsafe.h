@@ -62,24 +62,41 @@ namespace whfc_rb {
             return vec_pinsInPart[e * num_parts + id];
         }
 
-        std::vector<HyperedgeID> getCutEdges(PartitionID part0, PartitionID part1) override {
-            assert(datastructures_initialized);
-            std::vector<HyperedgeID> cut_hes;
-
+        std::vector<HyperedgeID>& getCutEdges(PartitionID part0, PartitionID part1, boost::dynamic_bitset<>& flags, std::vector<HyperedgeID>& cut_hes) override {
             if (config.precomputeCuts) {
-                for (HyperedgeID e : cutEdges(part0, part1)) {
-                    if (pinsInPart(part0, e) > 0 && pinsInPart(part1, e) > 0 && std::find(cut_hes.begin(), cut_hes.end(), e) == cut_hes.end()) {
-                        cut_hes.push_back(e);
-                    }
-                }
-                cutEdgeLock(part0, part1).lock();
-                cutEdges(part0, part1) = cut_hes;
-                cutEdgeLock(part0, part1).unlock();
+                return getPrecomputedCutEdges(part0, part1, flags);
             } else {
-                for (HyperedgeID e : hg.hyperedges()) {
-                    if (pinsInPart(part0, e) > 0 && pinsInPart(part1, e) > 0) {
-                        cut_hes.push_back(e);
-                    }
+                return computeCutEdges(part0, part1, cut_hes);
+            }
+        }
+
+
+        std::vector<HyperedgeID>& getPrecomputedCutEdges(PartitionID part0, PartitionID part1, boost::dynamic_bitset<>& hyperedgeFlags) {
+            assert(datastructures_initialized);
+            assert(config.precomputeCuts);
+
+            std::vector<HyperedgeID>& cut_hes = cutEdges(part0, part1);
+            hyperedgeFlags.reset();
+
+            std::vector<HyperedgeID>::iterator iter;
+            for (iter = cut_hes.begin(); iter != cut_hes.end(); ) {
+                if (hyperedgeFlags[*iter] || pinsInPart(part0, *iter) == 0 || pinsInPart(part1, *iter) == 0) {
+                    iter = cut_hes.erase(iter);
+                } else {
+                    hyperedgeFlags.set(*iter);
+                    ++iter;
+                }
+            }
+
+            return cut_hes;
+        }
+
+        std::vector<HyperedgeID>& computeCutEdges(PartitionID part0, PartitionID part1, std::vector<HyperedgeID>& cut_hes) {
+            assert(datastructures_initialized);
+
+            for (HyperedgeID e : hg.hyperedges()) {
+                if (pinsInPart(part0, e) > 0 && pinsInPart(part1, e) > 0) {
+                    cut_hes.push_back(e);
                 }
             }
 

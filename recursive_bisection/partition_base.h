@@ -73,9 +73,7 @@ namespace whfc_rb {
             return count;
         }
 
-        virtual std::vector<HyperedgeID> getCutEdges(PartitionID part0, PartitionID part1) {
-            std::vector<HyperedgeID> cut_hes;
-
+        virtual std::vector<HyperedgeID>& getCutEdges(PartitionID part0, PartitionID part1, boost::dynamic_bitset<>& flags, std::vector<HyperedgeID>& cut_hes) {
             for (HyperedgeID e : hg.hyperedges()) {
                 std::array<bool, 2> contains_part = {false, false};
                 for (NodeID u : hg.pinsOf(e)) {

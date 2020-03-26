@@ -57,9 +57,8 @@ namespace whfc_rb {
             return vec_pinsInPart[id * hg.numHyperedges() + e];
         }
 
-        std::vector<HyperedgeID> getCutEdges(PartitionID part0, PartitionID part1) override {
+        std::vector<HyperedgeID>& getCutEdges(PartitionID part0, PartitionID part1, boost::dynamic_bitset<>& bitset, std::vector<HyperedgeID>& cut_hes) override {
             assert(datastructures_initialized);
-            std::vector<HyperedgeID> cut_hes;
 
             if constexpr (precomputeCuts) {
                 for (HyperedgeID e : cutEdges(part0, part1)) {
