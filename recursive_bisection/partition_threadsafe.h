@@ -90,6 +90,10 @@ namespace whfc_rb {
                 }
             }
 
+            std::mt19937 mt(0);
+            std::shuffle(cut_hes1.begin(), cut_hes1.end(), mt);
+            std::shuffle(cut_hes2.begin(), cut_hes2.end(), mt);
+
             return concatenated_range<std::vector<HyperedgeID>, HyperedgeID>(cut_hes1, cut_hes2);
         }
 
