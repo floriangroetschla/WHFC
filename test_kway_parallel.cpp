@@ -24,8 +24,8 @@ void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &time
 
 int main(int argc, const char *argv[]) {
 
-    if (argc != 7) {
-        throw std::runtime_error("Usage ./KWayRefinementParallel HypergraphFile epsilon k seed preset numThreads");
+    if (argc != 9) {
+        throw std::runtime_error("Usage ./KWayRefinementParallel HypergraphFile epsilon k seed preset numThreads useThreadPinning(0 or 1) distancePiercing(0 or 1)");
     }
     whfc_rb::CSRHypergraph hg = whfc::HMetisIO::readCSRHypergraph(argv[1]);
     double epsilon = std::stod(argv[2]);
@@ -33,17 +33,24 @@ int main(int argc, const char *argv[]) {
     int seed = std::stoi(argv[4]);
     std::string patoh_preset = argv[5];
     uint numThreads = std::stoi(argv[6]);
+    bool useThreadPinning = std::stoi(argv[7]);
+    bool distancePiercing = std::stoi(argv[8]);
     std::mt19937 mt(seed);
 
     uint maxIterations = numParts * numParts;
 
     tbb::task_scheduler_init init(numThreads);
     whfc_rb::pinning_observer pinner;
-    pinner.observe(true);
+    pinner.observe(useThreadPinning);
 
     whfc::TimeReporter timer("Total");
 
-    whfc_rb::PartitionConfig config = {true, patoh_preset, true, false};
+    bool precomputeCuts = true;
+
+    whfc_rb::PartitionConfig config = {true, patoh_preset, precomputeCuts, distancePiercing};
+    std::cout << "useThreadPinning: " << useThreadPinning << std::endl;
+    std::cout << "precomputeCuts: " << precomputeCuts << std::endl;
+    std::cout << "distancePiercing: " << distancePiercing << std::endl;
 
     timer.start("Total");
     timer.start("PaToH", "Total");
