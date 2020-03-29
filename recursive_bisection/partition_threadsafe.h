@@ -14,7 +14,7 @@ namespace whfc_rb {
 
         explicit PartitionThreadsafe(PartitionID num_parts, CSRHypergraph &hg, const PartitionConfig& config) : PartitionBase(num_parts, hg),
                                                                          vec_pinsInPart(hg.numHyperedges() * num_parts),
-                                                                         vec_partWeights(num_parts), vec_cutEdges(num_parts * (num_parts - 1)), config(config) {
+                                                                         vec_partWeights(num_parts), vec_cutEdges(num_parts * num_parts), config(config) {
             assert(maxID() < num_parts);
             assert(partition.size() == hg.numNodes());
         }
@@ -22,7 +22,7 @@ namespace whfc_rb {
         explicit PartitionThreadsafe(std::vector<PartitionID> vec_partition, PartitionID num_parts, CSRHypergraph &hg, PartitionConfig& config)
                 : PartitionBase(vec_partition, num_parts, hg),
                   vec_pinsInPart(hg.numHyperedges() * num_parts),
-                  vec_partWeights(num_parts), vec_cutEdges(num_parts * (num_parts - 1)), config(config) {
+                  vec_partWeights(num_parts), vec_cutEdges(num_parts * num_parts), config(config) {
             assert(maxID() < num_parts);
             assert(partition.size() == hg.numNodes());
 
@@ -129,7 +129,7 @@ namespace whfc_rb {
         std::vector<HyperedgeID>& cutEdges(PartitionID part0, PartitionID part1) {
             assert(part0 != part1 && part0 < num_parts && part1 < num_parts);
 
-            return (vec_cutEdges[(part0 * (num_parts - 1)) + part1]);
+            return (vec_cutEdges[(part0 * num_parts) + part1]);
         }
 
         /*
@@ -155,7 +155,7 @@ namespace whfc_rb {
             for (uint i = 0; i < vec_partWeights.size(); ++i) {
                 vec_partWeights[i] = 0;
             }
-            vec_cutEdges = std::vector<std::vector<HyperedgeID>>(num_parts * (num_parts - 1));
+            vec_cutEdges = std::vector<std::vector<HyperedgeID>>(num_parts * num_parts);
 
             for (HyperedgeID e : hg.hyperedges()) {
                 std::vector<NodeID> partitionsOfEdge;
