@@ -37,7 +37,7 @@ namespace whfc_rb {
 
         explicit PartitionThreadsafe(PartitionID num_parts, CSRHypergraph &hg) :
                     PartitionBase(num_parts, hg),
-                    ets_deduplicator(hg.numNodes()), vec_pinsInPart(hg.numHyperedges() * num_parts, 0),
+                    ets_deduplicator(hg.numHyperedges()), vec_pinsInPart(hg.numHyperedges() * num_parts, 0),
                     vec_partWeights(num_parts, 0), vec_cutEdges(num_parts * num_parts)
         {
             assert(maxID() < num_parts);
@@ -78,15 +78,15 @@ namespace whfc_rb {
             return vec_pinsInPart[e * num_parts + id];
         }
 
-        void filter(std::vector<HyperedgeID>& cut_hes, ldc::TimestampSet<>& deduplicator) {
+        void filter(std::vector<HyperedgeID>& cut_hes, ldc::TimestampSet<>& deduplicator, PartitionID part0, PartitionID part1) {
             for (size_t i = 0; i < cut_hes.size(); ++i) {
-                if (deduplicator.contains(cut_hes[i])) {
+                const HyperedgeID e = cut_hes[i];
+                if (deduplicator.contains(e) || pinsInPart(part0, e) == 0 || pinsInPart(part1, e) == 0) {
                     cut_hes[i] = cut_hes.back();
                     cut_hes.pop_back();
                     --i;
-                } else {
-                    deduplicator.add(cut_hes[i]);
                 }
+                deduplicator.add(e);
             }
         }
 
@@ -96,8 +96,8 @@ namespace whfc_rb {
             deduplicator.clear();
             std::vector<HyperedgeID>& cut_hes1 = cutEdges(part0, part1);
             std::vector<HyperedgeID>& cut_hes2 = cutEdges(part1, part0);
-            filter(cut_hes1, deduplicator);
-            filter(cut_hes2, deduplicator);
+            filter(cut_hes1, deduplicator, part0, part1);
+            filter(cut_hes2, deduplicator, part0, part1);
             return CutEdgeRange(cut_hes1, cut_hes2);
         }
 

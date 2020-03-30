@@ -14,10 +14,12 @@ namespace whfc_rb {
         static constexpr NodeID invalid_node = std::numeric_limits<NodeID>::max();
         whfc::FlowHypergraphBuilder fhgb;
 
-        FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins,
-                                       std::mt19937 &mt) :
-                fhgb(maxNumNodes, maxNumEdges, maxNumPins), queue(maxNumNodes + 2), visitedNode(maxNumNodes), visitedHyperedge(maxNumEdges), globalToLocalID(maxNumNodes),
-                mt(mt) {}
+        FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, int seed) :
+                fhgb(maxNumNodes, maxNumEdges, maxNumPins),
+                queue(maxNumNodes + 2),
+                visitedNode(maxNumNodes), visitedHyperedge(maxNumEdges),
+                globalToLocalID(maxNumNodes),
+                mt(seed) {}
 
         struct ExtractorInfo {
             whfc::Node source;
@@ -81,7 +83,7 @@ namespace whfc_rb {
         boost::dynamic_bitset<> visitedHyperedge;
         std::vector<whfc::Node> globalToLocalID;
         ExtractorInfo result;
-        std::mt19937 &mt;
+        std::mt19937 mt;
 
         void visitNode(const NodeID node, CSRHypergraph &hg, whfc::NodeWeight &w) {
             globalToLocalID[node] = whfc::Node::fromOtherValueType(fhgb.numNodes());
@@ -91,9 +93,8 @@ namespace whfc_rb {
             w += hg.nodeWeight(node);
         }
 
-        template<class PartitionImpl>
-        whfc::NodeWeight
-        BreadthFirstSearch(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
+        template<class PartitionImpl, typename CutEdgeRange>
+        whfc::NodeWeight BreadthFirstSearch(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
                            uint partID, uint otherPartID, NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta, whfc::DistanceFromCut& distanceFromCut) {
             whfc::NodeWeight w = 0;
             whfc::HopDistance d = delta;
@@ -151,8 +152,7 @@ namespace whfc_rb {
         }
 
         template<class PartitionImpl, class CutEdgeRange>
-        void
-        processCutHyperedges(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
+        void processCutHyperedges(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
                              const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1) {
             for (const HyperedgeID e : cut_hes) {
                 assert(!visitedHyperedge[e]);

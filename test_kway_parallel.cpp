@@ -33,7 +33,7 @@ int main(int argc, const char *argv[]) {
     bool distancePiercing = std::stoi(argv[8]);
     std::mt19937 mt(seed);
 
-    uint maxIterations = numParts * numParts;
+    uint maxIterations = std::numeric_limits<uint>::max();
 
     tbb::task_scheduler_init init(numThreads);
     whfc_rb::pinning_observer pinner;
@@ -47,19 +47,25 @@ int main(int argc, const char *argv[]) {
     std::cout << "useThreadPinning: " << useThreadPinning << std::endl;
     std::cout << "precomputeCuts: " << precomputeCuts << std::endl;
     std::cout << "distancePiercing: " << distancePiercing << std::endl;
+    std::cout << "numThreads: " << numThreads << std::endl;
 
+    std::cout << "Start PaToH" << std::endl;
     timer.start("Total");
     timer.start("PaToH", "Total");
     whfc_rb::PartitionThreadsafe partition(numParts, hg);
     PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset);
     timer.stop("PaToH");
 
+    std::cout << "PaToH done. Start parallel k-way WHFC refinement" << std::endl;
+
     timer.start("Refinement", "Total");
     whfc_rb::KWayRefinerParallel refiner(partition, timer, mt, config);
-    uint iterations = refiner.refine(epsilon, maxIterations);
+    std::cout << "refiner init done" << std::endl;
+    uint iterations = refiner.refine(epsilon, maxIterations, seed);
     timer.stop("Refinement");
     timer.stop("Total");
 
+    std::cout << "WHFC refinement done" << std::endl;
     printStatistics(partition, timer);
     std::cout << "numThreads: " << numThreads << std::endl;
     std::cout << "maxIterations: " << maxIterations << std::endl;

@@ -13,17 +13,18 @@ namespace whfc_rb {
         explicit KWayRefinerParallel(PartitionThreadsafe &partition, whfc::TimeReporter &timer, std::mt19937 &mt, const PartitionConfig& config) :
                 partition(partition), partActive(partition.numParts()), partActiveNextRound(partition.numParts()), blockPairStatus(partition.numParts() * (partition.numParts() - 1) / 2), partitionScheduled(partition.numParts()), timer(timer), mt(mt), config(config) {}
 
-        uint refine(double epsilon, uint maxIterations) {
+        uint refine(double epsilon, uint maxIterations, int seed) {
+
             NodeWeight maxWeight = (1.0 + epsilon) * partition.totalWeight() / static_cast<double>(partition.numParts());
             partActive.set();
             partActiveNextRound.reset();
             iterationCounter = 0;
 
-            std::mt19937 mt_local(mt());
             whfc::TimeReporter timer_dummy; // Timer not useful yet
             timer_dummy.active = true;
-            tbb::enumerable_thread_specific<WHFCRefinerTwoWay> localRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), std::ref(mt_local), &timer_dummy);
+            tbb::enumerable_thread_specific<WHFCRefinerTwoWay> localRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), seed, &timer_dummy);
             tbb::enumerable_thread_specific<whfc::TimeReporter> timer_local;
+            std::cout << "init refiner done" << std::endl;
 
             while (partActive.count() > 0 && iterationCounter < maxIterations) {
                 std::vector<WorkElement> tasks;
@@ -43,8 +44,7 @@ namespace whfc_rb {
                 }
 
                 tbb::parallel_do(tasks,
-                        [maxIterations, &localRefiner, &timer_local, this, maxWeight](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder)
-                        {
+                        [&](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder) {
                             assert(this->partitionScheduled[element.part0]);
                             assert(this->partitionScheduled[element.part1]);
 

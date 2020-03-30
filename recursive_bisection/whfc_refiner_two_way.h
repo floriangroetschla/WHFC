@@ -13,12 +13,10 @@ namespace whfc_rb {
     public:
         using PartitionID = PartitionBase::PartitionID;
 
-
-        // Note (Lars): what is this indentation?
-        WHFCRefinerTwoWay(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937 &mt,
-                          whfc::TimeReporter* timer) :
-                extractor(maxNumNodes, maxNumEdges, maxNumPins, mt),
-                hfc(extractor.fhgb, mt()), mt(mt), timer(timer) {
+        WHFCRefinerTwoWay(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, int seed, whfc::TimeReporter* timer) :
+                extractor(maxNumNodes, maxNumEdges, maxNumPins, seed),
+                hfc(extractor.fhgb, seed), timer(timer)
+        {
             hfc.timer.active = false;
         }
 
@@ -79,7 +77,6 @@ namespace whfc_rb {
     private:
         FlowHypergraphBuilderExtractor extractor;
         whfc::HyperFlowCutter<whfc::Dinic> hfc;
-        std::mt19937 &mt;
         whfc::TimeReporter* timer;
 
         size_t instance_counter = 0;
