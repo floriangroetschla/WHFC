@@ -44,31 +44,31 @@ namespace whfc_rb {
 
                 tbb::parallel_do(tasks,
                         [&](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder) {
-                            assert(this->partitionScheduled[element.part0]);
-                            assert(this->partitionScheduled[element.part1]);
+                            assert(partitionScheduled[element.part0]);
+                            assert(partitionScheduled[element.part1]);
 
-                            if (this->iterationCounter < maxIterations) {
+                            if (iterationCounter < maxIterations) {
                                 WHFCRefinerTwoWay& refiner = localRefiner.local();
                                 whfc::TimeReporter& localTimer = timer_local.local();
                                 refiner.setTimer(&localTimer);
                                 localTimer.start("Refinement");
-                                bool refinementResult = refiner.refine(this->partition, element.part0, element.part1, maxWeight, maxWeight, this->config);
+                                bool refinementResult = refiner.refine(partition, element.part0, element.part1, maxWeight, maxWeight, config);
                                 localTimer.stop("Refinement");
                                 if (refinementResult) {
                                     // Schedule for next round
-                                    this->partActiveNextRound[element.part0] = 1;
-                                    this->partActiveNextRound[element.part1] = 1;
+                                    partActiveNextRound[element.part0] = 1;
+                                    partActiveNextRound[element.part1] = 1;
                                 }
 
-                                this->blockPair(element.part0, element.part1) = TaskStatus::FINISHED;
+                                blockPair(element.part0, element.part1) = TaskStatus::FINISHED;
 
-                                if (!this->addNewTasks(element.part0, feeder, maxWeight)) {
-                                    this->partitionScheduled[element.part0] = false;
+                                if (!addNewTasks(element.part0, feeder, maxWeight)) {
+                                    partitionScheduled[element.part0] = false;
                                 }
                                 if (!this->addNewTasks(element.part1, feeder, maxWeight)) {
-                                    this->partitionScheduled[element.part1] = false;
+                                    partitionScheduled[element.part1] = false;
                                 }
-                                this->iterationCounter++;
+                                iterationCounter++;
                             }
                         });
 
