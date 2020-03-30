@@ -63,7 +63,9 @@ namespace whfc_rb {
 
             if (newCut < extractor_info.cutAtStake ||
                 (newCut == extractor_info.cutAtStake && imbalanceAfter < imbalanceBefore)) {
+                timer->start("Reassignment", "Refinement");
                 reassign(partition, extractor_info, part0, part1);
+                timer->stop("Reassignment");
                 return true;
             }
 
