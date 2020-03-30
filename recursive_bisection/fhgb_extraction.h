@@ -48,7 +48,7 @@ namespace whfc_rb {
             whfc::NodeWeight w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut);
 
             // Add target node and run BFS in part1
-            result.target = whfc::Node::fromOtherValueType(fhgb.numNodes());
+            result.target = whfc::Node(fhgb.numNodes());
             fhgb.addNode(whfc::NodeWeight(0));
             queue.push(invalid_node);
             queue.reinitialize();
@@ -67,7 +67,7 @@ namespace whfc_rb {
         }
 
         auto localNodeIDs() const {
-            return boost::irange<whfc::Node>(whfc::Node(0), whfc::Node::fromOtherValueType(queue.queueEnd()));
+            return boost::irange<whfc::Node>(whfc::Node(0), whfc::Node(queue.queueEnd()));
         }
 
         whfc::Node global2local(const NodeID x) const {
@@ -86,7 +86,7 @@ namespace whfc_rb {
         std::mt19937 mt;
 
         void visitNode(const NodeID node, CSRHypergraph &hg, whfc::NodeWeight &w) {
-            globalToLocalID[node] = whfc::Node::fromOtherValueType(fhgb.numNodes());
+            globalToLocalID[node] = whfc::Node(fhgb.numNodes());
             queue.push(node);
             visitedNode[node] = true;
             fhgb.addNode(whfc::NodeWeight(hg.nodeWeight(node)));
@@ -195,7 +195,7 @@ namespace whfc_rb {
             queue.clear();
             visitedNode.reset();
             visitedHyperedge.reset();
-            result = {whfc::Node::fromOtherValueType(0), whfc::Node::fromOtherValueType(0), 0, 0};
+            result = {whfc::Node(0), whfc::Node(0), 0, 0};
         }
     };
 }
