@@ -70,7 +70,8 @@ namespace whfc_rb {
                                 }
                                 iterationCounter++;
                             }
-                        });
+                        }
+                );
 
                 //assert(allPairsProcessed()); only if maxIterations allows it
                 std::swap(partActive, partActiveNextRound);
