@@ -145,7 +145,7 @@ namespace whfc_rb {
                     pinsInPart(partition[u], e)++;
                 }
 
-                // TODO complexity can be reduced for large k and small hyperedges by using a clearlist in the loop over the pins
+                // Note: complexity can be reduced for large k and small hyperedges by using a clearlist in the loop over the pins, if that turns out to be an issue
 
                 for (PartitionID p = 0; p < numParts(); ++p) {
                     if (pinsInPart(p, e) > 0) {
