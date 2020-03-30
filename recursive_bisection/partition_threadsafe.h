@@ -129,7 +129,8 @@ namespace whfc_rb {
             assert(part0 != part1 && part0 < num_parts && part1 < num_parts);
             return (vec_cutEdges[(part0 * num_parts) + part1]);
         }
-                double imbalance() override {
+
+        double imbalance() override {
             assert(datastructures_initialized);
             auto total_weight = static_cast<double>(totalWeight());
             auto max_part_weight = static_cast<double>(*std::max_element(vec_partWeights.begin(), vec_partWeights.end()));
