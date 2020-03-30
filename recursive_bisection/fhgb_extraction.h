@@ -31,37 +31,54 @@ namespace whfc_rb {
         template<class PartitionImpl>
         ExtractorInfo
         run(PartitionImpl &partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
-            NodeWeight maxW0, NodeWeight maxW1, const PartitionConfig& config, whfc::DistanceFromCut& distanceFromCut) {
+            NodeWeight maxW0, NodeWeight maxW1, const PartitionConfig& config, whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer) {
+
+            timer.start("Init", "Extraction");
             CSRHypergraph &hg = partition.getGraph();
             initialize(hg.numNodes(), hg.numHyperedges());
+            timer.stop("Init");
+
             whfc::HopDistance delta = config.distancePiercing ? 1 : 0;
 
+            timer.start("Filter", "Extraction");
             auto cut_hes = partition.getCutEdges(part0, part1);
+            timer.stop("Filter");
+
+            timer.start("Shuffle", "Extraction");
             cut_hes.shuffle(mt);
+            timer.stop("Shuffle");
 
             assert(queue.empty());
+
+            timer.start("BFS", "Extraction");
 
             // Add source node and run BFS in part0
             fhgb.addNode(whfc::NodeWeight(0));
             queue.push(invalid_node);
             queue.reinitialize();
-            whfc::NodeWeight w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut);
+            whfc::NodeWeight w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer);
 
             // Add target node and run BFS in part1
             result.target = whfc::Node(fhgb.numNodes());
             fhgb.addNode(whfc::NodeWeight(0));
             queue.push(invalid_node);
             queue.reinitialize();
-            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut);
+            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, timer);
 
+            timer.stop("BFS");
+
+            timer.start("Process Cut Hyperedges", "Extraction");
             processCutHyperedges(hg, cut_hes, partition, part0, part1);
+            timer.stop("Process Cut Hyperedges");
 
             std::vector<NodeWeight> totalWeights = partition.partitionWeights();
 
-            fhgb.nodeWeight(result.source) = totalWeights[part0] - w0;
-            fhgb.nodeWeight(result.target) = totalWeights[part1] - w1;
+            fhgb.nodeWeight(result.source) = partition.partWeight(part0) - w0;
+            fhgb.nodeWeight(result.target) = partition.partWeight(part1) - w1;
 
+            timer.start("Finalize", "Extraction");
             fhgb.finalize();
+            timer.stop("Finalize");
 
             return result;
         }
@@ -97,9 +114,11 @@ namespace whfc_rb {
         whfc::NodeWeight BreadthFirstSearch(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
                                             PartitionBase::PartitionID partID, PartitionBase::PartitionID otherPartID,
                                             NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta,
-                                            whfc::DistanceFromCut& distanceFromCut) {
+                                            whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer) {
             whfc::NodeWeight w = 0;
             whfc::HopDistance d = delta;
+
+            timer.start("Collect Boundary Vertices", "BFS");
 
             // Collect boundary vertices
             for (const HyperedgeID e : cut_hes) {
@@ -110,6 +129,10 @@ namespace whfc_rb {
                     }
                 }
             }
+
+            timer.stop("Collect Boundary Vertices");
+
+            timer.start("Scan Levels", "BFS");
 
             // Do the actual breadth first search
             while (!queue.empty()) {
@@ -147,6 +170,8 @@ namespace whfc_rb {
                 }
             }
 
+            timer.stop("Scan Levels");
+
             d += delta;
             distanceFromCut[terminal] = d;
 
@@ -162,7 +187,7 @@ namespace whfc_rb {
                 bool connectToSource = false;
                 bool connectToTarget = false;
                 result.cutAtStake += hg.hyperedgeWeight(e);
-                visitedHyperedge.add(e);
+                // visitedHyperedge.add(e);
                 fhgb.startHyperedge(hg.hyperedgeWeight(e));
 
                 for (NodeID v : hg.pinsOf(e)) {

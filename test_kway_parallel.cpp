@@ -33,6 +33,7 @@ int main(int argc, const char *argv[]) {
     bool distancePiercing = std::stoi(argv[8]);
     std::mt19937 mt(seed);
 
+    //uint maxIterations = 20 * numParts * numParts;std::numeric_limits<uint>::max();
     uint maxIterations = std::numeric_limits<uint>::max();
 
     tbb::task_scheduler_init init(numThreads);

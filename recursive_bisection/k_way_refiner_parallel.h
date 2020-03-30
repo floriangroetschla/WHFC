@@ -16,8 +16,8 @@ namespace whfc_rb {
         uint refine(double epsilon, uint maxIterations, int seed) {
 
             NodeWeight maxWeight = (1.0 + epsilon) * partition.totalWeight() / static_cast<double>(partition.numParts());
-            partActive.set();
-            partActiveNextRound.reset();
+            partActive.assign(partActive.size(), 1);
+            partActiveNextRound.assign(partActive.size(), 0);
             iterationCounter = 0;
 
             whfc::TimeReporter timer_dummy; // Timer not useful yet
@@ -26,7 +26,7 @@ namespace whfc_rb {
             tbb::enumerable_thread_specific<whfc::TimeReporter> timer_local;
             std::cout << "init refiner done" << std::endl;
 
-            while (partActive.count() > 0 && iterationCounter < maxIterations) {
+            while (std::any_of(partActive.begin(), partActive.end(), [](auto& x) { return x > 0; }) && iterationCounter < maxIterations) {
                 std::vector<WorkElement> tasks;
                 PartitionBase::PartitionID part0 = 0;
                 PartitionBase::PartitionID part1 = partition.numParts() - 1;
@@ -57,8 +57,8 @@ namespace whfc_rb {
                                 localTimer.stop("Refinement");
                                 if (refinementResult) {
                                     // Schedule for next round
-                                    this->partActiveNextRound.set(element.part0);
-                                    this->partActiveNextRound.set(element.part1);
+                                    this->partActiveNextRound[element.part0] = 1;
+                                    this->partActiveNextRound[element.part1] = 1;
                                 }
 
                                 this->blockPair(element.part0, element.part1) = TaskStatus::FINISHED;
@@ -75,7 +75,7 @@ namespace whfc_rb {
 
                 //assert(allPairsProcessed()); only if maxIterations allows it
                 std::swap(partActive, partActiveNextRound);
-                partActiveNextRound.reset();
+                partActiveNextRound.assign(partActive.size(), 0);
             }
             for (auto local_timer = timer_local.begin(); local_timer != timer_local.end(); local_timer++) {
                 timer.merge(*local_timer, "Refinement", "Refinement");
@@ -88,8 +88,7 @@ namespace whfc_rb {
         enum class TaskStatus {UNSCHEDULED, SCHEDULED, FINISHED};
 
         PartitionThreadsafe &partition;
-        boost::dynamic_bitset<> partActive;
-        boost::dynamic_bitset<> partActiveNextRound;
+        std::vector<uint8_t> partActive, partActiveNextRound;
         std::vector<std::atomic<TaskStatus>> blockPairStatus;
         std::vector<std::atomic<bool>> partitionScheduled;
         whfc::TimeReporter &timer;
