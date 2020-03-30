@@ -57,6 +57,7 @@ int main(int argc, const char *argv[]) {
     timer.stop("PaToH");
 
     std::cout << "PaToH done. Start parallel k-way WHFC refinement" << std::endl;
+    printStatistics(partition, timer);
 
     timer.start("Refinement", "Total");
     whfc_rb::KWayRefinerParallel refiner(partition, timer, mt, config);

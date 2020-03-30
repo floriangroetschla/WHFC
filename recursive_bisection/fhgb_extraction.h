@@ -71,7 +71,7 @@ namespace whfc_rb {
         }
 
         whfc::Node global2local(const NodeID x) const {
-            assert(visitedNode[x]);
+            assert(visitedNode.contains(x));
             return globalToLocalID[x];
         }
 
@@ -79,8 +79,8 @@ namespace whfc_rb {
 
     private:
         LayeredQueue<NodeID> queue;
-        boost::dynamic_bitset<> visitedNode;
-        boost::dynamic_bitset<> visitedHyperedge;
+        ldc::TimestampSet<> visitedNode;
+        ldc::TimestampSet<> visitedHyperedge;
         std::vector<whfc::Node> globalToLocalID;
         ExtractorInfo result;
         std::mt19937 mt;
@@ -88,7 +88,7 @@ namespace whfc_rb {
         void visitNode(const NodeID node, CSRHypergraph &hg, whfc::NodeWeight &w) {
             globalToLocalID[node] = whfc::Node(fhgb.numNodes());
             queue.push(node);
-            visitedNode[node] = true;
+            visitedNode.add(node);
             fhgb.addNode(whfc::NodeWeight(hg.nodeWeight(node)));
             w += hg.nodeWeight(node);
         }
@@ -104,7 +104,7 @@ namespace whfc_rb {
             // Collect boundary vertices
             for (const HyperedgeID e : cut_hes) {
                 for (NodeID v : hg.pinsOf(e)) {
-                    if (!visitedNode[v] && partition[v] == partID && w + hg.nodeWeight(v) <= maxWeight) {
+                    if (!visitedNode.contains(v) && partition[v] == partID && w + hg.nodeWeight(v) <= maxWeight) {
                         visitNode(v, hg, w);
                         distanceFromCut[globalToLocalID[v]] = d;
                     }
@@ -120,18 +120,18 @@ namespace whfc_rb {
                 NodeID u = queue.pop();
 
                 for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                    if (!visitedHyperedge[e] && partition.pinsInPart(otherPartID, e) == 0 &&
+                    if (!visitedHyperedge.contains(e) && partition.pinsInPart(otherPartID, e) == 0 &&
                         partition.pinsInPart(partID, e) > 1) {
                         fhgb.startHyperedge(hg.hyperedgeWeight(e));
                         bool connectToTerminal = false;
                         for (NodeID v : hg.pinsOf(e)) {
                             if (partition[v] == partID) {
-                                if (!visitedNode[v] && w + hg.nodeWeight(v) <= maxWeight) {
+                                if (!visitedNode.contains(v) && w + hg.nodeWeight(v) <= maxWeight) {
                                     visitNode(v, hg, w);
                                     distanceFromCut[globalToLocalID[v]] = d;
                                 }
 
-                                if (visitedNode[v]) {
+                                if (visitedNode.contains(v)) {
                                     fhgb.addPin(globalToLocalID[v]);
                                 } else {
                                     connectToTerminal = true;
@@ -141,7 +141,7 @@ namespace whfc_rb {
                         if (connectToTerminal) {
                             fhgb.addPin(terminal);
                         }
-                        visitedHyperedge[e] = true;
+                        visitedHyperedge.add(e);
                     }
 
                 }
@@ -157,16 +157,16 @@ namespace whfc_rb {
         void processCutHyperedges(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
                                   const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1) {
             for (const HyperedgeID e : cut_hes) {
-                assert(!visitedHyperedge[e]);
+                assert(!visitedHyperedge.contains(e));
                 assert(partition.pinsInPart(part0, e) > 0 && partition.pinsInPart(part1, e) > 0);
                 bool connectToSource = false;
                 bool connectToTarget = false;
                 result.cutAtStake += hg.hyperedgeWeight(e);
-                visitedHyperedge[e] = true;
+                visitedHyperedge.add(e);
                 fhgb.startHyperedge(hg.hyperedgeWeight(e));
 
                 for (NodeID v : hg.pinsOf(e)) {
-                    if (visitedNode[v]) {
+                    if (visitedNode.contains(v)) {
                         fhgb.addPin(globalToLocalID[v]);
                     } else {
                         connectToSource |= (partition[v] == part0);
@@ -193,8 +193,8 @@ namespace whfc_rb {
         void initialize(uint numNodes, uint numHyperedges) {
             fhgb.clear();
             queue.clear();
-            visitedNode.reset();
-            visitedHyperedge.reset();
+            visitedNode.clear();
+            visitedHyperedge.clear();
             result = {whfc::Node(0), whfc::Node(0), 0, 0};
         }
     };
