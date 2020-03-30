@@ -18,10 +18,8 @@ namespace whfc_rb {
     public:
         using Partial = const_range<std::vector<HyperedgeID>>;
         using Base = concatenated_range<Partial, HyperedgeID>;
-        CutEdgeRange(std::vector<HyperedgeID>& c0, std::vector<HyperedgeID>& c1) :
-                Base(Partial(c0), Partial(c1)), c0(c0), c1(c1) { }
 
-        std::vector<HyperedgeID>& c0, c1;
+        CutEdgeRange(std::vector<HyperedgeID>& c0, std::vector<HyperedgeID>& c1) : Base(Partial(c0), Partial(c1)), c0(c0), c1(c1) { }
 
         template<typename URBG>
         void shuffle(URBG&& urbg) {
@@ -29,6 +27,8 @@ namespace whfc_rb {
             std::shuffle(c1.begin(), c1.end(), urbg);
         }
 
+    private:
+        std::vector<HyperedgeID>& c0, c1;
     };
 
     class PartitionThreadsafe : public PartitionBase {

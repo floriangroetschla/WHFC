@@ -95,7 +95,9 @@ namespace whfc_rb {
 
         template<class PartitionImpl, typename CutEdgeRange>
         whfc::NodeWeight BreadthFirstSearch(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
-                           uint partID, uint otherPartID, NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta, whfc::DistanceFromCut& distanceFromCut) {
+                                            PartitionBase::PartitionID partID, PartitionBase::PartitionID otherPartID,
+                                            NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta,
+                                            whfc::DistanceFromCut& distanceFromCut) {
             whfc::NodeWeight w = 0;
             whfc::HopDistance d = delta;
 
@@ -153,7 +155,7 @@ namespace whfc_rb {
 
         template<class PartitionImpl, class CutEdgeRange>
         void processCutHyperedges(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
-                             const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1) {
+                                  const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1) {
             for (const HyperedgeID e : cut_hes) {
                 assert(!visitedHyperedge[e]);
                 assert(partition.pinsInPart(part0, e) > 0 && partition.pinsInPart(part1, e) > 0);
