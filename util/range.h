@@ -15,10 +15,16 @@ public:
 template<class Range>
 struct const_range {
 	using const_iterator = typename Range::const_iterator;
+	using reference = typename Range::const_reference;
+
 	const_iterator __begin;
 	const_iterator __end;
+
 	inline const_iterator begin() const { return __begin; }
 	inline const_iterator end() const { return __end; }
+	inline size_t size() const { return static_cast<size_t>(std::distance(__begin, __end)); }
+	inline reference operator[](size_t n) const { return *(__begin + n); }
+
 	const_range(const_iterator __begin, const_iterator __end) : __begin(__begin), __end(__end) { }
 	const_range(const Range& r, std::size_t a, std::size_t b) : const_range(r.cbegin() + a, r.cbegin() + b) {}
 	explicit const_range(const Range& r) : const_range(r.cbegin(), r.cend()) { }

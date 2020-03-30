@@ -44,7 +44,7 @@ namespace whfc_rb {
             return weight;
         }
 
-        const std::vector<NodeWeight> partitionWeights() const {
+        std::vector<NodeWeight> partitionWeights() const {
             std::vector<NodeWeight> weights(num_parts, 0);
 
             for (NodeID u : hg.nodes()) {

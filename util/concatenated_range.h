@@ -61,7 +61,7 @@ public:
         return operator[](size() - 1);
     }
 
-private:
+protected:
     Range firstRange;
     Range secondRange;
 };

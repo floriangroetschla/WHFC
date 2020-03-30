@@ -25,13 +25,12 @@ namespace whfc_rb {
         template<class PartitionImpl>
         bool refine(PartitionImpl &partition, PartitionID part0, PartitionID part1, NodeWeight maxBlockWeight0,
                     NodeWeight maxBlockWeight1, const PartitionConfig& config) {
-            std::vector<NodeWeight> partWeights = partition.partitionWeights();
 
-            double maxW0 = 0.2 * partWeights[part0];
-            double maxW1 = 0.2 * partWeights[part1];
+            double maxW0 = 0.2 * partition.partWeight(part0);
+            double maxW1 = 0.2 * partition.partWeight(part1);
 
-            double imbalanceBefore = std::max(partWeights[part0] / maxBlockWeight0,
-                                              partWeights[part1] / maxBlockWeight1);
+            double imbalanceBefore = std::max(partition.partWeight(part0) / maxBlockWeight0,
+                                              partition.partWeight(part1) / maxBlockWeight1);
 
             timer->start("Extraction", "Refinement");
             FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1, config, hfc.cs.borderNodes.distance);

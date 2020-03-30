@@ -2,17 +2,13 @@
 #include "io/hmetis_io.h"
 #include <iostream>
 #include "extern/patoh_wrapper.h"
-#include "recursive_bisection/recursive_bisection.h"
 #include <random>
 #include "util/timer.h"
-#include "recursive_bisection/partition_base.h"
-#include "recursive_bisection/partition_ca.h"
-#include "recursive_bisection/null_refiner.h"
-#include "recursive_bisection/k_way_refiner.h"
 #include <tbb/tbb.h>
 #include "recursive_bisection/k_way_refiner_parallel.h"
 #include "recursive_bisection/partition_threadsafe.h"
 #include "recursive_bisection/tbb_thread_pinning.h"
+#include "recursive_bisection/config.h"
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
     timer.report(std::cout);
@@ -54,7 +50,7 @@ int main(int argc, const char *argv[]) {
 
     timer.start("Total");
     timer.start("PaToH", "Total");
-    whfc_rb::PartitionThreadsafe partition(numParts, hg, config);
+    whfc_rb::PartitionThreadsafe partition(numParts, hg);
     PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset);
     timer.stop("PaToH");
 
