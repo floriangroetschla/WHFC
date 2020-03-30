@@ -24,7 +24,6 @@ namespace whfc_rb {
             timer_dummy.active = true;
             tbb::enumerable_thread_specific<WHFCRefinerTwoWay> localRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), seed, &timer_dummy);
             tbb::enumerable_thread_specific<whfc::TimeReporter> timer_local;
-            std::cout << "init refiner done" << std::endl;
 
             while (std::any_of(partActive.begin(), partActive.end(), [](auto& x) { return x > 0; }) && iterationCounter < maxIterations) {
                 std::vector<WorkElement> tasks;

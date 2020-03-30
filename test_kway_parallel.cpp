@@ -50,24 +50,20 @@ int main(int argc, const char *argv[]) {
     std::cout << "distancePiercing: " << distancePiercing << std::endl;
     std::cout << "numThreads: " << numThreads << std::endl;
 
-    std::cout << "Start PaToH" << std::endl;
     timer.start("Total");
     timer.start("PaToH", "Total");
     whfc_rb::PartitionThreadsafe partition(numParts, hg);
     PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset);
     timer.stop("PaToH");
 
-    std::cout << "PaToH done. Start parallel k-way WHFC refinement" << std::endl;
     printStatistics(partition, timer);
 
     timer.start("Refinement", "Total");
     whfc_rb::KWayRefinerParallel refiner(partition, timer, mt, config);
-    std::cout << "refiner init done" << std::endl;
     uint iterations = refiner.refine(epsilon, maxIterations, seed);
     timer.stop("Refinement");
     timer.stop("Total");
 
-    std::cout << "WHFC refinement done" << std::endl;
     printStatistics(partition, timer);
     std::cout << "numThreads: " << numThreads << std::endl;
     std::cout << "maxIterations: " << maxIterations << std::endl;
