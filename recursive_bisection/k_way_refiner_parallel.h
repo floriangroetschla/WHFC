@@ -10,6 +10,8 @@
 namespace whfc_rb {
     class KWayRefinerParallel {
     public:
+        using PartitionID = PartitionBase::PartitionID;
+        
         explicit KWayRefinerParallel(PartitionThreadsafe &partition, whfc::TimeReporter &timer, std::mt19937 &mt, const PartitionConfig& config) :
                 partition(partition), partActive(partition.numParts()), partActiveNextRound(partition.numParts()), blockPairStatus(partition.numParts() * (partition.numParts() - 1) / 2), partitionScheduled(partition.numParts()), timer(timer), mt(mt), config(config) {}
 
@@ -26,21 +28,7 @@ namespace whfc_rb {
             tbb::enumerable_thread_specific<whfc::TimeReporter> timer_local;
 
             while (std::any_of(partActive.begin(), partActive.end(), [](auto& x) { return x > 0; }) && iterationCounter < maxIterations) {
-                std::vector<WorkElement> tasks;
-                PartitionBase::PartitionID part0 = 0;
-                PartitionBase::PartitionID part1 = partition.numParts() - 1;
-                resetBlockPairStatus();
-                while (part0 < part1) {
-                    if (partActive[part0] || partActive[part1]) {
-                        WorkElement element = {part0, part1};
-                        tasks.push_back(element);
-                        blockPair(part0, part1) = TaskStatus::SCHEDULED;
-                        partitionScheduled[part0] = true;
-                        partitionScheduled[part1] = true;
-                    }
-                    part0++;
-                    part1--;
-                }
+                std::vector<WorkElement> tasks = initialBlockPairs();
 
                 tbb::parallel_do(tasks,
                         [&](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder) {
@@ -97,13 +85,39 @@ namespace whfc_rb {
         const PartitionConfig& config;
 
         struct WorkElement {
-            PartitionBase::PartitionID part0;
-            PartitionBase::PartitionID part1;
+            PartitionID part0;
+            PartitionID part1;
         };
 
-        bool addNewTasks(PartitionBase::PartitionID part, tbb::parallel_do_feeder<WorkElement>& feeder, NodeWeight maxWeight) {
+        size_t guessNumCutEdges(PartitionID part0, PartitionID part1) {
+            return partition.cutEdges(part0, part1).size() + partition.cutEdges(part1, part0).size();
+        }
+        
+        std::vector<WorkElement> initialBlockPairs() {
+            std::vector<WorkElement> tasks;
+            PartitionID part0 = 0;
+            PartitionID part1 = partition.numParts() - 1;
+            resetBlockPairStatus();
+
+            // TODO: count for each block in how many block pairs it wants to be (just take the initial guess)
+            // TODO: only schedule block pairs that actually share a cut (partition.cutEdges.size() > 0)
+            while (part0 < part1) {
+                if (partActive[part0] || partActive[part1]) {
+                    WorkElement element = {part0, part1};
+                    tasks.push_back(element);
+                    blockPair(part0, part1) = TaskStatus::SCHEDULED;
+                    partitionScheduled[part0] = true;
+                    partitionScheduled[part1] = true;
+                }
+                part0++;
+                part1--;
+            }
+            return tasks;
+        }
+
+        bool addNewTasks(PartitionID part, tbb::parallel_do_feeder<WorkElement>& feeder, NodeWeight maxWeight) {
             bool foundPair = false;
-            for (PartitionBase::PartitionID pid = 0; pid < partition.numParts(); ++pid) {
+            for (PartitionID pid = 0; pid < partition.numParts(); ++pid) {
                 if (pid != part && !partitionScheduled[pid]) {
                     if (!partitionScheduled[pid].exchange(true)) {
                         if (blockPair(part, pid) == TaskStatus::UNSCHEDULED) {
@@ -133,7 +147,7 @@ namespace whfc_rb {
             }
         }
 
-        std::atomic<TaskStatus>& blockPair(PartitionBase::PartitionID part0, PartitionBase::PartitionID part1) {
+        std::atomic<TaskStatus>& blockPair(PartitionID part0, PartitionID part1) {
             if (part0 < part1) std::swap(part0, part1);
             return (blockPairStatus[(part0 * (part0 - 1) / 2) + part1]);
         }
