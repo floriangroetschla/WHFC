@@ -33,7 +33,7 @@ namespace whfc_rb {
 
             while (std::any_of(partActive.begin(), partActive.end(), [](auto& x) { return x > 0; }) && iterationCounter < maxIterations) {
                 std::vector<WorkElement> tasks = initialBlockPairs();
-
+                std::cout << "Round " << round << " initial tasks: " << tasks.size() << std::endl;
                 tbb::parallel_do(tasks,
                         [&](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder) {
                             assert(partScheduled[element.part0]);
@@ -50,6 +50,7 @@ namespace whfc_rb {
                                     // Schedule for next round
                                     partActiveNextRound[element.part0] = 1;
                                     partActiveNextRound[element.part1] = 1;
+                                    reportImprovement(element.part0, element.part1);
                                 }
 
                                 blockPairStatus(element.part0, element.part1) = TaskStatus::FINISHED;
@@ -64,6 +65,8 @@ namespace whfc_rb {
                             }
                         }
                 );
+
+                std::cout << "WHFC refiner calls: " << iterationCounter << std::endl;
 
                 //assert(allPairsProcessed()); only if maxIterations allows it
                 std::swap(partActive, partActiveNextRound);
@@ -178,7 +181,12 @@ namespace whfc_rb {
             if (part0 < part1) std::swap(part0, part1);
             return guessNumCutEdges(part0, part1) > 0
                    && blockPairStatus(part0, part1) == TaskStatus::UNSCHEDULED
-                   && (round == 0 || improvement_history[(part0 * (part0 - 1)/2) + part1] > 0);
+                   && (round < 2 || improvement_history[(part0 * (part0 - 1)/2) + part1] > 0);
+        }
+
+        void reportImprovement(PartitionID part0, PartitionID part1) {
+            if (part0 < part1) std::swap(part0, part1);
+            improvement_history[(part0 * (part0 - 1)/2) + part1]++;
         }
 
 
