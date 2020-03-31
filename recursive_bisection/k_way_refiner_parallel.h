@@ -133,7 +133,6 @@ namespace whfc_rb {
         }
 
         bool addNewTasks(PartitionID part, tbb::parallel_do_feeder<WorkElement>& feeder, NodeWeight maxWeight) {
-            bool foundPair = false;
             for (PartitionID pid = 0; pid < partition.numParts(); ++pid) {
                 if (pid != part && guessNumCutEdges(part, pid) > 0 && !partScheduled[pid]
                         && blockPairStatus(part, pid) == TaskStatus::UNSCHEDULED) {
@@ -141,15 +140,14 @@ namespace whfc_rb {
                         if (blockPairStatus(part, pid) == TaskStatus::UNSCHEDULED) {
                             blockPairStatus(part, pid) = TaskStatus::SCHEDULED;
                             feeder.add({part, pid});
-                            foundPair = true;
-                            break;
+                            return true;
                         } else {
                             partScheduled[pid] = false;
                         }
                     }
                 }
             }
-            return foundPair;
+            return false;
         }
 
         bool allPairsProcessed() {
