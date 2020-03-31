@@ -129,7 +129,7 @@ namespace whfc_rb {
             return obj;
         }
 
-        PartitionID numParts() {
+        PartitionID numParts() const {
             return num_parts;
         }
 
