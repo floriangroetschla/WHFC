@@ -31,6 +31,7 @@ namespace whfc_rb {
             tbb::enumerable_thread_specific<WHFCRefinerTwoWay> localRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), seed, &timer_dummy);
             tbb::enumerable_thread_specific<whfc::TimeReporter> timer_local;
 
+            // TODO maybe also make a row restriction. or terminate if there aren't enough initial tasks. 
             while (std::any_of(partActive.begin(), partActive.end(), [](auto& x) { return x > 0; }) && iterationCounter < maxIterations) {
                 std::vector<WorkElement> tasks = initialBlockPairs();
                 std::cout << "Round " << round << " initial tasks: " << tasks.size() << std::endl;
