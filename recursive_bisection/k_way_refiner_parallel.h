@@ -13,7 +13,11 @@ namespace whfc_rb {
         using PartitionID = PartitionBase::PartitionID;
         
         explicit KWayRefinerParallel(PartitionThreadsafe &partition, whfc::TimeReporter &timer, std::mt19937 &mt, const PartitionConfig& config) :
-                partition(partition), partActive(partition.numParts()), partActiveNextRound(partition.numParts()), block_pair_status(partition.numParts() * (partition.numParts() - 1) / 2), partScheduled(partition.numParts()), timer(timer), mt(mt), config(config) {}
+                partition(partition), partActive(partition.numParts()), partActiveNextRound(partition.numParts()),
+                improvement_history(partition.numParts() * (partition.numParts() -1) / 2, 0),
+                block_pair_status(partition.numParts() * (partition.numParts() - 1) / 2),
+                partScheduled(partition.numParts()),
+                timer(timer), mt(mt), config(config) {}
 
         uint refine(double epsilon, uint maxIterations, int seed) {
 
@@ -64,6 +68,7 @@ namespace whfc_rb {
                 //assert(allPairsProcessed()); only if maxIterations allows it
                 std::swap(partActive, partActiveNextRound);
                 partActiveNextRound.assign(partActive.size(), 0);
+                round++;
             }
             for (auto local_timer = timer_local.begin(); local_timer != timer_local.end(); local_timer++) {
                 timer.merge(*local_timer, "Refinement", "Refinement");
@@ -75,8 +80,10 @@ namespace whfc_rb {
     private:
         enum class TaskStatus {UNSCHEDULED, SCHEDULED, FINISHED};
 
+        size_t round = 0;
         PartitionThreadsafe &partition;
         std::vector<uint8_t> partActive, partActiveNextRound;
+        std::vector<uint32_t> improvement_history;
         std::vector<std::atomic<TaskStatus>> block_pair_status;
         std::vector<std::atomic<bool>> partScheduled;
         whfc::TimeReporter &timer;
@@ -100,7 +107,7 @@ namespace whfc_rb {
             std::vector<std::pair<PartitionID, PartitionID>> block_pairs;
             for (PartitionID i = 0; i < partition.numParts() - 1; ++i) {
                 for (PartitionID j = i + 1; j < partition.numParts(); ++j) {
-                    if (guessNumCutEdges(i, j) > 0) {
+                    if (isEligible(i, j)) {
                         participations[i]++;
                         participations[j]++;
                         block_pairs.emplace_back(i,j);
@@ -134,8 +141,7 @@ namespace whfc_rb {
 
         bool addNewTasks(PartitionID part, tbb::parallel_do_feeder<WorkElement>& feeder, NodeWeight maxWeight) {
             for (PartitionID pid = 0; pid < partition.numParts(); ++pid) {
-                if (pid != part && guessNumCutEdges(part, pid) > 0 && !partScheduled[pid]
-                        && blockPairStatus(part, pid) == TaskStatus::UNSCHEDULED) {
+                if (pid != part && isEligible(part, pid)) {
                     if (!partScheduled[pid].exchange(true)) {
                         if (blockPairStatus(part, pid) == TaskStatus::UNSCHEDULED) {
                             blockPairStatus(part, pid) = TaskStatus::SCHEDULED;
@@ -167,6 +173,15 @@ namespace whfc_rb {
             if (part0 < part1) std::swap(part0, part1);
             return (block_pair_status[(part0 * (part0 - 1) / 2) + part1]);
         }
+
+        bool isEligible(PartitionID part0, PartitionID part1) {
+            if (part0 < part1) std::swap(part0, part1);
+            return guessNumCutEdges(part0, part1) > 0
+                   && blockPairStatus(part0, part1) == TaskStatus::UNSCHEDULED
+                   && (round == 0 || improvement_history[(part0 * (part0 - 1)/2) + part1] > 0);
+        }
+
+
 
     };
 }
