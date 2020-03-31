@@ -53,7 +53,7 @@ namespace whfc_rb {
                                 if (!addNewTasks(element.part0, feeder, maxWeight)) {
                                     partScheduled[element.part0] = false;
                                 }
-                                if (!this->addNewTasks(element.part1, feeder, maxWeight)) {
+                                if (!addNewTasks(element.part1, feeder, maxWeight)) {
                                     partScheduled[element.part1] = false;
                                 }
                                 iterationCounter++;
@@ -135,7 +135,7 @@ namespace whfc_rb {
         bool addNewTasks(PartitionID part, tbb::parallel_do_feeder<WorkElement>& feeder, NodeWeight maxWeight) {
             bool foundPair = false;
             for (PartitionID pid = 0; pid < partition.numParts(); ++pid) {
-                if (pid != part && !partScheduled[pid]) {
+                if (pid != part && guessNumCutEdges(part, pid) > 0 && !partScheduled[pid]) {
                     if (!partScheduled[pid].exchange(true)) {
                         if (blockPairStatus(part, pid) == TaskStatus::UNSCHEDULED) {
                             blockPairStatus(part, pid) = TaskStatus::SCHEDULED;
