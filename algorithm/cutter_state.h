@@ -92,8 +92,8 @@ namespace whfc {
 				hg(_hg),
 				n(_hg),
 				h(_hg),
-				cuts(_hg.numHyperedges()),
-				borderNodes(_hg.numNodes()),
+				cuts(_hg.maxNumHyperedges),
+				borderNodes(_hg.maxNumNodes),
 				maxBlockWeightPerSide({NodeWeight(0), NodeWeight(0)}),
 				isolatedNodes(hg, useIsolatedNodes),
 				timer(timer)

@@ -23,8 +23,8 @@ namespace whfc {
 		using DistanceT = DistanceRange::DistanceT;
 		
 		
-		DistanceReachableNodes(const FlowHypergraph& hg) : Base(hg), distance(hg.numNodes(), unreachableDistance), s(sourceSettledDistance), t(targetSettledDistance) {
-			assert(4 + hg.numNodes() * 2 < std::numeric_limits<DistanceT>::max());
+		DistanceReachableNodes(const FlowHypergraph& hg) : Base(hg), distance(hg.maxNumNodes, unreachableDistance), s(sourceSettledDistance), t(targetSettledDistance) {
+			assert(4 + hg.maxNumNodes * 2 < std::numeric_limits<DistanceT>::max());
 		}
 
 		inline size_t capacity() const { return distance.size(); }
@@ -44,7 +44,7 @@ namespace whfc {
 		inline void unsettleTarget(const Node u) { assert(isTarget(u)); Base::unsettleTarget(u); unreachTarget(u); }
 		
 		void fullReset() {
-			std::fill_n(distance.begin(), hg.numNodes(), unreachableDistance);
+			std::fill_n(distance.begin(), hg.maxNumNodes, unreachableDistance);
 			sourceSettledDistance = 1;
 			targetSettledDistance = 2;
 			runningDistance = resetBaseDistance;
@@ -139,7 +139,7 @@ namespace whfc {
 	public:
 		using DistanceT = DistanceReachableNodes::DistanceT;
 		
-		DistanceReachableHyperedges(const FlowHypergraph& hg) : inDistance(hg.numHyperedges(), unreachableDistance), outDistance(hg.numHyperedges(), unreachableDistance),
+		DistanceReachableHyperedges(const FlowHypergraph& hg) : inDistance(hg.maxNumHyperedges, unreachableDistance), outDistance(hg.maxNumHyperedges, unreachableDistance),
 																hg(hg), s(sourceSettledDistance), t(targetSettledDistance) { }
 		
 		inline size_t capacity() const { return outDistance.size(); }
@@ -194,8 +194,8 @@ namespace whfc {
 		}
 
 		void fullReset() {
-			std::fill_n(inDistance.begin(), hg.numHyperedges(), unreachableDistance);
-			std::fill_n(outDistance.begin(), hg.numHyperedges(), unreachableDistance);
+			std::fill_n(inDistance.begin(), hg.maxNumHyperedges, unreachableDistance);
+			std::fill_n(outDistance.begin(), hg.maxNumHyperedges, unreachableDistance);
 			sourceSettledDistance = 1; targetSettledDistance = 2;
 			runningDistance = resetBaseDistance;
 			s = DistanceRange(sourceSettledDistance);

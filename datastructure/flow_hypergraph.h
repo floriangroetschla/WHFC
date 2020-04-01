@@ -44,15 +44,16 @@ namespace whfc {
 		inline auto hyperedgeIDs() const { return mutable_index_range<Hyperedge>(Hyperedge(0), Hyperedge::fromOtherValueType(numHyperedges())); }
 		inline auto pinIndices() const { return PinIndexRange(PinIndex(0), PinIndex::fromOtherValueType(numPins())); }
 
-		FlowHypergraph() : nodes(1), hyperedges(1) { }
+		FlowHypergraph() : maxNumNodes(0), maxNumHyperedges(0), nodes(1), hyperedges(1) { }
 		
-		//use in FlowHypergraphBuilder to get rid of any allocations
-		FlowHypergraph(size_t maxNumNodes, size_t maxNumHyperedges, size_t maxNumPins) :
-				nodes(maxNumNodes + 1), hyperedges(maxNumHyperedges + 1), pins(maxNumPins),
-				incident_hyperedges(maxNumPins), pins_sending_flow(maxNumHyperedges), pins_receiving_flow(maxNumHyperedges) { }
+		//use in FlowHypergraphBuilder
+		FlowHypergraph(size_t maxNumNodes, size_t maxNumHyperedges) :
+                maxNumNodes(maxNumNodes), maxNumHyperedges(maxNumHyperedges), nodes(1), hyperedges(1) { }
 
 		FlowHypergraph(std::vector<NodeWeight>& node_weights, std::vector<HyperedgeWeight>& hyperedge_weights, std::vector<PinIndex>& hyperedge_sizes, std::vector<Node>& _pins) :
-				maxHyperedgeCapacity(0),
+                maxHyperedgeCapacity(0),
+		        maxNumNodes(node_weights.size()),
+                maxNumHyperedges(hyperedge_weights.size()),
 				nodes(node_weights.size() + 1),
 				hyperedges(hyperedge_weights.size() + 1),
 				pins(_pins.size()),
@@ -277,6 +278,9 @@ namespace whfc {
 		}
 		
 		Flow maxHyperedgeCapacity = maxFlow;
+
+        const size_t maxNumNodes;
+        const size_t maxNumHyperedges;
 
 	protected:
 		std::vector<NodeData> nodes;

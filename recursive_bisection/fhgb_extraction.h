@@ -15,7 +15,7 @@ namespace whfc_rb {
         whfc::FlowHypergraphBuilder fhgb;
 
         FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, int seed) :
-                fhgb(maxNumNodes, maxNumEdges, maxNumPins),
+                fhgb(maxNumNodes, maxNumEdges),
                 queue(maxNumNodes + 2),
                 visitedNode(maxNumNodes), visitedHyperedge(maxNumEdges),
                 globalToLocalID(maxNumNodes),

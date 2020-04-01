@@ -32,11 +32,11 @@ namespace whfc {
 		
 		Flow upperFlowBound;
 		
-		DinicBase(FlowHypergraph& hg) : hg(hg), queue(hg.numNodes()), stack(hg.numNodes()),
-										current_flow_sending_pin(hg.numHyperedges(), PinIndex::Invalid()),
-										current_flow_receiving_pin(hg.numHyperedges(), PinIndex::Invalid()),
-										current_pin(hg.numHyperedges(), PinIndex::Invalid()),
-										current_hyperedge(hg.numNodes(), InHeIndex::Invalid())
+		DinicBase(FlowHypergraph& hg) : hg(hg), queue(hg.maxNumNodes), stack(hg.maxNumNodes),
+										current_flow_sending_pin(hg.maxNumHyperedges, PinIndex::Invalid()),
+										current_flow_receiving_pin(hg.maxNumHyperedges, PinIndex::Invalid()),
+										current_pin(hg.maxNumHyperedges, PinIndex::Invalid()),
+										current_hyperedge(hg.maxNumNodes, InHeIndex::Invalid())
 		{
 		
 		}
