@@ -103,6 +103,7 @@ namespace whfc_rb {
 
         void changePart(NodeID u, PartitionID newPart) {
             assert(datastructures_initialized);
+            assert(u < partition.size());
             if (partition[u] != newPart) {
                 PartitionID oldPart = partition[u];
                 partition[u] = newPart;

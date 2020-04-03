@@ -2,6 +2,7 @@
 
 #include "../definitions.h"
 #include "flow_hypergraph.h"
+#include "../datastructure/copyable_atomic.h"
 
 namespace whfc {
 	class ReachableNodesBase {
@@ -72,7 +73,7 @@ namespace whfc {
 			targetWeight = NodeWeight(0);
 		}
 
-		NodeWeight sourceReachableWeight = NodeWeight(0), sourceWeight = NodeWeight(0), targetReachableWeight = NodeWeight(0), targetWeight = NodeWeight(0);
+		CopyableAtomic<NodeWeight> sourceReachableWeight = NodeWeight(0), sourceWeight = NodeWeight(0), targetReachableWeight = NodeWeight(0), targetWeight = NodeWeight(0);
 		
 	protected:
 		const FlowHypergraph& hg;

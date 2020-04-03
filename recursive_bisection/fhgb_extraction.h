@@ -155,6 +155,7 @@ namespace whfc_rb {
                                 }
 
                                 if (visitedNode.contains(v)) {
+                                    assert(globalToLocalID[v] < fhgb.numNodes());
                                     fhgb.addPin(globalToLocalID[v]);
                                 } else {
                                     connectToTerminal = true;
@@ -162,6 +163,7 @@ namespace whfc_rb {
                             }
                         }
                         if (connectToTerminal) {
+                            assert(terminal < fhgb.numNodes());
                             fhgb.addPin(terminal);
                         }
                         visitedHyperedge.add(e);
@@ -192,6 +194,7 @@ namespace whfc_rb {
 
                 for (NodeID v : hg.pinsOf(e)) {
                     if (visitedNode.contains(v)) {
+                        assert(globalToLocalID[v] < fhgb.numNodes());
                         fhgb.addPin(globalToLocalID[v]);
                     } else {
                         connectToSource |= (partition[v] == part0);

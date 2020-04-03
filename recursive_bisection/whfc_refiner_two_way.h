@@ -87,8 +87,10 @@ namespace whfc_rb {
         void reassign(PartitionImpl &partition, FlowHypergraphBuilderExtractor::ExtractorInfo &info, PartitionID part0,
                       PartitionID part1) {
             for (whfc::Node localID : extractor.localNodeIDs()) {
+                assert(localID < extractor.fhgb.numNodes());
                 if (localID == info.source || localID == info.target) continue;
                 NodeID globalID = extractor.local2global(localID);
+                assert(globalID < partition.getGraph().numNodes());
                 PartitionID newPart = hfc.cs.n.isSource(localID) ? part0 : part1;
                 partition.changePart(globalID, newPart);
             }

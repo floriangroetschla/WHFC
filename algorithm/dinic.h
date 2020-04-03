@@ -4,6 +4,9 @@
 #include "../datastructure/stack.h"
 #include "../datastructure/distance_reachable_sets.h"
 #include "ford_fulkerson.h"
+#include "../recursive_bisection/timestamp_set.hpp"
+#include "../datastructure/copyable_atomic.h"
+
 
 namespace whfc {
 	class DinicBase {
@@ -55,8 +58,65 @@ namespace whfc {
 		static constexpr bool same_traversal_as_grow_assimilated = false;
 		static constexpr bool grow_reachable_marks_flow_sending_pins_when_marking_all_pins = true;
 		static constexpr bool log = false;
+
+        class Layer {
+        public:
+            Layer(size_t size) : layer(size), end(0) {}
+
+            void add(Node u) {
+                layer[end++] = u;
+            }
+
+            void clear() {
+                end = 0;
+            }
+
+            Node& at(uint i) {
+                return layer[i];
+            }
+
+            uint size() {
+                return end;
+            }
+
+        private:
+            std::vector<Node> layer;
+            size_t end;
+        };
+
+        class NodeVectorView {
+        public:
+            NodeVectorView() = default;
+
+            void addVector(std::vector<Node>* vector) {
+                vector_pointers.push_back(vector);
+                prefix_sizes.push_back(prefix_sizes.size() == 0 ? vector->size() : prefix_sizes.back() + vector->size());
+            }
+
+            size_t size() {
+                return prefix_sizes.back();
+            }
+
+            void clear() {
+                vector_pointers.clear();
+                prefix_sizes.clear();
+            }
+
+            Node get(size_t i) {
+                size_t vector_index = 0;
+                while (i >= prefix_sizes[vector_index]) {
+                    i -= prefix_sizes[vector_index];
+                    vector_index++;
+                }
+                return (*vector_pointers[vector_index])[i];
+            }
+
+        private:
+            std::vector<std::vector<Node>*> vector_pointers;
+            std::vector<size_t> prefix_sizes;
+        };
 		
-		Dinic(FlowHypergraph& hg) : DinicBase(hg)
+		Dinic(FlowHypergraph& hg) : DinicBase(hg), currentLayer_thread_specific(hg.maxNumNodes), nextLayer_thread_specific(), node_visited(hg.maxNumNodes), edge_locks(hg.maxNumHyperedges)
 		{
 			reset();
 		}
@@ -119,84 +179,113 @@ namespace whfc {
 		}
 		
 	private:
+	    //Layer currentLayer;
+		//Layer nextLayer;
+        tbb::enumerable_thread_specific<std::vector<Node>> currentLayer_thread_specific;
+		tbb::enumerable_thread_specific<std::vector<Node>> nextLayer_thread_specific;
+		std::vector<Node> currentLayer;
+        ldc::AtomicTimestampSet<uint16_t> node_visited;
+        std::vector<std::mutex> edge_locks;
+
 		
 		void resetSourcePiercingNodeDistances(CutterState<Type>& cs, bool reset = true) {
 			for (auto& sp: cs.sourcePiercingNodes)
 				cs.n.setPiercingNodeDistance(sp.node, reset);
 		}
-		
+
 		bool buildLayeredNetwork(CutterState<Type>& cs, const bool augment_flow) {
-			alignDirection(cs);
-			unused(augment_flow);	//for debug builds only
-			cs.clearForSearch();
-			auto& n = cs.n;
-			auto& h = cs.h;
-			queue.clear();
-			bool found_target = false;
-			
-			for (auto& sp : cs.sourcePiercingNodes) {
-				n.setPiercingNodeDistance(sp.node, false);
-				assert(n.isSourceReachable(sp.node));
-				queue.push(sp.node);
-				current_hyperedge[sp.node] = hg.beginIndexHyperedges(sp.node);
-			}
-			n.hop(); h.hop(); queue.finishNextLayer();
-			
-			while (!queue.empty()) {
-				while (!queue.currentLayerEmpty()) {
-					const Node u = queue.pop();
-					for (InHe& inc_u : hg.hyperedgesOf(u)) {
-						const Hyperedge e = inc_u.e;
-						if (!h.areAllPinsSourceReachable__unsafe__(e)) {
-							const bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(inc_u) > 0;
-							if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e))
-								continue;
-							
-							if (scanAllPins) {
-								h.reachAllPins(e);
-								assert(n.distance[u] + 1 == h.outDistance[e]);
-								current_pin[e] = hg.pinsNotSendingFlowIndices(e).begin();
-							}
-							
-							const bool scanFlowSending = !h.areFlowSendingPinsSourceReachable__unsafe__(e);
-							if (scanFlowSending) {
-								h.reachFlowSendingPins(e);
-								assert(n.distance[u] + 1 == h.inDistance[e]);
-								current_flow_sending_pin[e] = hg.pinsSendingFlowIndices(e).begin();
-							}
-							
-							auto visit = [&](const Pin& pv) {
-								const Node v = pv.pin;
-								assert(augment_flow || !n.isTargetReachable(v));
-								assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);	//checking distance, since the source piercing node is no longer a source at the moment
-								found_target |= n.isTarget(v);
-								if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)) {
-									n.reach(v);
-									assert(n.distance[u] + 1 == n.distance[v]);
-									queue.push(v);
-									current_hyperedge[v] = hg.beginIndexHyperedges(v);
-								}
-							};
-							
-							if (scanFlowSending)
-								for (const Pin& pv : hg.pinsSendingFlowInto(e))
-									visit(pv);
-							
-							if (scanAllPins)
-								for (const Pin& pv : hg.pinsNotSendingFlowInto(e))
-									visit(pv);
-						}
-					}
-				}
-				
-				n.hop(); h.hop(); queue.finishNextLayer();
-			}
-			
-			n.lockInSourceDistance(); h.lockInSourceDistance();
-			h.compareDistances(n);
-			
-			LOGGER_WN << V(found_target) << "#BFS layers =" << (n.s.upper_bound - n.s.base);
-			return found_target;
+		    alignDirection(cs);
+		    unused(augment_flow);
+		    cs.clearForSearch();
+		    auto& n = cs.n;
+		    auto& h = cs.h;
+		    bool found_target = false;
+
+		    //NodeVectorView view;
+		    currentLayer.clear();
+		    node_visited.reset();
+
+            for (auto& sp : cs.sourcePiercingNodes) {
+                n.setPiercingNodeDistance(sp.node, false);
+                assert(n.isSourceReachable(sp.node));
+                currentLayer.push_back(sp.node);
+                current_hyperedge[sp.node] = hg.beginIndexHyperedges(sp.node);
+            }
+            n.hop(); h.hop();
+
+
+            while (currentLayer.size() > 0) {
+                tbb::this_task_arena::isolate( [&]{
+                    tbb::parallel_for(static_cast<uint>(0), static_cast<uint>(currentLayer.size()), [&](uint i) {
+                        std::vector<Node>& nextLayer = nextLayer_thread_specific.local();
+                        const Node u(currentLayer[i]);
+                        for (InHe& inc_u : hg.hyperedgesOf(u)) {
+                            const Hyperedge e = inc_u.e;
+                            // TODO: Solve this without locks / Check if they are really necessary
+                            const std::lock_guard<std::mutex> lock(edge_locks[e]);
+                            if (!h.areAllPinsSourceReachable__unsafe__(e)) { // Are there pins that were not already visited
+                                const bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(inc_u) > 0;
+                                if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e)) // only sending pins can be pushed back
+                                    continue;
+
+                                if (scanAllPins) {
+                                    h.reachAllPins(e);
+                                    assert(n.distance[u] + 1 == h.outDistance[e]);
+                                    current_pin[e] = hg.pinsNotSendingFlowIndices(e).begin();
+                                }
+
+                                const bool scanFlowSending = !h.areFlowSendingPinsSourceReachable__unsafe__(e);
+                                if (scanFlowSending) {
+                                    h.reachFlowSendingPins(e);
+                                    assert(n.distance[u] + 1 == h.inDistance[e]);
+                                    current_flow_sending_pin[e] = hg.pinsSendingFlowIndices(e).begin();
+                                }
+
+                                auto visit = [&](const Pin& pv) {
+                                    const Node v = pv.pin;
+                                    if (node_visited.set(v)) {
+                                        assert(augment_flow || !n.isTargetReachable(v));
+                                        assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);	//checking distance, since the source piercing node is no longer a source at the moment
+                                        if (n.isTarget(v)) found_target = true;
+                                        if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)) {
+                                            assert(v < hg.numNodes());
+                                            n.reach(v);
+                                            assert(n.distance[u] + 1 == n.distance[v]);
+                                            //add_lock.lock();
+                                            nextLayer.push_back(v);
+                                            //add_lock.unlock();
+                                            current_hyperedge[v] = hg.beginIndexHyperedges(v);
+                                        }
+                                    }
+                                };
+
+                                if (scanFlowSending)
+                                    for (const Pin& pv : hg.pinsSendingFlowInto(e))
+                                        visit(pv);
+
+                                if (scanAllPins)
+                                    for (const Pin& pv : hg.pinsNotSendingFlowInto(e))
+                                        visit(pv);
+                            }
+
+                        }
+                    });
+                } );
+
+                n.hop(); h.hop();
+                currentLayer.clear();
+                for (std::vector<Node>& nextLayer : nextLayer_thread_specific) {
+                    currentLayer.insert(currentLayer.end(), nextLayer.begin(), nextLayer.end());
+                    nextLayer.clear();
+                }
+                //std::swap(currentLayer, nextLayer);
+                //nextLayer.clear();
+            }
+            n.lockInSourceDistance(); h.lockInSourceDistance();
+            h.compareDistances(n);
+
+            LOGGER_WN << V(found_target) << "#BFS layers =" << (n.s.upper_bound - n.s.base);
+            return found_target;
 		}
 		
 		Flow augmentFlowInLayeredNetwork(CutterState<Type>& cs) {

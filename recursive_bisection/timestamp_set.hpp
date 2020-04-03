@@ -69,4 +69,31 @@ private:
 	std::vector<T> map;
 };
 
+template<typename TimestampT = uint16_t>
+class AtomicTimestampSet {
+public:
+    AtomicTimestampSet(size_t n) : timestamps(n), generation(0) {}
+
+    bool set(size_t i) {
+        return timestamps[i].exchange(generation) != generation;
+    }
+
+    bool isSet(size_t i) {
+        return timestamps[i] == generation;
+    }
+
+    void reset() {
+        if (generation == std::numeric_limits<TimestampT>::max()) {
+            timestamps = std::vector<std::atomic<TimestampT>>(timestamps.size());
+            generation = 0;
+        }
+        generation++;
+    }
+
+private:
+    std::vector<std::atomic<TimestampT>> timestamps;
+    std::atomic<TimestampT> generation;
+};
+
+
 }
