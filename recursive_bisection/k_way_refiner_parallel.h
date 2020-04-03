@@ -20,16 +20,12 @@ namespace whfc_rb {
                 timer(timer), mt(mt), config(config) {}
 
         uint refine(double epsilon, uint maxIterations, int seed) {
-
             NodeWeight maxWeight = (1.0 + epsilon) * partition.totalWeight() / static_cast<double>(partition.numParts());
             partActive.assign(partActive.size(), 1);
             partActiveNextRound.assign(partActive.size(), 0);
             iterationCounter = 0;
 
-            whfc::TimeReporter timer_dummy; // Timer not useful yet
-            timer_dummy.active = true;
-            tbb::enumerable_thread_specific<WHFCRefinerTwoWay> localRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), seed, &timer_dummy);
-            tbb::enumerable_thread_specific<whfc::TimeReporter> timer_local;
+            tbb::enumerable_thread_specific<WHFCRefinerTwoWay> localRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), seed);
 
             // TODO maybe also make a row restriction. or terminate if there aren't enough initial tasks. 
             while (std::any_of(partActive.begin(), partActive.end(), [](auto& x) { return x > 0; }) && iterationCounter < maxIterations) {
@@ -42,11 +38,7 @@ namespace whfc_rb {
 
                             if (iterationCounter < maxIterations) {
                                 WHFCRefinerTwoWay& refiner = localRefiner.local();
-                                whfc::TimeReporter& localTimer = timer_local.local();
-                                refiner.setTimer(&localTimer);
-                                localTimer.start("Refinement");
                                 bool refinementResult = refiner.refine(partition, element.part0, element.part1, maxWeight, maxWeight, config);
-                                localTimer.stop("Refinement");
                                 if (refinementResult) {
                                     // Schedule for next round
                                     partActiveNextRound[element.part0] = 1;
@@ -74,8 +66,9 @@ namespace whfc_rb {
                 partActiveNextRound.assign(partActive.size(), 0);
                 round++;
             }
-            for (auto local_timer = timer_local.begin(); local_timer != timer_local.end(); local_timer++) {
-                timer.merge(*local_timer, "Refinement", "Refinement");
+
+            for (WHFCRefinerTwoWay& refiner : localRefiner) {
+                timer.merge(refiner.getTimer(), "Refinement", "WHFCRefinerTwoWay");
             }
 
             return iterationCounter.load();

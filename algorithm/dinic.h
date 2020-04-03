@@ -118,8 +118,10 @@ namespace whfc {
             std::vector<std::vector<Node>*> vector_pointers;
             std::vector<size_t> prefix_sizes;
         };
+
+        TimeReporter& timer;
 		
-		Dinic(FlowHypergraph& hg) : DinicBase(hg), currentLayer_thread_specific(hg.maxNumNodes), thisLayer_thread_specific(), nextLayer_thread_specific(), node_visited(hg.maxNumNodes), edge_locks(hg.maxNumHyperedges)
+		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer), currentLayer_thread_specific(hg.maxNumNodes), thisLayer_thread_specific(), nextLayer_thread_specific(), node_visited(hg.maxNumNodes), edge_locks(hg.maxNumHyperedges)
 		{
 			reset();
 		}
@@ -198,6 +200,7 @@ namespace whfc {
 		}
 
 		bool buildLayeredNetwork(CutterState<Type>& cs, const bool augment_flow) {
+		    timer.start("buildLayeredNetwork");
 		    alignDirection(cs);
 		    unused(augment_flow);
 		    cs.clearForSearch();
@@ -300,6 +303,7 @@ namespace whfc {
             h.compareDistances(n);
 
             LOGGER_WN << V(found_target) << "#BFS layers =" << (n.s.upper_bound - n.s.base);
+            timer.stop("buildLayeredNetwork");
             return found_target;
 		}
 		

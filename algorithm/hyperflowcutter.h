@@ -24,7 +24,7 @@ namespace whfc {
 				timer("HyperFlowCutter"),
 				hg(hg),
 				cs(hg, timer),
-				flow_algo(hg),
+				flow_algo(hg, timer),
 				upperFlowBound(maxFlow),
 				piercer(hg, cs, timer)
 		{
@@ -189,6 +189,7 @@ namespace whfc {
 		 * Equivalent to runUntilBalancedOrFlowBoundExceeded(s,t) except that it does not use the flow-based interleaving that is necessary when running multiple HFC instances
 		 */
 		bool enumerateCutsUntilBalancedOrFlowBoundExceeded(const Node s, const Node t) {
+		    timer.start("HyperFlowCutter");
 			flow_algo.upperFlowBound = upperFlowBound;
 			cs.initialize(s,t);
 			bool has_balanced_cut_below_flow_bound = false;
@@ -216,7 +217,7 @@ namespace whfc {
 			if (cs.currentViewDirection() != 0) {
 				cs.flipViewDirection();
 			}
-			
+			timer.stop("HyperFlowCutter");
 			return has_balanced_cut_below_flow_bound;
 		}
 		
