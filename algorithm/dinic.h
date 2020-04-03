@@ -94,6 +94,7 @@ namespace whfc {
             }
 
             size_t size() {
+                if (prefix_sizes.size() == 0) return 0;
                 return prefix_sizes.back();
             }
 
@@ -102,13 +103,15 @@ namespace whfc {
                 prefix_sizes.clear();
             }
 
-            Node get(size_t i) {
+            Node& get(size_t i) {
                 size_t vector_index = 0;
-                while (i >= prefix_sizes[vector_index]) {
-                    i -= prefix_sizes[vector_index];
+                size_t last_size = 0;
+                while (!(i >= last_size && i < prefix_sizes[vector_index])) {
+                    last_size = prefix_sizes[vector_index];
                     vector_index++;
                 }
-                return (*vector_pointers[vector_index])[i];
+                assert(i - last_size < vector_pointers[vector_index]->size());
+                return (*vector_pointers[vector_index])[i - last_size];
             }
 
         private:
@@ -116,7 +119,7 @@ namespace whfc {
             std::vector<size_t> prefix_sizes;
         };
 		
-		Dinic(FlowHypergraph& hg) : DinicBase(hg), currentLayer_thread_specific(hg.maxNumNodes), nextLayer_thread_specific(), node_visited(hg.maxNumNodes), edge_locks(hg.maxNumHyperedges)
+		Dinic(FlowHypergraph& hg) : DinicBase(hg), currentLayer_thread_specific(hg.maxNumNodes), thisLayer_thread_specific(), nextLayer_thread_specific(), node_visited(hg.maxNumNodes), edge_locks(hg.maxNumHyperedges)
 		{
 			reset();
 		}
@@ -183,6 +186,7 @@ namespace whfc {
 		//Layer nextLayer;
         tbb::enumerable_thread_specific<std::vector<Node>> currentLayer_thread_specific;
 		tbb::enumerable_thread_specific<std::vector<Node>> nextLayer_thread_specific;
+        tbb::enumerable_thread_specific<std::vector<Node>> thisLayer_thread_specific;
 		std::vector<Node> currentLayer;
         ldc::AtomicTimestampSet<uint16_t> node_visited;
         std::vector<std::mutex> edge_locks;
@@ -201,7 +205,7 @@ namespace whfc {
 		    auto& h = cs.h;
 		    bool found_target = false;
 
-		    //NodeVectorView view;
+		    NodeVectorView view;
 		    currentLayer.clear();
 		    node_visited.reset();
 
@@ -213,12 +217,16 @@ namespace whfc {
             }
             n.hop(); h.hop();
 
+            view.addVector(&currentLayer);
 
-            while (currentLayer.size() > 0) {
+            while (view.size() > 0) {
+
                 tbb::this_task_arena::isolate( [&]{
-                    tbb::parallel_for(static_cast<uint>(0), static_cast<uint>(currentLayer.size()), [&](uint i) {
+                    tbb::parallel_for(static_cast<uint>(0), static_cast<uint>(view.size()), [&](uint i) {
+                        //std::vector<Node>& thisLayer = thisLayer_thread_specific.local();
                         std::vector<Node>& nextLayer = nextLayer_thread_specific.local();
-                        const Node u(currentLayer[i]);
+                        //const Node u(currentLayer[i]);
+                        const Node u(view.get(i));
                         for (InHe& inc_u : hg.hyperedgesOf(u)) {
                             const Hyperedge e = inc_u.e;
                             // TODO: Solve this without locks / Check if they are really necessary
@@ -273,10 +281,17 @@ namespace whfc {
                 } );
 
                 n.hop(); h.hop();
-                currentLayer.clear();
+                //currentLayer.clear();
+                view.clear();
+                std::swap(thisLayer_thread_specific, nextLayer_thread_specific);
+                for (std::vector<Node>& thisLayer : thisLayer_thread_specific) {
+                    view.addVector(&thisLayer);
+
+                }
                 for (std::vector<Node>& nextLayer : nextLayer_thread_specific) {
-                    currentLayer.insert(currentLayer.end(), nextLayer.begin(), nextLayer.end());
                     nextLayer.clear();
+                    //currentLayer.insert(currentLayer.end(), nextLayer.begin(), nextLayer.end());
+                    //nextLayer.clear();
                 }
                 //std::swap(currentLayer, nextLayer);
                 //nextLayer.clear();
