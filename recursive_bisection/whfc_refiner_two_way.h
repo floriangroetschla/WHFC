@@ -50,7 +50,6 @@ namespace whfc_rb {
             timer.start("WHFC");
             bool hfc_result = hfc.enumerateCutsUntilBalancedOrFlowBoundExceeded(extractor_info.source, extractor_info.target);
             timer.stop("WHFC");
-            hfc.timer.report(std::cout);
             timer.merge(hfc.timer, "WHFC", "HyperFlowCutter");
 
             if (!hfc_result) return false;

@@ -121,7 +121,7 @@ namespace whfc {
 
         TimeReporter& timer;
 		
-		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer), currentLayer_thread_specific(hg.maxNumNodes), thisLayer_thread_specific(), nextLayer_thread_specific(), node_visited(hg.maxNumNodes), edge_locks(hg.maxNumHyperedges)
+		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer), thisLayer_thread_specific(), nextLayer_thread_specific(), node_visited(hg.maxNumNodes), edge_locks(hg.maxNumHyperedges)
 		{
 			reset();
 		}
@@ -184,11 +184,8 @@ namespace whfc {
 		}
 		
 	private:
-	    //Layer currentLayer;
-		//Layer nextLayer;
-        tbb::enumerable_thread_specific<std::vector<Node>> currentLayer_thread_specific;
-		tbb::enumerable_thread_specific<std::vector<Node>> nextLayer_thread_specific;
         tbb::enumerable_thread_specific<std::vector<Node>> thisLayer_thread_specific;
+        tbb::enumerable_thread_specific<std::vector<Node>> nextLayer_thread_specific;
 		std::vector<Node> currentLayer;
         ldc::AtomicTimestampSet<uint16_t> node_visited;
         std::vector<std::mutex> edge_locks;
@@ -226,9 +223,7 @@ namespace whfc {
 
                 tbb::this_task_arena::isolate( [&]{
                     tbb::parallel_for(static_cast<uint>(0), static_cast<uint>(view.size()), [&](uint i) {
-                        //std::vector<Node>& thisLayer = thisLayer_thread_specific.local();
                         std::vector<Node>& nextLayer = nextLayer_thread_specific.local();
-                        //const Node u(currentLayer[i]);
                         const Node u(view.get(i));
                         for (InHe& inc_u : hg.hyperedgesOf(u)) {
                             const Hyperedge e = inc_u.e;
@@ -262,9 +257,7 @@ namespace whfc {
                                             assert(v < hg.numNodes());
                                             n.reach(v);
                                             assert(n.distance[u] + 1 == n.distance[v]);
-                                            //add_lock.lock();
                                             nextLayer.push_back(v);
-                                            //add_lock.unlock();
                                             current_hyperedge[v] = hg.beginIndexHyperedges(v);
                                         }
                                     }
@@ -284,7 +277,7 @@ namespace whfc {
                 } );
 
                 n.hop(); h.hop();
-                //currentLayer.clear();
+
                 view.clear();
                 std::swap(thisLayer_thread_specific, nextLayer_thread_specific);
                 for (std::vector<Node>& thisLayer : thisLayer_thread_specific) {
@@ -293,11 +286,8 @@ namespace whfc {
                 }
                 for (std::vector<Node>& nextLayer : nextLayer_thread_specific) {
                     nextLayer.clear();
-                    //currentLayer.insert(currentLayer.end(), nextLayer.begin(), nextLayer.end());
-                    //nextLayer.clear();
                 }
-                //std::swap(currentLayer, nextLayer);
-                //nextLayer.clear();
+
             }
             n.lockInSourceDistance(); h.lockInSourceDistance();
             h.compareDistances(n);
