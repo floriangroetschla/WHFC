@@ -52,7 +52,7 @@ namespace whfc_rb {
             timer.stop("WHFC");
             timer.merge(hfc.timer, "WHFC", "HyperFlowCutter");
 
-            if (!hfc_result) return false;
+            if (!hfc_result) { timer.stop("WHFCRefinerTwoWay"); return false; }
 
             whfc::Flow newCut = extractor_info.baseCut + hfc.cs.flowValue;
 
@@ -67,6 +67,7 @@ namespace whfc_rb {
                 timer.start("Reassignment");
                 reassign(partition, extractor_info, part0, part1);
                 timer.stop("Reassignment");
+                timer.stop("WHFCRefinerTwoWay");
                 return true;
             }
 
