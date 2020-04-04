@@ -58,7 +58,7 @@ namespace whfc {
 		static constexpr bool same_traversal_as_grow_assimilated = false;
 		static constexpr bool grow_reachable_marks_flow_sending_pins_when_marking_all_pins = true;
 		static constexpr bool log = false;
-		
+
         class NodeVectorView {
         public:
             NodeVectorView() = default;
@@ -96,7 +96,10 @@ namespace whfc {
 
         TimeReporter& timer;
 		
-		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer), thisLayer_thread_specific(), nextLayer_thread_specific(), node_visited(hg.maxNumNodes)
+		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer),
+		    thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()),
+		    nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()),
+		    node_visited(hg.maxNumNodes)
 		{
 			reset();
 		}
@@ -159,8 +162,8 @@ namespace whfc {
 		}
 		
 	private:
-        tbb::enumerable_thread_specific<std::vector<Node>> thisLayer_thread_specific;
-        tbb::enumerable_thread_specific<std::vector<Node>> nextLayer_thread_specific;
+        std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> thisLayer_thread_specific;
+        std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> nextLayer_thread_specific;
 		std::vector<Node> currentLayer;
         ldc::AtomicTimestampSet<uint16_t> node_visited;
 
@@ -249,31 +252,34 @@ namespace whfc {
 
             while (view.size() > 0) {
                 // Only execute in parallel if there are enough nodes left
-                if (view.size() > 100) {
+                if (view.size() > 10000000) {
+                    std::cout << "Called parallel" << std::endl;
                     tbb::this_task_arena::isolate( [&]{
                         tbb::parallel_for(tbb::blocked_range<size_t>(0,view.size()), [&](tbb::blocked_range<size_t> r) {
-                            std::vector<Node>& nextLayer = nextLayer_thread_specific.local();
+                            std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
                             for (size_t i = r.begin(); i < r.end(); ++i) {
                                 if (searchFromNode(view.get(i), cs, augment_flow, nextLayer)) found_target = true;
                             }
                         });
                     } );
                 } else {
-                    std::vector<Node>& nextLayer = nextLayer_thread_specific.local();
+                    timer.start("searchFromNodes", "buildLayeredNetwork");
+                    std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
                     for (size_t i = 0; i < view.size(); ++i) {
                         if (searchFromNode(view.get(i), cs, augment_flow, nextLayer)) found_target = true;
                     }
+                    timer.stop("searchFromNodes");
                 }
 
                 n.hop(); h.hop();
 
                 view.clear();
                 std::swap(thisLayer_thread_specific, nextLayer_thread_specific);
-                for (std::vector<Node>& thisLayer : thisLayer_thread_specific) {
+                for (std::vector<Node>& thisLayer : *thisLayer_thread_specific) {
                     view.addVector(&thisLayer);
-
                 }
-                for (std::vector<Node>& nextLayer : nextLayer_thread_specific) {
+
+                for (std::vector<Node>& nextLayer : *nextLayer_thread_specific) {
                     nextLayer.clear();
                 }
 
@@ -285,6 +291,7 @@ namespace whfc {
             timer.stop("buildLayeredNetwork");
             return found_target;
 		}
+		
 		
 		Flow augmentFlowInLayeredNetwork(CutterState<Type>& cs) {
 			alignDirection(cs);
