@@ -121,7 +121,7 @@ namespace whfc {
 
         TimeReporter& timer;
 		
-		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer), thisLayer_thread_specific(), nextLayer_thread_specific(), node_visited(hg.maxNumNodes), edge_locks(hg.maxNumHyperedges)
+		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer), thisLayer_thread_specific(), nextLayer_thread_specific(), node_visited(hg.maxNumNodes)
 		{
 			reset();
 		}
@@ -188,7 +188,6 @@ namespace whfc {
         tbb::enumerable_thread_specific<std::vector<Node>> nextLayer_thread_specific;
 		std::vector<Node> currentLayer;
         ldc::AtomicTimestampSet<uint16_t> node_visited;
-        std::vector<std::mutex> edge_locks;
 
 		
 		void resetSourcePiercingNodeDistances(CutterState<Type>& cs, bool reset = true) {
@@ -220,58 +219,57 @@ namespace whfc {
             view.addVector(&currentLayer);
 
             while (view.size() > 0) {
-
                 tbb::this_task_arena::isolate( [&]{
-                    tbb::parallel_for(static_cast<uint>(0), static_cast<uint>(view.size()), [&](uint i) {
+                    tbb::parallel_for(tbb::blocked_range<size_t>(0,view.size()), [&](tbb::blocked_range<size_t> r) {
                         std::vector<Node>& nextLayer = nextLayer_thread_specific.local();
-                        const Node u(view.get(i));
-                        for (InHe& inc_u : hg.hyperedgesOf(u)) {
-                            const Hyperedge e = inc_u.e;
-                            // TODO: Solve this without locks / Check if they are really necessary
-                            const std::lock_guard<std::mutex> lock(edge_locks[e]);
-                            if (!h.areAllPinsSourceReachable__unsafe__(e)) { // Are there pins that were not already visited
-                                const bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(inc_u) > 0;
-                                if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e)) // only sending pins can be pushed back
-                                    continue;
+                        for (size_t i = r.begin(); i < r.end(); ++i) {
+                            const Node u(view.get(i));
+                            for (InHe& inc_u : hg.hyperedgesOf(u)) {
+                                const Hyperedge e = inc_u.e;
+                                if (!h.areAllPinsSourceReachable__unsafe__(e)) { // Are there pins that were not already visited
+                                    const bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(inc_u) > 0;
+                                    if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e)) // only sending pins can be pushed back
+                                        continue;
 
-                                if (scanAllPins) {
-                                    h.reachAllPins(e);
-                                    assert(n.distance[u] + 1 == h.outDistance[e]);
-                                    current_pin[e] = hg.pinsNotSendingFlowIndices(e).begin();
-                                }
-
-                                const bool scanFlowSending = !h.areFlowSendingPinsSourceReachable__unsafe__(e);
-                                if (scanFlowSending) {
-                                    h.reachFlowSendingPins(e);
-                                    assert(n.distance[u] + 1 == h.inDistance[e]);
-                                    current_flow_sending_pin[e] = hg.pinsSendingFlowIndices(e).begin();
-                                }
-
-                                auto visit = [&](const Pin& pv) {
-                                    const Node v = pv.pin;
-                                    if (node_visited.set(v)) {
-                                        assert(augment_flow || !n.isTargetReachable(v));
-                                        assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);	//checking distance, since the source piercing node is no longer a source at the moment
-                                        if (n.isTarget(v)) found_target = true;
-                                        if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)) {
-                                            assert(v < hg.numNodes());
-                                            n.reach(v);
-                                            assert(n.distance[u] + 1 == n.distance[v]);
-                                            nextLayer.push_back(v);
-                                            current_hyperedge[v] = hg.beginIndexHyperedges(v);
-                                        }
+                                    if (scanAllPins) {
+                                        h.reachAllPins(e);
+                                        assert(n.distance[u] + 1 == h.outDistance[e]);
+                                        current_pin[e] = hg.pinsNotSendingFlowIndices(e).begin();
                                     }
-                                };
 
-                                if (scanFlowSending)
-                                    for (const Pin& pv : hg.pinsSendingFlowInto(e))
-                                        visit(pv);
+                                    const bool scanFlowSending = !h.areFlowSendingPinsSourceReachable__unsafe__(e);
+                                    if (scanFlowSending) {
+                                        h.reachFlowSendingPins(e);
+                                        assert(n.distance[u] + 1 == h.inDistance[e]);
+                                        current_flow_sending_pin[e] = hg.pinsSendingFlowIndices(e).begin();
+                                    }
 
-                                if (scanAllPins)
-                                    for (const Pin& pv : hg.pinsNotSendingFlowInto(e))
-                                        visit(pv);
+                                    auto visit = [&](const Pin& pv) {
+                                        const Node v = pv.pin;
+                                        if (node_visited.set(v)) {
+                                            assert(augment_flow || !n.isTargetReachable(v));
+                                            assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);	//checking distance, since the source piercing node is no longer a source at the moment
+                                            if (n.isTarget(v)) found_target = true;
+                                            if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)) {
+                                                assert(v < hg.numNodes());
+                                                n.reach(v);
+                                                assert(n.distance[u] + 1 == n.distance[v]);
+                                                nextLayer.push_back(v);
+                                                current_hyperedge[v] = hg.beginIndexHyperedges(v);
+                                            }
+                                        }
+                                    };
+
+                                    if (scanFlowSending)
+                                        for (const Pin& pv : hg.pinsSendingFlowInto(e))
+                                            visit(pv);
+
+                                    if (scanAllPins)
+                                        for (const Pin& pv : hg.pinsNotSendingFlowInto(e))
+                                            visit(pv);
+                                }
+
                             }
-
                         }
                     });
                 } );
