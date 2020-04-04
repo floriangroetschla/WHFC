@@ -58,32 +58,7 @@ namespace whfc {
 		static constexpr bool same_traversal_as_grow_assimilated = false;
 		static constexpr bool grow_reachable_marks_flow_sending_pins_when_marking_all_pins = true;
 		static constexpr bool log = false;
-
-        class Layer {
-        public:
-            Layer(size_t size) : layer(size), end(0) {}
-
-            void add(Node u) {
-                layer[end++] = u;
-            }
-
-            void clear() {
-                end = 0;
-            }
-
-            Node& at(uint i) {
-                return layer[i];
-            }
-
-            uint size() {
-                return end;
-            }
-
-        private:
-            std::vector<Node> layer;
-            size_t end;
-        };
-
+		
         class NodeVectorView {
         public:
             NodeVectorView() = default;
