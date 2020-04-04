@@ -25,7 +25,7 @@ namespace whfc_rb {
             partActiveNextRound.assign(partActive.size(), 0);
             iterationCounter = 0;
 
-            tbb::enumerable_thread_specific<WHFCRefinerTwoWay> localRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), seed);
+            tbb::enumerable_thread_specific<WHFCRefinerTwoWay> localRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), seed, std::ref(config));
 
             // TODO maybe also make a row restriction. or terminate if there aren't enough initial tasks. 
             while (std::any_of(partActive.begin(), partActive.end(), [](auto& x) { return x > 0; }) && iterationCounter < maxIterations) {
@@ -38,7 +38,7 @@ namespace whfc_rb {
 
                             if (iterationCounter < maxIterations) {
                                 WHFCRefinerTwoWay& refiner = localRefiner.local();
-                                bool refinementResult = refiner.refine(partition, element.part0, element.part1, maxWeight, maxWeight, config);
+                                bool refinementResult = refiner.refine(partition, element.part0, element.part1, maxWeight, maxWeight);
                                 if (refinementResult) {
                                     // Schedule for next round
                                     partActiveNextRound[element.part0] = 1;

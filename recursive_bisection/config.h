@@ -7,5 +7,6 @@ namespace whfc_rb {
         std::string patoh_preset;
         bool precomputeCuts;
         bool distancePiercing;
+        double percentage_bfs_from_cut = 0.2;
     };
 }

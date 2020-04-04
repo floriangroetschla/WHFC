@@ -14,12 +14,12 @@ namespace whfc_rb {
         static constexpr NodeID invalid_node = std::numeric_limits<NodeID>::max();
         whfc::FlowHypergraphBuilder fhgb;
 
-        FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, int seed) :
-                fhgb(maxNumNodes, maxNumEdges),
+        FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, int seed, const PartitionConfig& config) :
+                fhgb(2 * config.percentage_bfs_from_cut * maxNumNodes + 2, maxNumEdges),
                 queue(maxNumNodes + 2),
                 visitedNode(maxNumNodes), visitedHyperedge(maxNumEdges),
                 globalToLocalID(maxNumNodes),
-                mt(seed) {}
+                mt(seed), config(config) {}
 
         struct ExtractorInfo {
             whfc::Node source;
@@ -31,7 +31,7 @@ namespace whfc_rb {
         template<class PartitionImpl>
         ExtractorInfo
         run(PartitionImpl &partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
-            NodeWeight maxW0, NodeWeight maxW1, const PartitionConfig& config, whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer) {
+            NodeWeight maxW0, NodeWeight maxW1, whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer) {
 
             timer.start("Init", "Extraction");
             CSRHypergraph &hg = partition.getGraph();
@@ -101,6 +101,7 @@ namespace whfc_rb {
         std::vector<whfc::Node> globalToLocalID;
         ExtractorInfo result;
         std::mt19937 mt;
+        const PartitionConfig& config;
 
         void visitNode(const NodeID node, CSRHypergraph &hg, whfc::NodeWeight &w) {
             globalToLocalID[node] = whfc::Node(fhgb.numNodes());

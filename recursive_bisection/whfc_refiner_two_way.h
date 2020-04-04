@@ -13,25 +13,25 @@ namespace whfc_rb {
     public:
         using PartitionID = PartitionBase::PartitionID;
 
-        WHFCRefinerTwoWay(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, int seed) :
-                extractor(maxNumNodes, maxNumEdges, maxNumPins, seed),
-                hfc(extractor.fhgb, seed), timer("WHFCRefinerTwoWay")
+        WHFCRefinerTwoWay(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, int seed, const PartitionConfig& config) :
+                extractor(maxNumNodes, maxNumEdges, maxNumPins, seed, config),
+                hfc(extractor.fhgb, seed), timer("WHFCRefinerTwoWay"), config(config)
         {
         }
 
         template<class PartitionImpl>
         bool refine(PartitionImpl &partition, PartitionID part0, PartitionID part1, NodeWeight maxBlockWeight0,
-                    NodeWeight maxBlockWeight1, const PartitionConfig& config) {
+                    NodeWeight maxBlockWeight1) {
 
             timer.start("WHFCRefinerTwoWay");
-            double maxW0 = 0.2 * partition.partWeight(part0);
-            double maxW1 = 0.2 * partition.partWeight(part1);
+            double maxW0 = config.percentage_bfs_from_cut * partition.partWeight(part0);
+            double maxW1 = config.percentage_bfs_from_cut * partition.partWeight(part1);
 
             double imbalanceBefore = std::max(partition.partWeight(part0) / maxBlockWeight0,
                                               partition.partWeight(part1) / maxBlockWeight1);
 
             timer.start("Extraction");
-            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1, config, hfc.cs.borderNodes.distance, timer);
+            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1, hfc.cs.borderNodes.distance, timer);
             timer.stop("Extraction");
 
             // call WHFC to improve the bisection
@@ -84,6 +84,7 @@ namespace whfc_rb {
         FlowHypergraphBuilderExtractor extractor;
         whfc::HyperFlowCutter<whfc::Dinic> hfc;
         whfc::TimeReporter timer;
+        const PartitionConfig& config;
 
         size_t instance_counter = 0;
 
