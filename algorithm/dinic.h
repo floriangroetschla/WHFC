@@ -195,6 +195,60 @@ namespace whfc {
 				cs.n.setPiercingNodeDistance(sp.node, reset);
 		}
 
+
+		bool searchFromNode(const Node u, CutterState<Type>& cs, const bool augment_flow, std::vector<Node>& nextLayer) {
+            auto& n = cs.n;
+            auto& h = cs.h;
+            bool found_target;
+            for (InHe& inc_u : hg.hyperedgesOf(u)) {
+                const Hyperedge e = inc_u.e;
+                if (!h.areAllPinsSourceReachable__unsafe__(e)) { // Are there pins that were not already visited
+                    const bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(inc_u) > 0;
+                    if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e)) // only sending pins can be pushed back
+                        continue;
+
+                    if (scanAllPins) {
+                        h.reachAllPins(e);
+                        assert(n.distance[u] + 1 == h.outDistance[e]);
+                        current_pin[e] = hg.pinsNotSendingFlowIndices(e).begin();
+                    }
+
+                    const bool scanFlowSending = !h.areFlowSendingPinsSourceReachable__unsafe__(e);
+                    if (scanFlowSending) {
+                        h.reachFlowSendingPins(e);
+                        assert(n.distance[u] + 1 == h.inDistance[e]);
+                        current_flow_sending_pin[e] = hg.pinsSendingFlowIndices(e).begin();
+                    }
+
+                    auto visit = [&](const Pin& pv) {
+                        const Node v = pv.pin;
+                        if (node_visited.set(v)) {
+                            assert(augment_flow || !n.isTargetReachable(v));
+                            assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);	//checking distance, since the source piercing node is no longer a source at the moment
+                            found_target |= n.isTarget(v);
+                            if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)) {
+                                assert(v < hg.numNodes());
+                                n.reach(v);
+                                assert(n.distance[u] + 1 == n.distance[v]);
+                                nextLayer.push_back(v);
+                                current_hyperedge[v] = hg.beginIndexHyperedges(v);
+                            }
+                        }
+                    };
+
+                    if (scanFlowSending)
+                        for (const Pin& pv : hg.pinsSendingFlowInto(e))
+                            visit(pv);
+
+                    if (scanAllPins)
+                        for (const Pin& pv : hg.pinsNotSendingFlowInto(e))
+                            visit(pv);
+                }
+
+            }
+            return found_target;
+		}
+
 		bool buildLayeredNetwork(CutterState<Type>& cs, const bool augment_flow) {
 		    timer.start("buildLayeredNetwork");
 		    alignDirection(cs);
@@ -219,60 +273,22 @@ namespace whfc {
             view.addVector(&currentLayer);
 
             while (view.size() > 0) {
-                tbb::this_task_arena::isolate( [&]{
-                    tbb::parallel_for(tbb::blocked_range<size_t>(0,view.size()), [&](tbb::blocked_range<size_t> r) {
-                        std::vector<Node>& nextLayer = nextLayer_thread_specific.local();
-                        for (size_t i = r.begin(); i < r.end(); ++i) {
-                            const Node u(view.get(i));
-                            for (InHe& inc_u : hg.hyperedgesOf(u)) {
-                                const Hyperedge e = inc_u.e;
-                                if (!h.areAllPinsSourceReachable__unsafe__(e)) { // Are there pins that were not already visited
-                                    const bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(inc_u) > 0;
-                                    if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e)) // only sending pins can be pushed back
-                                        continue;
-
-                                    if (scanAllPins) {
-                                        h.reachAllPins(e);
-                                        assert(n.distance[u] + 1 == h.outDistance[e]);
-                                        current_pin[e] = hg.pinsNotSendingFlowIndices(e).begin();
-                                    }
-
-                                    const bool scanFlowSending = !h.areFlowSendingPinsSourceReachable__unsafe__(e);
-                                    if (scanFlowSending) {
-                                        h.reachFlowSendingPins(e);
-                                        assert(n.distance[u] + 1 == h.inDistance[e]);
-                                        current_flow_sending_pin[e] = hg.pinsSendingFlowIndices(e).begin();
-                                    }
-
-                                    auto visit = [&](const Pin& pv) {
-                                        const Node v = pv.pin;
-                                        if (node_visited.set(v)) {
-                                            assert(augment_flow || !n.isTargetReachable(v));
-                                            assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);	//checking distance, since the source piercing node is no longer a source at the moment
-                                            if (n.isTarget(v)) found_target = true;
-                                            if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)) {
-                                                assert(v < hg.numNodes());
-                                                n.reach(v);
-                                                assert(n.distance[u] + 1 == n.distance[v]);
-                                                nextLayer.push_back(v);
-                                                current_hyperedge[v] = hg.beginIndexHyperedges(v);
-                                            }
-                                        }
-                                    };
-
-                                    if (scanFlowSending)
-                                        for (const Pin& pv : hg.pinsSendingFlowInto(e))
-                                            visit(pv);
-
-                                    if (scanAllPins)
-                                        for (const Pin& pv : hg.pinsNotSendingFlowInto(e))
-                                            visit(pv);
-                                }
-
+                // Only execute in parallel if there are enough nodes left
+                if (view.size() > 100) {
+                    tbb::this_task_arena::isolate( [&]{
+                        tbb::parallel_for(tbb::blocked_range<size_t>(0,view.size()), [&](tbb::blocked_range<size_t> r) {
+                            std::vector<Node>& nextLayer = nextLayer_thread_specific.local();
+                            for (size_t i = r.begin(); i < r.end(); ++i) {
+                                if (searchFromNode(view.get(i), cs, augment_flow, nextLayer)) found_target = true;
                             }
-                        }
-                    });
-                } );
+                        });
+                    } );
+                } else {
+                    std::vector<Node>& nextLayer = nextLayer_thread_specific.local();
+                    for (size_t i = 0; i < view.size(); ++i) {
+                        if (searchFromNode(view.get(i), cs, augment_flow, nextLayer)) found_target = true;
+                    }
+                }
 
                 n.hop(); h.hop();
 
