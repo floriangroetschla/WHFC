@@ -65,7 +65,6 @@ namespace whfc {
 		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer),
 		    thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()),
 		    nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()),
-		    edge_locks(hg.maxNumHyperedges),
 		    node_visited(hg.maxNumNodes)
 		{
 			reset();
@@ -131,7 +130,6 @@ namespace whfc {
 	private:
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> thisLayer_thread_specific;
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> nextLayer_thread_specific;
-		std::vector<std::mutex> edge_locks;
         ldc::AtomicTimestampSet<uint16_t> node_visited;
 
 		
@@ -144,11 +142,10 @@ namespace whfc {
 		bool searchFromNode(const Node u, CutterState<Type>& cs, const bool augment_flow, std::vector<Node>& nextLayer) {
             auto& n = cs.n;
             auto& h = cs.h;
-            bool found_target;
+            bool found_target = false;
             for (InHe& inc_u : hg.hyperedgesOf(u)) {
                 const Hyperedge e = inc_u.e;
                 if (!h.areAllPinsSourceReachable__unsafe__(e)) { // Are there pins that were not already visited
-                    std::lock_guard<std::mutex> lock(edge_locks[e]);
                     const bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(inc_u) > 0;
                     if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e)) // only sending pins can be pushed back
                         continue;
@@ -221,22 +218,22 @@ namespace whfc {
 
             while (num_nodes > 0) {
                 // Only execute in parallel if there are enough nodes left
-                if (num_nodes > 1) {
+                if (num_nodes > 100) {
                     timer.start("searchFromNodesParallel", "buildLayeredNetwork");
                     tbb::this_task_arena::isolate( [&]{
                         tbb::parallel_for(tbb::blocked_range<size_t>(0, num_nodes), [&](tbb::blocked_range<size_t> r) {
                             std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
-                            size_t currentLayer = 0;
+                            size_t i_layer = 0;
                             size_t start = r.begin();
                             size_t index_in_vector = start;
-                            while (index_in_vector > currentLayers[currentLayer]->size()) {
-                                index_in_vector -= currentLayers[currentLayer]->size();
-                                currentLayer++;
+                            while (index_in_vector > currentLayers[i_layer]->size()) {
+                                index_in_vector -= currentLayers[i_layer]->size();
+                                i_layer++;
                             }
                             size_t diff = start - index_in_vector;
                             for (size_t i = r.begin(); i < r.end(); ++i) {
-                                if (i - diff > currentLayers[currentLayer]->size()) { diff += currentLayers[currentLayer]->size(); currentLayer++; }
-                                if (searchFromNode((*currentLayers[currentLayer])[i - diff], cs, augment_flow, nextLayer)) found_target = true;
+                                if (i - diff >= currentLayers[i_layer]->size()) { diff += currentLayers[i_layer]->size(); i_layer++; }
+                                if (searchFromNode((*currentLayers[i_layer])[i - diff], cs, augment_flow, nextLayer)) found_target = true;
                             }
                         });
                     } );
