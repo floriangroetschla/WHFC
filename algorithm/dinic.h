@@ -59,46 +59,13 @@ namespace whfc {
 		static constexpr bool grow_reachable_marks_flow_sending_pins_when_marking_all_pins = true;
 		static constexpr bool log = false;
 
-        class NodeVectorView {
-        public:
-            NodeVectorView() = default;
-
-            void addVector(std::vector<Node>* vector) {
-                vector_pointers.push_back(vector);
-                prefix_sizes.push_back(prefix_sizes.size() == 0 ? vector->size() : prefix_sizes.back() + vector->size());
-            }
-
-            size_t size() {
-                if (prefix_sizes.size() == 0) return 0;
-                return prefix_sizes.back();
-            }
-
-            void clear() {
-                vector_pointers.clear();
-                prefix_sizes.clear();
-            }
-
-            Node& get(size_t i) {
-                size_t vector_index = 0;
-                size_t last_size = 0;
-                while (!(i >= last_size && i < prefix_sizes[vector_index])) {
-                    last_size = prefix_sizes[vector_index];
-                    vector_index++;
-                }
-                assert(i - last_size < vector_pointers[vector_index]->size());
-                return (*vector_pointers[vector_index])[i - last_size];
-            }
-
-        private:
-            std::vector<std::vector<Node>*> vector_pointers;
-            std::vector<size_t> prefix_sizes;
-        };
 
         TimeReporter& timer;
 		
 		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer),
 		    thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()),
 		    nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()),
+		    edge_locks(hg.maxNumHyperedges),
 		    node_visited(hg.maxNumNodes)
 		{
 			reset();
@@ -164,7 +131,7 @@ namespace whfc {
 	private:
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> thisLayer_thread_specific;
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> nextLayer_thread_specific;
-		std::vector<Node> currentLayer;
+		std::vector<std::mutex> edge_locks;
         ldc::AtomicTimestampSet<uint16_t> node_visited;
 
 		
@@ -181,6 +148,7 @@ namespace whfc {
             for (InHe& inc_u : hg.hyperedgesOf(u)) {
                 const Hyperedge e = inc_u.e;
                 if (!h.areAllPinsSourceReachable__unsafe__(e)) { // Are there pins that were not already visited
+                    std::lock_guard<std::mutex> lock(edge_locks[e]);
                     const bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(inc_u) > 0;
                     if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e)) // only sending pins can be pushed back
                         continue;
@@ -236,8 +204,8 @@ namespace whfc {
 		    auto& h = cs.h;
 		    bool found_target = false;
 
-		    NodeVectorView view;
-		    currentLayer.clear();
+		    std::vector<std::vector<Node>*> currentLayers;
+		    std::vector<Node> currentLayer;
 		    node_visited.reset();
 
             for (auto& sp : cs.sourcePiercingNodes) {
@@ -248,35 +216,53 @@ namespace whfc {
             }
             n.hop(); h.hop();
 
-            view.addVector(&currentLayer);
+            currentLayers.push_back(&currentLayer);
+            uint num_nodes = currentLayer.size();
 
-            while (view.size() > 0) {
+            while (num_nodes > 0) {
                 // Only execute in parallel if there are enough nodes left
-                if (view.size() > 10000000) {
-                    std::cout << "Called parallel" << std::endl;
+                if (num_nodes > 1) {
+                    timer.start("searchFromNodesParallel", "buildLayeredNetwork");
                     tbb::this_task_arena::isolate( [&]{
-                        tbb::parallel_for(tbb::blocked_range<size_t>(0,view.size()), [&](tbb::blocked_range<size_t> r) {
+                        tbb::parallel_for(tbb::blocked_range<size_t>(0, num_nodes), [&](tbb::blocked_range<size_t> r) {
                             std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
+                            size_t currentLayer = 0;
+                            size_t start = r.begin();
+                            size_t index_in_vector = start;
+                            while (index_in_vector > currentLayers[currentLayer]->size()) {
+                                index_in_vector -= currentLayers[currentLayer]->size();
+                                currentLayer++;
+                            }
+                            size_t diff = start - index_in_vector;
                             for (size_t i = r.begin(); i < r.end(); ++i) {
-                                if (searchFromNode(view.get(i), cs, augment_flow, nextLayer)) found_target = true;
+                                if (i - diff > currentLayers[currentLayer]->size()) { diff += currentLayers[currentLayer]->size(); currentLayer++; }
+                                if (searchFromNode((*currentLayers[currentLayer])[i - diff], cs, augment_flow, nextLayer)) found_target = true;
                             }
                         });
                     } );
+                    timer.stop("searchFromNodesParallel");
                 } else {
                     timer.start("searchFromNodes", "buildLayeredNetwork");
                     std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
-                    for (size_t i = 0; i < view.size(); ++i) {
-                        if (searchFromNode(view.get(i), cs, augment_flow, nextLayer)) found_target = true;
+                    size_t currentLayer = 0;
+                    size_t diff = 0;
+                    for (size_t i = 0; i < num_nodes; ++i) {
+                        if (i - diff >= currentLayers[currentLayer]->size()) { diff += currentLayers[currentLayer]->size(); currentLayer++; }
+                        if (searchFromNode((*currentLayers[currentLayer])[i - diff], cs, augment_flow, nextLayer)) found_target = true;
                     }
                     timer.stop("searchFromNodes");
                 }
 
                 n.hop(); h.hop();
 
-                view.clear();
+                num_nodes = 0;
+                currentLayers.clear();
                 std::swap(thisLayer_thread_specific, nextLayer_thread_specific);
                 for (std::vector<Node>& thisLayer : *thisLayer_thread_specific) {
-                    view.addVector(&thisLayer);
+                    if (thisLayer.size() > 0) {
+                        num_nodes += thisLayer.size();
+                        currentLayers.push_back(&thisLayer);
+                    }
                 }
 
                 for (std::vector<Node>& nextLayer : *nextLayer_thread_specific) {
@@ -291,7 +277,7 @@ namespace whfc {
             timer.stop("buildLayeredNetwork");
             return found_target;
 		}
-		
+
 		
 		Flow augmentFlowInLayeredNetwork(CutterState<Type>& cs) {
 			alignDirection(cs);
