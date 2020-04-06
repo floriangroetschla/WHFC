@@ -212,7 +212,7 @@ namespace whfc {
 #endif
 			}
 			if (!isBaseDistanceSafe()) {
-				auto reset = [&](std::vector<DistanceT>& d) {
+				auto reset = [&](std::vector<CopyableAtomic<DistanceT>>& d) {
 					for (Hyperedge e : hg.hyperedgeIDs()) {
 						if (d[e] == sourceSettledDistance || d[e] == targetSettledDistance)
 							continue;
@@ -255,7 +255,7 @@ namespace whfc {
 			assert(n.isBaseDistanceSafe() == isBaseDistanceSafe());
 		}
 		
-		std::vector<DistanceT> inDistance, outDistance;
+		std::vector<CopyableAtomic<DistanceT>> inDistance, outDistance;
 	//protected:
 		const FlowHypergraph& hg;
 		static constexpr DistanceT unreachableDistance = 0;

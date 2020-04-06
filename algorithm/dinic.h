@@ -143,17 +143,18 @@ namespace whfc {
             for (InHe& inc_u : hg.hyperedgesOf(u)) {
                 const Hyperedge e = inc_u.e;
                 if (!h.areAllPinsSourceReachable__unsafe__(e)) { // Are there pins that were not already visited
-                    const bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(inc_u) > 0;
+                    bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(inc_u) > 0;
                     if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e)) // only sending pins can be pushed back
                         continue;
 
+                    scanAllPins = scanAllPins && h.outDistance[e].exchange(h.runningDistance) < h.s.base;
                     if (scanAllPins) {
                         h.reachAllPins(e);
                         assert(n.distance[u] + 1 == h.outDistance[e]);
                         current_pin[e] = hg.pinsNotSendingFlowIndices(e).begin();
                     }
 
-                    const bool scanFlowSending = !h.areFlowSendingPinsSourceReachable__unsafe__(e);
+                    const bool scanFlowSending = !h.areFlowSendingPinsSourceReachable__unsafe__(e) && h.inDistance[e].exchange(h.runningDistance) < h.s.base;
                     if (scanFlowSending) {
                         h.reachFlowSendingPins(e);
                         assert(n.distance[u] + 1 == h.inDistance[e]);
