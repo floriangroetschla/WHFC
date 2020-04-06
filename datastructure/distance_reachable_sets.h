@@ -34,7 +34,7 @@ namespace whfc {
 		inline bool isSourceReachable__unsafe__(const Node u) const { return isSource(u) || distance[u] >= s.base; }	//saves a comparison in Dinic
 		inline bool isSourceReachable(const Node u) const { return isSource(u) || s.contains(distance[u]); }
 		inline bool isTargetReachable(const Node u) const { return isTarget(u) || t.contains(distance[u]); }
-		inline void reach(const Node u) { assert(u < hg.numNodes()); assert(!isSourceReachable(u)); distance[u] = runningDistance; Base::reach(u); }
+		inline void reach(const Node u) { assert(u < hg.numNodes()); /*assert(!isSourceReachable(u));*/ distance[u] = runningDistance; Base::reach(u); }
 		inline void settle(const Node u) { assert(!isSource(u)); distance[u] = sourceSettledDistance; Base::settle(u); }
 		inline void reachTarget(const Node u) { assert(!isSourceReachable(u) && !isTargetReachable(u)); distance[u] = t.base; Base::reachTarget(u); }
 		inline void settleTarget(const Node u) { assert(!isSourceReachable(u) && isTargetReachable(u)); distance[u] = targetSettledDistance; Base::settleTarget(u); }
@@ -126,7 +126,7 @@ namespace whfc {
 			return hg.numNodes() + static_cast<size_t>(runningDistance) < static_cast<size_t>(std::numeric_limits<DistanceT>::max());
 		}
 		
-		std::vector<DistanceT> distance;
+		std::vector<CopyableAtomic<DistanceT>> distance;
 		
 		static constexpr DistanceT unreachableDistance = 0;
 		DistanceT sourceSettledDistance = 1, targetSettledDistance = 2;

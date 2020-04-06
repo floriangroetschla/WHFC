@@ -64,8 +64,7 @@ namespace whfc {
 		
 		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer),
 		    thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()),
-		    nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()),
-		    node_visited(hg.maxNumNodes)
+		    nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>())
 		{
 			reset();
 		}
@@ -130,8 +129,6 @@ namespace whfc {
 	private:
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> thisLayer_thread_specific;
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> nextLayer_thread_specific;
-        ldc::AtomicTimestampSet<uint16_t> node_visited;
-
 		
 		void resetSourcePiercingNodeDistances(CutterState<Type>& cs, bool reset = true) {
 			for (auto& sp: cs.sourcePiercingNodes)
@@ -165,17 +162,15 @@ namespace whfc {
 
                     auto visit = [&](const Pin& pv) {
                         const Node v = pv.pin;
-                        if (node_visited.set(v)) {
-                            assert(augment_flow || !n.isTargetReachable(v));
-                            assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);	//checking distance, since the source piercing node is no longer a source at the moment
-                            found_target |= n.isTarget(v);
-                            if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)) {
-                                assert(v < hg.numNodes());
-                                n.reach(v);
-                                assert(n.distance[u] + 1 == n.distance[v]);
-                                nextLayer.push_back(v);
-                                current_hyperedge[v] = hg.beginIndexHyperedges(v);
-                            }
+                        found_target |= n.isTarget(v);
+                        assert(augment_flow || !n.isTargetReachable(v));
+                        assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);	//checking distance, since the source piercing node is no longer a source at the moment
+                        if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v) && n.distance[v].exchange(n.runningDistance) < n.s.base) {
+                            assert(v < hg.numNodes());
+                            n.reach(v);
+                            assert(n.distance[u] + 1 == n.distance[v]);
+                            nextLayer.push_back(v);
+                            current_hyperedge[v] = hg.beginIndexHyperedges(v);
                         }
                     };
 
@@ -203,7 +198,6 @@ namespace whfc {
 
 		    std::vector<std::vector<Node>*> currentLayers;
 		    std::vector<Node> currentLayer;
-		    node_visited.reset();
 
             for (auto& sp : cs.sourcePiercingNodes) {
                 n.setPiercingNodeDistance(sp.node, false);
@@ -220,23 +214,21 @@ namespace whfc {
                 // Only execute in parallel if there are enough nodes left
                 if (num_nodes > 100) {
                     timer.start("searchFromNodesParallel", "buildLayeredNetwork");
-                    tbb::this_task_arena::isolate( [&]{
-                        tbb::parallel_for(tbb::blocked_range<size_t>(0, num_nodes), [&](tbb::blocked_range<size_t> r) {
-                            std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
-                            size_t i_layer = 0;
-                            size_t start = r.begin();
-                            size_t index_in_vector = start;
-                            while (index_in_vector > currentLayers[i_layer]->size()) {
-                                index_in_vector -= currentLayers[i_layer]->size();
-                                i_layer++;
-                            }
-                            size_t diff = start - index_in_vector;
-                            for (size_t i = r.begin(); i < r.end(); ++i) {
-                                if (i - diff >= currentLayers[i_layer]->size()) { diff += currentLayers[i_layer]->size(); i_layer++; }
-                                if (searchFromNode((*currentLayers[i_layer])[i - diff], cs, augment_flow, nextLayer)) found_target = true;
-                            }
-                        });
-                    } );
+                    tbb::parallel_for(tbb::blocked_range<size_t>(0, num_nodes), [&](tbb::blocked_range<size_t> r) {
+                        std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
+                        size_t i_layer = 0;
+                        size_t start = r.begin();
+                        size_t index_in_vector = start;
+                        while (index_in_vector > currentLayers[i_layer]->size()) {
+                            index_in_vector -= currentLayers[i_layer]->size();
+                            i_layer++;
+                        }
+                        size_t diff = start - index_in_vector;
+                        for (size_t i = r.begin(); i < r.end(); ++i) {
+                            if (i - diff >= currentLayers[i_layer]->size()) { diff += currentLayers[i_layer]->size(); i_layer++; }
+                            if (searchFromNode((*currentLayers[i_layer])[i - diff], cs, augment_flow, nextLayer)) found_target = true;
+                        }
+                    });
                     timer.stop("searchFromNodesParallel");
                 } else {
                     timer.start("searchFromNodes", "buildLayeredNetwork");
