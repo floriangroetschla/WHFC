@@ -17,15 +17,18 @@ namespace whfc_rb {
                 improvement_history(partition.numParts() * (partition.numParts() -1) / 2, 0),
                 block_pair_status(partition.numParts() * (partition.numParts() - 1) / 2),
                 partScheduled(partition.numParts()),
-                timer(timer), mt(mt), config(config) {}
+                timer(timer), mt(mt), config(config),
+                refiners_thread_specific(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), mt(), std::ref(config)),
+                timers_thread_specific()
+                {
 
-        uint refine(double epsilon, uint maxIterations, int seed) {
+                }
+
+        uint refine(double epsilon, uint maxIterations) {
             NodeWeight maxWeight = (1.0 + epsilon) * partition.totalWeight() / static_cast<double>(partition.numParts());
             partActive.assign(partActive.size(), 1);
             partActiveNextRound.assign(partActive.size(), 0);
             iterationCounter = 0;
-
-            tbb::enumerable_thread_specific<WHFCRefinerTwoWay> localRefiner(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), seed, std::ref(config));
 
             // TODO maybe also make a row restriction. or terminate if there aren't enough initial tasks. 
             while (std::any_of(partActive.begin(), partActive.end(), [](auto& x) { return x > 0; }) && iterationCounter < maxIterations) {
@@ -37,8 +40,15 @@ namespace whfc_rb {
                             assert(partScheduled[element.part1]);
 
                             if (iterationCounter < maxIterations) {
-                                WHFCRefinerTwoWay& refiner = localRefiner.local();
-                                bool refinementResult = refiner.refine(partition, element.part0, element.part1, maxWeight, maxWeight);
+                                WHFCRefinerTwoWay& refiner = refiners_thread_specific.local();
+                                whfc::TimeReporter& timer = timers_thread_specific.local();
+                                timer.start("WHFCRefinerTwoWay");
+                                bool refinementResult;
+                                tbb::this_task_arena::isolate( [&] {
+                                    refinementResult = refiner.refine(partition, element.part0, element.part1,
+                                                                           maxWeight, maxWeight, timer);
+                                });
+                                timer.stop("WHFCRefinerTwoWay");
                                 if (refinementResult) {
                                     // Schedule for next round
                                     partActiveNextRound[element.part0] = 1;
@@ -67,8 +77,8 @@ namespace whfc_rb {
                 round++;
             }
 
-            for (WHFCRefinerTwoWay& refiner : localRefiner) {
-                timer.merge(refiner.getTimer(), "Refinement", "WHFCRefinerTwoWay");
+            for (whfc::TimeReporter& local_timer : timers_thread_specific) {
+                timer.merge(local_timer, "Refinement", "total");
             }
 
             return iterationCounter.load();
@@ -87,6 +97,8 @@ namespace whfc_rb {
         std::mt19937 &mt;
         std::atomic<uint> iterationCounter = 0;
         const PartitionConfig& config;
+        tbb::enumerable_thread_specific<WHFCRefinerTwoWay> refiners_thread_specific;
+        tbb::enumerable_thread_specific<whfc::TimeReporter> timers_thread_specific;
 
         struct WorkElement {
             PartitionID part0;
@@ -98,6 +110,7 @@ namespace whfc_rb {
         }
         
         std::vector<WorkElement> initialBlockPairs() {
+            timer.start("initialBlockPairs", "Refinement");
             resetBlockPairStatus();
 
             std::vector<size_t> participations(partition.numParts(), 0);
@@ -133,6 +146,7 @@ namespace whfc_rb {
                 }
             }
 
+            timer.stop("initialBlockPairs");
             return tasks;
         }
 

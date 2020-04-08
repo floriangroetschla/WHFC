@@ -60,7 +60,7 @@ int main(int argc, const char *argv[]) {
 
     timer.start("Refinement", "Total");
     whfc_rb::KWayRefinerParallel refiner(partition, timer, mt, config);
-    uint iterations = refiner.refine(epsilon, maxIterations, seed);
+    uint iterations = refiner.refine(epsilon, maxIterations);
     timer.stop("Refinement");
     timer.stop("Total");
 

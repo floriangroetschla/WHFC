@@ -21,16 +21,15 @@ namespace whfc_rb {
 
         template<class PartitionImpl>
         bool refine(PartitionImpl &partition, PartitionID part0, PartitionID part1, NodeWeight maxBlockWeight0,
-                    NodeWeight maxBlockWeight1) {
+                    NodeWeight maxBlockWeight1, whfc::TimeReporter& timer) {
 
-            timer.start("WHFCRefinerTwoWay");
             double maxW0 = config.percentage_bfs_from_cut * partition.partWeight(part0);
             double maxW1 = config.percentage_bfs_from_cut * partition.partWeight(part1);
 
             double imbalanceBefore = std::max(partition.partWeight(part0) / maxBlockWeight0,
                                               partition.partWeight(part1) / maxBlockWeight1);
 
-            timer.start("Extraction");
+            timer.start("Extraction", "WHFCRefinerTwoWay");
             FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1, hfc.cs.borderNodes.distance, timer);
             timer.stop("Extraction");
 
@@ -47,12 +46,12 @@ namespace whfc_rb {
                 writeSnapshot(extractor_info);
             }
 
-            timer.start("WHFC");
+            timer.start("WHFC", "WHFCRefinerTwoWay");
             bool hfc_result = hfc.enumerateCutsUntilBalancedOrFlowBoundExceeded(extractor_info.source, extractor_info.target);
             timer.stop("WHFC");
             timer.merge(hfc.timer, "WHFC", "HyperFlowCutter");
 
-            if (!hfc_result) { timer.stop("WHFCRefinerTwoWay"); return false; }
+            if (!hfc_result) return false;
 
             whfc::Flow newCut = extractor_info.baseCut + hfc.cs.flowValue;
 
@@ -64,14 +63,11 @@ namespace whfc_rb {
 
             if (newCut < extractor_info.cutAtStake ||
                 (newCut == extractor_info.cutAtStake && imbalanceAfter < imbalanceBefore)) {
-                timer.start("Reassignment");
+                timer.start("Reassignment", "WHFCRefinerTwoWay");
                 reassign(partition, extractor_info, part0, part1);
                 timer.stop("Reassignment");
-                timer.stop("WHFCRefinerTwoWay");
                 return true;
             }
-
-            timer.stop("WHFCRefinerTwoWay");
 
             return false;
         }
