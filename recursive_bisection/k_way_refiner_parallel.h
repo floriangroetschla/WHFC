@@ -33,7 +33,7 @@ namespace whfc_rb {
             // TODO maybe also make a row restriction. or terminate if there aren't enough initial tasks. 
             while (std::any_of(partActive.begin(), partActive.end(), [](auto& x) { return x > 0; }) && iterationCounter < maxIterations) {
                 std::vector<WorkElement> tasks = initialBlockPairs();
-                std::cout << "Round " << round << " initial tasks: " << tasks.size() << std::endl;
+                //std::cout << "Round " << round << " initial tasks: " << tasks.size() << std::endl;
                 tbb::parallel_do(tasks,
                         [&](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder) {
                             assert(partScheduled[element.part0]);
@@ -58,24 +58,24 @@ namespace whfc_rb {
 
                                 blockPairStatus(element.part0, element.part1) = TaskStatus::FINISHED;
 
-                                partScheduled[element.part0] = false;
-                                partScheduled[element.part1] = false;
-                                timer.start("addNewTasksFromPQ");
-                                addNewTasksFromPQ(feeder, maxWeight);
-                                timer.stop("addNewTasksFromPQ");
+                                //partScheduled[element.part0] = false;
+                                //partScheduled[element.part1] = false;
+                                timer.start("addNewTasks");
+                                //addNewTasksFromPQ(feeder, maxWeight);
 
-                                /*
                                 if (!addNewTasks(element.part0, feeder, maxWeight)) {
                                     partScheduled[element.part0] = false;
                                 }
                                 if (!addNewTasks(element.part1, feeder, maxWeight)) {
                                     partScheduled[element.part1] = false;
-                                }*/
+                                }
+
+                                timer.stop("addNewTasks");
                                 iterationCounter++;
                             }
                         }
                 );
-                std::cout << "WHFC refiner calls: " << iterationCounter << std::endl;
+                //std::cout << "WHFC refiner calls: " << iterationCounter << std::endl;
 
                 //assert(allPairsProcessed()); only if maxIterations allows it
                 std::swap(partActive, partActiveNextRound);

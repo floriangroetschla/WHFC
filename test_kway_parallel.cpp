@@ -56,7 +56,7 @@ int main(int argc, const char *argv[]) {
     PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset);
     timer.stop("PaToH");
 
-    printStatistics(partition, timer);
+    //printStatistics(partition, timer);
 
     timer.start("Refinement", "Total");
     whfc_rb::KWayRefinerParallel refiner(partition, timer, mt, config);
