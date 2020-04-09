@@ -234,7 +234,7 @@ namespace whfc {
 
             while (num_nodes > 0) {
                 // Only execute in parallel if there are enough nodes left
-                if (num_nodes > 1000) {
+                if (num_nodes > 100) {
                     timer.start("searchFromNodesParallel", "buildLayeredNetwork");
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, num_nodes), [&](tbb::blocked_range<size_t> r) {
                         size_t i_layer = 0;
