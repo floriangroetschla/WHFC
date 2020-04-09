@@ -58,17 +58,21 @@ namespace whfc_rb {
 
                                 blockPairStatus(element.part0, element.part1) = TaskStatus::FINISHED;
 
+                                partScheduled[element.part0] = false;
+                                partScheduled[element.part1] = false;
+                                addNewTasksFromPQ(feeder, maxWeight);
+
+                                /*
                                 if (!addNewTasks(element.part0, feeder, maxWeight)) {
                                     partScheduled[element.part0] = false;
                                 }
                                 if (!addNewTasks(element.part1, feeder, maxWeight)) {
                                     partScheduled[element.part1] = false;
-                                }
+                                }*/
                                 iterationCounter++;
                             }
                         }
                 );
-
                 std::cout << "WHFC refiner calls: " << iterationCounter << std::endl;
 
                 //assert(allPairsProcessed()); only if maxIterations allows it
@@ -103,7 +107,7 @@ namespace whfc_rb {
             }
 
             size_t size() {
-                return size;
+                return container_size;
             }
 
             size_t numBuckets() {
@@ -139,6 +143,13 @@ namespace whfc_rb {
                     first_non_empty_bucket = std::numeric_limits<size_t>::max();
                 }
                 return element;
+            }
+
+            void removeElement(size_t bucket, size_t i) {
+                assert(bucket < buckets.size() && i < buckets[bucket].size());
+                buckets[bucket][i] = buckets[bucket].back();
+                buckets[bucket].pop_back();
+                container_size--;
             }
 
         private:
@@ -181,7 +192,6 @@ namespace whfc_rb {
 
             std::vector<size_t> participations(partition.numParts(), 0);
 
-
             for (PartitionID i = 0; i < partition.numParts() - 1; ++i) {
                 for (PartitionID j = i + 1; j < partition.numParts(); ++j) {
                     if (isEligible(i, j)) {
@@ -202,12 +212,15 @@ namespace whfc_rb {
             std::vector<WorkElement> tasks;
             size_t bucket = bucketPQ.firstNonEmptyBucket();
             while (bucket < bucketPQ.numBuckets()) {
-                for (WorkElement element : bucketPQ.getBucket(bucket)) {
+                std::vector<WorkElement> bucket_elements = bucketPQ.getBucket(bucket);
+                for (size_t i = 0; i < bucket_elements.size(); ++i) {
+                    const WorkElement element = bucket_elements[i];
                     if (!partScheduled[element.part0] && !partScheduled[element.part1]) {
                         tasks.push_back(element);
                         blockPairStatus(element.part0, element.part1) = TaskStatus::SCHEDULED;
                         partScheduled[element.part0] = true;
                         partScheduled[element.part1] = true;
+                        bucketPQ.removeElement(bucket, i);
                     }
                 }
                 bucket++;
@@ -232,6 +245,29 @@ namespace whfc_rb {
                 }
             }
             return false;
+        }
+
+        std::mutex add_lock;
+        void addNewTasksFromPQ(tbb::parallel_do_feeder<WorkElement>& feeder, NodeWeight maxWeight) {
+            std::lock_guard<std::mutex> lock_guard(add_lock);
+            if (bucketPQ.size() > 0) {
+                size_t bucket = bucketPQ.firstNonEmptyBucket();
+                while (bucket < bucketPQ.numBuckets()) {
+                    std::vector<WorkElement> bucket_elements = bucketPQ.getBucket(bucket);
+                    for (size_t i = 0; i < bucket_elements.size(); ++i) {
+                        const WorkElement element = bucket_elements[i];
+                        if (!partScheduled[element.part0] && !partScheduled[element.part1] && isEligible(element.part0, element.part1)) {
+                            feeder.add({element});
+                            blockPairStatus(element.part0, element.part1) = TaskStatus::SCHEDULED;
+                            partScheduled[element.part0] = true;
+                            partScheduled[element.part1] = true;
+                            bucketPQ.removeElement(bucket, i);
+                        }
+                    }
+                    bucket++;
+                }
+            }
+
         }
 
         bool allPairsProcessed() {
