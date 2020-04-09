@@ -60,7 +60,9 @@ namespace whfc_rb {
 
                                 partScheduled[element.part0] = false;
                                 partScheduled[element.part1] = false;
+                                timer.start("addNewTasksFromPQ");
                                 addNewTasksFromPQ(feeder, maxWeight);
+                                timer.stop("addNewTasksFromPQ");
 
                                 /*
                                 if (!addNewTasks(element.part0, feeder, maxWeight)) {
@@ -267,7 +269,6 @@ namespace whfc_rb {
                     bucket++;
                 }
             }
-
         }
 
         bool allPairsProcessed() {
