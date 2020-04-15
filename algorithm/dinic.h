@@ -157,78 +157,78 @@ namespace whfc {
             }
         }
 
-		template<typename Range>
-        __attribute__((always_inline)) bool processIncidences(const Node u, const Range in_he_range, CutterState<Type>& cs, const bool augment_flow) {
-            auto& n = cs.n;
-            auto& h = cs.h;
-            bool found_target = false;
-
-            WriteBuffer& writeBuffer = writeBuffer_thread_specific.local();
-
-            for (InHe& in_he : in_he_range) {
-                const Hyperedge e = in_he.e;
-
-                if (!h.areAllPinsSourceReachable__unsafe__(e)) { // Are there pins that were not already visited
-                    bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(in_he) > 0;
-                    if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e)) // only sending pins can be pushed back
-                        continue;
-
-                    scanAllPins = scanAllPins && h.outDistance[e].exchange(h.runningDistance, std::memory_order_acq_rel) < h.s.base;
-                    if (scanAllPins) {
-                        h.reachAllPins(e);
-                        assert(n.distance[u] + 1 == h.outDistance[e]);
-                        current_pin[e] = hg.pinsNotSendingFlowIndices(e).begin();
-                    }
-
-                    const bool scanFlowSending = !h.areFlowSendingPinsSourceReachable__unsafe__(e) &&
-                                                 h.inDistance[e].exchange(h.runningDistance, std::memory_order_acq_rel) < h.s.base;
-                    if (scanFlowSending) {
-                        h.reachFlowSendingPins(e);
-                        assert(n.distance[u] + 1 == h.inDistance[e]);
-                        current_flow_sending_pin[e] = hg.pinsSendingFlowIndices(e).begin();
-                    }
-
-                    auto visit = [&](const Pin &pv) {
-                        const Node v = pv.pin;
-                        if (n.isTarget(v)) found_target = true;
-                        assert(augment_flow || !n.isTargetReachable(v));
-                        assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);    //checking distance, since the source piercing node is no longer a source at the moment
-                        if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v) && n.distance[v].exchange(n.runningDistance, std::memory_order_acq_rel) < n.s.base) {
-                            assert(v < hg.numNodes());
-                            n.reach(v);
-                            assert(n.distance[u] + 1 == n.distance[v]);
-                            if (writeBuffer.leftBound >= writeBuffer.rightBound) updateWriteBuffer(writeBuffer);
-                            (*nextLayer)[writeBuffer.leftBound++] = v;
-                            numNodesNextLayer++;
-                            current_hyperedge[v] = hg.beginIndexHyperedges(v);
-                        }
-                    };
-
-                    if (scanFlowSending)
-                        for (const Pin &pv : hg.pinsSendingFlowInto(e))
-                            visit(pv);
-
-                    if (scanAllPins)
-                        for (const Pin &pv : hg.pinsNotSendingFlowInto(e))
-                            visit(pv);
-                }
-            }
-
-            return found_target;
-
-		}
-
-
 		inline bool searchFromNode(const Node u, CutterState<Type>& cs, const bool augment_flow) {
             bool found_target = false;
+            auto& n = cs.n;
+            auto& h = cs.h;
+
+            auto processIncidences = [&](const Node u, tbb::blocked_range<std::vector<InHe>::iterator>& range) {
+                WriteBuffer& writeBuffer = writeBuffer_thread_specific.local();
+
+                for (InHe& in_he : range) {
+                    const Hyperedge e = in_he.e;
+
+                    if (!h.areAllPinsSourceReachable__unsafe__(e)) { // Are there pins that were not already visited
+                        bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(in_he) > 0;
+                        if (!scanAllPins &&
+                            h.areFlowSendingPinsSourceReachable__unsafe__(e)) // only sending pins can be pushed back
+                            continue;
+
+                        scanAllPins = scanAllPins &&
+                                      h.outDistance[e].exchange(h.runningDistance, std::memory_order_acq_rel) <
+                                      h.s.base;
+                        if (scanAllPins) {
+                            h.reachAllPins(e);
+                            assert(n.distance[u] + 1 == h.outDistance[e]);
+                            current_pin[e] = hg.pinsNotSendingFlowIndices(e).begin();
+                        }
+
+                        const bool scanFlowSending = !h.areFlowSendingPinsSourceReachable__unsafe__(e) &&
+                                                     h.inDistance[e].exchange(h.runningDistance,
+                                                                              std::memory_order_acq_rel) < h.s.base;
+                        if (scanFlowSending) {
+                            h.reachFlowSendingPins(e);
+                            assert(n.distance[u] + 1 == h.inDistance[e]);
+                            current_flow_sending_pin[e] = hg.pinsSendingFlowIndices(e).begin();
+                        }
+
+                        auto visit = [&](const Pin &pv) {
+                            const Node v = pv.pin;
+                            if (n.isTarget(v)) found_target = true;
+                            assert(augment_flow || !n.isTargetReachable(v));
+                            assert(augment_flow || !cs.isIsolated(v) || n.distance[v] ==
+                                                                        n.s.base);    //checking distance, since the source piercing node is no longer a source at the moment
+                            if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v) &&
+                                n.distance[v].exchange(n.runningDistance, std::memory_order_acq_rel) < n.s.base) {
+                                assert(v < hg.numNodes());
+                                n.reach(v);
+                                assert(n.distance[u] + 1 == n.distance[v]);
+                                if (writeBuffer.leftBound >= writeBuffer.rightBound) updateWriteBuffer(writeBuffer);
+                                (*nextLayer)[writeBuffer.leftBound++] = v;
+                                numNodesNextLayer++;
+                                current_hyperedge[v] = hg.beginIndexHyperedges(v);
+                            }
+                        };
+
+                        if (scanFlowSending)
+                            for (const Pin &pv : hg.pinsSendingFlowInto(e))
+                                visit(pv);
+
+                        if (scanAllPins)
+                            for (const Pin &pv : hg.pinsNotSendingFlowInto(e))
+                                visit(pv);
+                    }
+                }
+            };
 
             if (hg.hyperedgesOf(u).size() > 100) {
                 tbb::parallel_for(tbb::blocked_range(hg.beginHyperedges(u), hg.endHyperedges(u), 100),
                                   [&](auto hes) {
-                                      if (processIncidences(u, hes, cs, augment_flow)) found_target = true;
+                                        processIncidences(u, hes);
                                   });
             } else {
-                if (processIncidences(u, tbb::blocked_range(hg.beginHyperedges(u), hg.endHyperedges(u)), cs, augment_flow)) found_target = true;
+                tbb::blocked_range range = tbb::blocked_range(hg.beginHyperedges(u), hg.endHyperedges(u));
+                processIncidences(u, range);
             }
             return found_target;
 		}
@@ -280,15 +280,13 @@ namespace whfc {
                     writeBuffer = {0, 0};
                 }
 
-                /*
                 timer.start("Sorting", "buildLayeredNetwork");
                 tbb::parallel_sort(nextLayer->begin(), nextLayer->begin() + firstFreeBlockIndex);
                 timer.stop("Sorting");
-                */
 
                 std::swap(thisLayer, nextLayer);
-                //numNodesThisLayer = numNodesNextLayer.load();
-                numNodesThisLayer = firstFreeBlockIndex.load();
+                numNodesThisLayer = numNodesNextLayer.load();
+                //numNodesThisLayer = firstFreeBlockIndex.load();
 
                 numNodesNextLayer = 0;
                 firstFreeBlockIndex = 0;
