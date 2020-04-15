@@ -20,7 +20,7 @@ namespace whfc {
 		using InHe = FlowHypergraph::InHe;
 		using PinIndexRange = FlowHypergraph::PinIndexRange;
 		using DistanceT = DistanceReachableNodes::DistanceT;
-		
+
 		
 		FlowHypergraph& hg;
 		LayeredQueue<Node> queue;
@@ -63,8 +63,8 @@ namespace whfc {
         TimeReporter& timer;
 		
 		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer),
-		    thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()),
-		    nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>())
+		    thisLayer(new std::vector<Node>(hg.maxNumNodes * 1000, Node(hg.maxNumNodes + 1))),
+		    nextLayer(new std::vector<Node>(hg.maxNumNodes * 1000, Node(hg.maxNumNodes + 1)))
 		{
 			reset();
 		}
@@ -127,13 +127,23 @@ namespace whfc {
 		}
 		
 	private:
-        std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> thisLayer_thread_specific;
-        std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> nextLayer_thread_specific;
-		
-		void resetSourcePiercingNodeDistances(CutterState<Type>& cs, bool reset = true) {
+        std::unique_ptr<std::vector<Node>> thisLayer;
+        std::unique_ptr<std::vector<Node>> nextLayer;
+        std::atomic<size_t> numNodesThisLayer = 0;
+        std::atomic<size_t> numNodesNextLayer = 0;
+        std::atomic<size_t> firstFreeBlockIndex = 0;
+
+        static constexpr size_t write_buffer_size = 10;
+
+        void resetSourcePiercingNodeDistances(CutterState<Type>& cs, bool reset = true) {
 			for (auto& sp: cs.sourcePiercingNodes)
 				cs.n.setPiercingNodeDistance(sp.node, reset);
 		}
+
+		void getWriteBuffer(size_t& leftBound, size_t& rightBound) {
+            leftBound = firstFreeBlockIndex.fetch_add(write_buffer_size);
+            rightBound = leftBound + write_buffer_size;
+        }
 
 		template<typename Range>
         __attribute__((always_inline)) bool processIncidences(const Node u, const Range in_he_range, CutterState<Type>& cs, const bool augment_flow) {
@@ -141,7 +151,8 @@ namespace whfc {
             auto& h = cs.h;
             bool found_target = false;
 
-            std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
+            size_t leftBound, rightBound;
+            getWriteBuffer(leftBound, rightBound);
 
             for (InHe& in_he : in_he_range) {
                 const Hyperedge e = in_he.e;
@@ -175,7 +186,9 @@ namespace whfc {
                             assert(v < hg.numNodes());
                             n.reach(v);
                             assert(n.distance[u] + 1 == n.distance[v]);
-                            nextLayer.push_back(v);
+                            if (leftBound >= rightBound) getWriteBuffer(leftBound, rightBound);
+                            (*nextLayer)[leftBound++] = v;
+                            numNodesNextLayer++;
                             current_hyperedge[v] = hg.beginIndexHyperedges(v);
                         }
                     };
@@ -189,6 +202,11 @@ namespace whfc {
                             visit(pv);
                 }
             }
+
+            for (; leftBound < rightBound; ++leftBound) {
+                (*nextLayer)[leftBound] = Node(hg.maxNumNodes + 1);
+            }
+
             return found_target;
 
 		}
@@ -197,7 +215,7 @@ namespace whfc {
 		bool searchFromNode(const Node u, CutterState<Type>& cs, const bool augment_flow) {
             bool found_target = false;
 
-            if (hg.hyperedgesOf(u).size() > 0) {
+            if (hg.hyperedgesOf(u).size() > 100) {
                 tbb::parallel_for(tbb::blocked_range<mutable_range<std::vector<InHe>>::iterator>(hg.beginHyperedges(u),
                                                                                                  hg.endHyperedges(u)),
                                   [&](tbb::blocked_range<mutable_range<std::vector<InHe>>::iterator> hes) {
@@ -217,66 +235,47 @@ namespace whfc {
 		    auto& n = cs.n;
 		    auto& h = cs.h;
 		    bool found_target = false;
-
-		    std::vector<std::vector<Node>*> currentLayers;
-		    std::vector<Node> currentLayer;
+            numNodesThisLayer = 0;
+            numNodesNextLayer = 0;
 
             for (auto& sp : cs.sourcePiercingNodes) {
                 n.setPiercingNodeDistance(sp.node, false);
                 assert(n.isSourceReachable(sp.node));
-                currentLayer.push_back(sp.node);
+                (*thisLayer)[numNodesThisLayer] = sp.node;
                 current_hyperedge[sp.node] = hg.beginIndexHyperedges(sp.node);
+                numNodesThisLayer++;
             }
             n.hop(); h.hop();
 
-            currentLayers.push_back(&currentLayer);
-            uint num_nodes = currentLayer.size();
-
-            while (num_nodes > 0) {
+            while (numNodesThisLayer > 0) {
                 // Only execute in parallel if there are enough nodes left
-                if (num_nodes > 0) {
+                if (numNodesThisLayer > 100) {
                     timer.start("searchFromNodesParallel", "buildLayeredNetwork");
-                    tbb::parallel_for(tbb::blocked_range<size_t>(0, num_nodes), [&](tbb::blocked_range<size_t> r) {
-                        size_t i_layer = 0;
-                        size_t start = r.begin();
-                        size_t index_in_vector = start;
-                        while (index_in_vector > currentLayers[i_layer]->size()) {
-                            index_in_vector -= currentLayers[i_layer]->size();
-                            i_layer++;
-                        }
-                        size_t diff = start - index_in_vector;
+                    tbb::parallel_for(tbb::blocked_range<size_t>(0, numNodesThisLayer), [&](tbb::blocked_range<size_t> r) {
                         for (size_t i = r.begin(); i < r.end(); ++i) {
-                            if (i - diff >= currentLayers[i_layer]->size()) { diff += currentLayers[i_layer]->size(); i_layer++; }
-                            if (searchFromNode((*currentLayers[i_layer])[i - diff], cs, augment_flow)) found_target = true;
+                            if (searchFromNode((*thisLayer)[i], cs, augment_flow)) found_target = true;
                         }
                     });
                     timer.stop("searchFromNodesParallel");
                 } else {
                     timer.start("searchFromNodes", "buildLayeredNetwork");
-                    size_t currentLayer = 0;
-                    size_t diff = 0;
-                    for (size_t i = 0; i < num_nodes; ++i) {
-                        if (i - diff >= currentLayers[currentLayer]->size()) { diff += currentLayers[currentLayer]->size(); currentLayer++; }
-                        if (searchFromNode((*currentLayers[currentLayer])[i - diff], cs, augment_flow)) found_target = true;
+                    for (size_t i = 0; i < numNodesThisLayer; ++i) {
+                        if (searchFromNode((*thisLayer)[i], cs, augment_flow)) found_target = true;
                     }
                     timer.stop("searchFromNodes");
                 }
 
                 n.hop(); h.hop();
 
-                num_nodes = 0;
-                currentLayers.clear();
-                std::swap(thisLayer_thread_specific, nextLayer_thread_specific);
-                for (std::vector<Node>& thisLayer : *thisLayer_thread_specific) {
-                    if (thisLayer.size() > 0) {
-                        num_nodes += thisLayer.size();
-                        currentLayers.push_back(&thisLayer);
-                    }
-                }
+                timer.start("Sorting");
+                std::sort(nextLayer->begin(), nextLayer->begin() + firstFreeBlockIndex);
+                timer.stop("Sorting");
 
-                for (std::vector<Node>& nextLayer : *nextLayer_thread_specific) {
-                    nextLayer.clear();
-                }
+                std::swap(thisLayer, nextLayer);
+                numNodesThisLayer = numNodesNextLayer.load();
+
+                numNodesNextLayer = 0;
+                firstFreeBlockIndex = 0;
 
             }
             n.lockInSourceDistance(); h.lockInSourceDistance();
