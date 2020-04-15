@@ -63,8 +63,8 @@ namespace whfc {
         TimeReporter& timer;
 		
 		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer),
-		    thisLayer(new std::vector<Node>(hg.maxNumNodes, Node(hg.maxNumNodes + 1))),
-		    nextLayer(new std::vector<Node>(hg.maxNumNodes, Node(hg.maxNumNodes + 1)))
+		    thisLayer(new std::vector<Node>(hg.maxNumNodes, Node::Invalid())),
+		    nextLayer(new std::vector<Node>(hg.maxNumNodes, Node::Invalid()))
 		{
 			reset();
 		}
@@ -276,7 +276,7 @@ namespace whfc {
 
                 for (WriteBuffer& writeBuffer : writeBuffer_thread_specific) {
                     for (; writeBuffer.leftBound < writeBuffer.rightBound; writeBuffer.leftBound++) {
-                        (*nextLayer)[writeBuffer.leftBound] = Node(hg.maxNumNodes + 1);
+                        (*nextLayer)[writeBuffer.leftBound] = Node::Invalid();
                     }
                     writeBuffer = {0, 0};
                 }
