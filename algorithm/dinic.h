@@ -147,7 +147,7 @@ namespace whfc {
 				cs.n.setPiercingNodeDistance(sp.node, reset);
 		}
 
-		void updateWriteBuffer(WriteBuffer& writeBuffer) {
+		inline void updateWriteBuffer(WriteBuffer& writeBuffer) {
             writeBuffer.leftBound = firstFreeBlockIndex.fetch_add(write_buffer_size, std::memory_order_acq_rel);
             writeBuffer.rightBound = writeBuffer.leftBound + write_buffer_size;
             if (writeBuffer.rightBound > nextLayer->size()) {
@@ -219,17 +219,16 @@ namespace whfc {
 		}
 
 
-		bool searchFromNode(const Node u, CutterState<Type>& cs, const bool augment_flow) {
+		inline bool searchFromNode(const Node u, CutterState<Type>& cs, const bool augment_flow) {
             bool found_target = false;
 
             if (hg.hyperedgesOf(u).size() > 100) {
-                tbb::parallel_for(tbb::blocked_range<mutable_range<std::vector<InHe>>::iterator>(hg.beginHyperedges(u),
-                                                                                                 hg.endHyperedges(u), 100),
-                                  [&](tbb::blocked_range<mutable_range<std::vector<InHe>>::iterator> hes) {
+                tbb::parallel_for(tbb::blocked_range(hg.beginHyperedges(u), hg.endHyperedges(u), 100),
+                                  [&](auto hes) {
                                       if (processIncidences(u, hes, cs, augment_flow)) found_target = true;
                                   });
             } else {
-                if (processIncidences(u, hg.hyperedgesOf(u), cs, augment_flow)) found_target = true;
+                if (processIncidences(u, tbb::blocked_range(hg.beginHyperedges(u), hg.endHyperedges(u)), cs, augment_flow)) found_target = true;
             }
             return found_target;
 		}
