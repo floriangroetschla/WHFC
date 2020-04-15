@@ -224,7 +224,7 @@ namespace whfc {
 
             if (hg.hyperedgesOf(u).size() > 100) {
                 tbb::parallel_for(tbb::blocked_range<mutable_range<std::vector<InHe>>::iterator>(hg.beginHyperedges(u),
-                                                                                                 hg.endHyperedges(u)),
+                                                                                                 hg.endHyperedges(u), 100),
                                   [&](tbb::blocked_range<mutable_range<std::vector<InHe>>::iterator> hes) {
                                       if (processIncidences(u, hes, cs, augment_flow)) found_target = true;
                                   });
@@ -260,14 +260,14 @@ namespace whfc {
                     timer.start("searchFromNodesParallel", "buildLayeredNetwork");
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, numNodesThisLayer), [&](tbb::blocked_range<size_t> r) {
                         for (size_t i = r.begin(); i < r.end(); ++i) {
-                            if (searchFromNode((*thisLayer)[i], cs, augment_flow)) found_target = true;
+                            if ((*thisLayer)[i] != Node::Invalid() && searchFromNode((*thisLayer)[i], cs, augment_flow)) found_target = true;
                         }
                     });
                     timer.stop("searchFromNodesParallel");
                 } else {
                     timer.start("searchFromNodes", "buildLayeredNetwork");
                     for (size_t i = 0; i < numNodesThisLayer; ++i) {
-                        if (searchFromNode((*thisLayer)[i], cs, augment_flow)) found_target = true;
+                        if ((*thisLayer)[i] != Node::Invalid() && searchFromNode((*thisLayer)[i], cs, augment_flow)) found_target = true;
                     }
                     timer.stop("searchFromNodes");
                 }
@@ -281,13 +281,15 @@ namespace whfc {
                     writeBuffer = {0, 0};
                 }
 
-
+                /*
                 timer.start("Sorting", "buildLayeredNetwork");
                 tbb::parallel_sort(nextLayer->begin(), nextLayer->begin() + firstFreeBlockIndex);
                 timer.stop("Sorting");
+                */
 
                 std::swap(thisLayer, nextLayer);
-                numNodesThisLayer = numNodesNextLayer.load();
+                //numNodesThisLayer = numNodesNextLayer.load();
+                numNodesThisLayer = firstFreeBlockIndex.load();
 
                 numNodesNextLayer = 0;
                 firstFreeBlockIndex = 0;
