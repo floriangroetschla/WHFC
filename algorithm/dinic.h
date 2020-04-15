@@ -140,7 +140,7 @@ namespace whfc {
         tbb::enumerable_thread_specific<WriteBuffer> writeBuffer_thread_specific;
         std::mutex resizeLock;
 
-        static constexpr size_t write_buffer_size = 100;
+        static constexpr size_t write_buffer_size = 128;
 
         void resetSourcePiercingNodeDistances(CutterState<Type>& cs, bool reset = true) {
 			for (auto& sp: cs.sourcePiercingNodes)
@@ -254,28 +254,26 @@ namespace whfc {
             n.hop(); h.hop();
 
             while (numNodesThisLayer > 0) {
+                timer.start("searchFromNodes", "buildLayeredNetwork");
                 // Only execute in parallel if there are enough nodes left
                 if (numNodesThisLayer > 100) {
-                    timer.start("searchFromNodesParallel", "buildLayeredNetwork");
-                    tbb::parallel_for(tbb::blocked_range<size_t>(0, numNodesThisLayer), [&](tbb::blocked_range<size_t> r) {
+                    tbb::parallel_for(tbb::blocked_range<size_t>(0, numNodesThisLayer, 100), [&](tbb::blocked_range<size_t> r) {
                         for (size_t i = r.begin(); i < r.end(); ++i) {
                             if ((*thisLayer)[i] != Node::Invalid() && searchFromNode((*thisLayer)[i], cs, augment_flow)) found_target = true;
                         }
                     });
-                    timer.stop("searchFromNodesParallel");
                 } else {
-                    timer.start("searchFromNodes", "buildLayeredNetwork");
                     for (size_t i = 0; i < numNodesThisLayer; ++i) {
                         if ((*thisLayer)[i] != Node::Invalid() && searchFromNode((*thisLayer)[i], cs, augment_flow)) found_target = true;
                     }
-                    timer.stop("searchFromNodes");
                 }
+                timer.stop("searchFromNodes");
 
                 n.hop(); h.hop();
 
                 for (WriteBuffer& writeBuffer : writeBuffer_thread_specific) {
-                    for (; writeBuffer.leftBound < writeBuffer.rightBound; writeBuffer.leftBound++) {
-                        (*nextLayer)[writeBuffer.leftBound] = Node::Invalid();
+                    for (size_t leftBound = writeBuffer.leftBound; leftBound < writeBuffer.rightBound; ++leftBound) {
+                        (*nextLayer)[leftBound] = Node::Invalid();
                     }
                     writeBuffer = {0, 0};
                 }
