@@ -63,8 +63,8 @@ namespace whfc {
         TimeReporter& timer;
 		
 		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer),
-		    thisLayer(new std::vector<Node>(hg.maxNumNodes * 1000, Node(hg.maxNumNodes + 1))),
-		    nextLayer(new std::vector<Node>(hg.maxNumNodes * 1000, Node(hg.maxNumNodes + 1)))
+		    thisLayer(new std::vector<Node>(hg.maxNumNodes, Node(hg.maxNumNodes + 1))),
+		    nextLayer(new std::vector<Node>(hg.maxNumNodes, Node(hg.maxNumNodes + 1)))
 		{
 			reset();
 		}
@@ -127,22 +127,34 @@ namespace whfc {
 		}
 		
 	private:
+	    struct WriteBuffer {
+		    size_t leftBound = 0;
+		    size_t rightBound = 0;
+		};
+
         std::unique_ptr<std::vector<Node>> thisLayer;
         std::unique_ptr<std::vector<Node>> nextLayer;
         std::atomic<size_t> numNodesThisLayer = 0;
         std::atomic<size_t> numNodesNextLayer = 0;
         std::atomic<size_t> firstFreeBlockIndex = 0;
+        tbb::enumerable_thread_specific<WriteBuffer> writeBuffer_thread_specific;
+        std::mutex resizeLock;
 
-        static constexpr size_t write_buffer_size = 10;
+        static constexpr size_t write_buffer_size = 100;
 
         void resetSourcePiercingNodeDistances(CutterState<Type>& cs, bool reset = true) {
 			for (auto& sp: cs.sourcePiercingNodes)
 				cs.n.setPiercingNodeDistance(sp.node, reset);
 		}
 
-		void getWriteBuffer(size_t& leftBound, size_t& rightBound) {
-            leftBound = firstFreeBlockIndex.fetch_add(write_buffer_size);
-            rightBound = leftBound + write_buffer_size;
+		void updateWriteBuffer(WriteBuffer& writeBuffer) {
+            writeBuffer.leftBound = firstFreeBlockIndex.fetch_add(write_buffer_size, std::memory_order_acq_rel);
+            writeBuffer.rightBound = writeBuffer.leftBound + write_buffer_size;
+            if (writeBuffer.rightBound > nextLayer->size()) {
+                resizeLock.lock();
+                nextLayer->resize(nextLayer->size() + write_buffer_size * 10);
+                resizeLock.unlock();
+            }
         }
 
 		template<typename Range>
@@ -151,8 +163,7 @@ namespace whfc {
             auto& h = cs.h;
             bool found_target = false;
 
-            size_t leftBound, rightBound;
-            getWriteBuffer(leftBound, rightBound);
+            WriteBuffer& writeBuffer = writeBuffer_thread_specific.local();
 
             for (InHe& in_he : in_he_range) {
                 const Hyperedge e = in_he.e;
@@ -186,8 +197,8 @@ namespace whfc {
                             assert(v < hg.numNodes());
                             n.reach(v);
                             assert(n.distance[u] + 1 == n.distance[v]);
-                            if (leftBound >= rightBound) getWriteBuffer(leftBound, rightBound);
-                            (*nextLayer)[leftBound++] = v;
+                            if (writeBuffer.leftBound >= writeBuffer.rightBound) updateWriteBuffer(writeBuffer);
+                            (*nextLayer)[writeBuffer.leftBound++] = v;
                             numNodesNextLayer++;
                             current_hyperedge[v] = hg.beginIndexHyperedges(v);
                         }
@@ -201,10 +212,6 @@ namespace whfc {
                         for (const Pin &pv : hg.pinsNotSendingFlowInto(e))
                             visit(pv);
                 }
-            }
-
-            for (; leftBound < rightBound; ++leftBound) {
-                (*nextLayer)[leftBound] = Node(hg.maxNumNodes + 1);
             }
 
             return found_target;
@@ -267,8 +274,16 @@ namespace whfc {
 
                 n.hop(); h.hop();
 
-                timer.start("Sorting");
-                std::sort(nextLayer->begin(), nextLayer->begin() + firstFreeBlockIndex);
+                for (WriteBuffer& writeBuffer : writeBuffer_thread_specific) {
+                    for (; writeBuffer.leftBound < writeBuffer.rightBound; writeBuffer.leftBound++) {
+                        (*nextLayer)[writeBuffer.leftBound] = Node(hg.maxNumNodes + 1);
+                    }
+                    writeBuffer = {0, 0};
+                }
+
+
+                timer.start("Sorting", "buildLayeredNetwork");
+                tbb::parallel_sort(nextLayer->begin(), nextLayer->begin() + firstFreeBlockIndex);
                 timer.stop("Sorting");
 
                 std::swap(thisLayer, nextLayer);
