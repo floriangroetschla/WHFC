@@ -197,9 +197,9 @@ namespace whfc {
 		bool searchFromNode(const Node u, CutterState<Type>& cs, const bool augment_flow) {
             bool found_target = false;
 
-            if (hg.hyperedgesOf(u).size() > 100) {
+            if (hg.hyperedgesOf(u).size() > 0) {
                 tbb::parallel_for(tbb::blocked_range<mutable_range<std::vector<InHe>>::iterator>(hg.beginHyperedges(u),
-                                                                                                 hg.endHyperedges(u), 100),
+                                                                                                 hg.endHyperedges(u)),
                                   [&](tbb::blocked_range<mutable_range<std::vector<InHe>>::iterator> hes) {
                                       if (processIncidences(u, hes, cs, augment_flow)) found_target = true;
                                   });
@@ -234,7 +234,7 @@ namespace whfc {
 
             while (num_nodes > 0) {
                 // Only execute in parallel if there are enough nodes left
-                if (num_nodes > 100) {
+                if (num_nodes > 0) {
                     timer.start("searchFromNodesParallel", "buildLayeredNetwork");
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, num_nodes), [&](tbb::blocked_range<size_t> r) {
                         size_t i_layer = 0;
