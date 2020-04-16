@@ -143,46 +143,46 @@ namespace whfc {
 																hg(hg), s(sourceSettledDistance), t(targetSettledDistance) { }
 		
 		inline size_t capacity() const { return outDistance.size(); }
-		inline bool areAllPinsSources(const Hyperedge e) const { return outDistance[e] == sourceSettledDistance; }
-		inline bool areAllPinsSourceReachable__unsafe__(const Hyperedge e) const { return areAllPinsSources(e) || outDistance[e] >= s.base; }
-		inline bool areAllPinsSourceReachable(const Hyperedge e) const { return areAllPinsSources(e) || s.contains(outDistance[e]); }
-		inline void settleAllPins(const Hyperedge e) { assert(!areAllPinsSources(e)); outDistance[e] = sourceSettledDistance; }
-		inline void reachAllPins(const Hyperedge e) { assert(!areAllPinsSourceReachable(e) || outDistance[e] == runningDistance); outDistance[e] = runningDistance; }
+		inline bool areAllPinsSources(const Hyperedge e) const { return outDistance[e].load(memory_order) == sourceSettledDistance; }
+		inline bool areAllPinsSourceReachable__unsafe__(const Hyperedge e) const { return areAllPinsSources(e) || outDistance[e].load(memory_order) >= s.base; }
+		inline bool areAllPinsSourceReachable(const Hyperedge e) const { return areAllPinsSources(e) || s.contains(outDistance[e].load(memory_order)); }
+		inline void settleAllPins(const Hyperedge e) { assert(!areAllPinsSources(e)); outDistance[e].store(sourceSettledDistance, memory_order); }
+		inline void reachAllPins(const Hyperedge e) { assert(!areAllPinsSourceReachable(e) || outDistance[e].load(memory_order) == runningDistance); outDistance[e].store(runningDistance, memory_order); }
 
-		inline bool areFlowSendingPinsSources(const Hyperedge e) const { return inDistance[e] == sourceSettledDistance; }
-		inline bool areFlowSendingPinsSourceReachable__unsafe__(const Hyperedge e) const { return areFlowSendingPinsSources(e) || inDistance[e] >= s.base; }
-		inline bool areFlowSendingPinsSourceReachable(const Hyperedge e) const { return areFlowSendingPinsSources(e) || s.contains(inDistance[e]); }
-		inline void settleFlowSendingPins(const Hyperedge e) { assert(!areFlowSendingPinsSources(e)); inDistance[e] = sourceSettledDistance; }
-		inline void reachFlowSendingPins(const Hyperedge e) { assert(!areFlowSendingPinsSourceReachable(e) || inDistance[e] == runningDistance); inDistance[e] = runningDistance; }
+		inline bool areFlowSendingPinsSources(const Hyperedge e) const { return inDistance[e].load(memory_order) == sourceSettledDistance; }
+		inline bool areFlowSendingPinsSourceReachable__unsafe__(const Hyperedge e) const { return areFlowSendingPinsSources(e) || inDistance[e].load(memory_order) >= s.base; }
+		inline bool areFlowSendingPinsSourceReachable(const Hyperedge e) const { return areFlowSendingPinsSources(e) || s.contains(inDistance[e].load(memory_order)); }
+		inline void settleFlowSendingPins(const Hyperedge e) { assert(!areFlowSendingPinsSources(e)); inDistance[e].store(sourceSettledDistance, memory_order); }
+		inline void reachFlowSendingPins(const Hyperedge e) { assert(!areFlowSendingPinsSourceReachable(e) || inDistance[e] == runningDistance); inDistance[e].store(runningDistance, memory_order); }
 
 		void unsettleAllPins(const Hyperedge e) {
 			assert(areAllPinsSources(e));
-			outDistance[e] = unreachableDistance;
+			outDistance[e].store(unreachableDistance, memory_order);
 		}
 		
 		void unsettleFlowSendingPins(const Hyperedge e) {
 			assert(areFlowSendingPinsSources(e));
-			inDistance[e] = unreachableDistance;
+			inDistance[e].store(unreachableDistance, memory_order);
 		}
 		
 		void settleAllPinsTarget(const Hyperedge e) {
 			assert(inDistance[e] != targetSettledDistance);
-			inDistance[e] = targetSettledDistance;
+			inDistance[e].store(targetSettledDistance, memory_order);
 		}
 		
 		void settleFlowSendingPinsTarget(const Hyperedge e) {
 			assert(outDistance[e] != targetSettledDistance);
-			outDistance[e] = targetSettledDistance;
+			outDistance[e].store(targetSettledDistance, memory_order);
 		}
 		
 		void unsettleAllPinsTarget(const Hyperedge e) {
 			assert(inDistance[e] == targetSettledDistance);
-			inDistance[e] = unreachableDistance;
+			inDistance[e].store(unreachableDistance, memory_order);
 		}
 		
 		void unsettleFlowSendingPinsTarget(const Hyperedge e) {
 			assert(outDistance[e] == targetSettledDistance);
-			outDistance[e] = unreachableDistance;
+			outDistance[e].store(unreachableDistance, memory_order);
 		}
 		
 		inline DistanceT hop() { return ++runningDistance; }
@@ -256,6 +256,7 @@ namespace whfc {
 		}
 		
 		std::vector<CopyableAtomic<DistanceT>> inDistance, outDistance;
+		static constexpr std::memory_order memory_order = std::memory_order_relaxed;
 	//protected:
 		const FlowHypergraph& hg;
 		static constexpr DistanceT unreachableDistance = 0;

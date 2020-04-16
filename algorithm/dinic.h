@@ -63,8 +63,8 @@ namespace whfc {
         TimeReporter& timer;
 		
 		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer),
-		    thisLayer(new std::vector<Node>(hg.maxNumNodes, Node::Invalid())),
-		    nextLayer(new std::vector<Node>(hg.maxNumNodes, Node::Invalid()))
+		    thisLayer(new tbb::concurrent_vector<Node>(hg.maxNumNodes, Node::Invalid())),
+		    nextLayer(new tbb::concurrent_vector<Node>(hg.maxNumNodes, Node::Invalid()))
 		{
 			reset();
 		}
@@ -132,13 +132,12 @@ namespace whfc {
 		    size_t rightBound = 0;
 		};
 
-        std::unique_ptr<std::vector<Node>> thisLayer;
-        std::unique_ptr<std::vector<Node>> nextLayer;
-        std::atomic<size_t> numNodesThisLayer = 0;
+        std::unique_ptr<tbb::concurrent_vector<Node>> thisLayer;
+        std::unique_ptr<tbb::concurrent_vector<Node>> nextLayer;
+        size_t numNodesThisLayer = 0;
         std::atomic<size_t> numNodesNextLayer = 0;
         std::atomic<size_t> firstFreeBlockIndex = 0;
         tbb::enumerable_thread_specific<WriteBuffer> writeBuffer_thread_specific;
-        std::mutex resizeLock;
 
         static constexpr size_t write_buffer_size = 128;
 
@@ -148,12 +147,10 @@ namespace whfc {
 		}
 
 		inline void updateWriteBuffer(WriteBuffer& writeBuffer) {
-            writeBuffer.leftBound = firstFreeBlockIndex.fetch_add(write_buffer_size, std::memory_order_acq_rel);
+            writeBuffer.leftBound = firstFreeBlockIndex.fetch_add(write_buffer_size, std::memory_order_relaxed);
             writeBuffer.rightBound = writeBuffer.leftBound + write_buffer_size;
             if (writeBuffer.rightBound > nextLayer->size()) {
-                resizeLock.lock();
-                nextLayer->resize(nextLayer->size() + write_buffer_size * 10);
-                resizeLock.unlock();
+                nextLayer->grow_by(write_buffer_size * 10);
             }
         }
 
@@ -175,7 +172,7 @@ namespace whfc {
                             continue;
 
                         scanAllPins = scanAllPins &&
-                                      h.outDistance[e].exchange(h.runningDistance, std::memory_order_acq_rel) <
+                                      h.outDistance[e].exchange(h.runningDistance, std::memory_order_relaxed) <
                                       h.s.base;
                         if (scanAllPins) {
                             h.reachAllPins(e);
@@ -185,7 +182,7 @@ namespace whfc {
 
                         const bool scanFlowSending = !h.areFlowSendingPinsSourceReachable__unsafe__(e) &&
                                                      h.inDistance[e].exchange(h.runningDistance,
-                                                                              std::memory_order_acq_rel) < h.s.base;
+                                                                              std::memory_order_relaxed) < h.s.base;
                         if (scanFlowSending) {
                             h.reachFlowSendingPins(e);
                             assert(n.distance[u] + 1 == h.inDistance[e]);
@@ -199,13 +196,13 @@ namespace whfc {
                             assert(augment_flow || !cs.isIsolated(v) || n.distance[v] ==
                                                                         n.s.base);    //checking distance, since the source piercing node is no longer a source at the moment
                             if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v) &&
-                                n.distance[v].exchange(n.runningDistance, std::memory_order_acq_rel) < n.s.base) {
+                                n.distance[v].exchange(n.runningDistance, std::memory_order_relaxed) < n.s.base) {
                                 assert(v < hg.numNodes());
                                 n.reach(v);
                                 assert(n.distance[u] + 1 == n.distance[v]);
                                 if (writeBuffer.leftBound >= writeBuffer.rightBound) updateWriteBuffer(writeBuffer);
                                 (*nextLayer)[writeBuffer.leftBound++] = v;
-                                numNodesNextLayer++;
+                                numNodesNextLayer.fetch_add(1, std::memory_order_relaxed);
                                 current_hyperedge[v] = hg.beginIndexHyperedges(v);
                             }
                         };
