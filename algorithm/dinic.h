@@ -138,7 +138,8 @@ namespace whfc {
         tbb::enumerable_thread_specific<WriteBuffer> writeBuffer_thread_specific;
         bool found_target;
 
-        static constexpr size_t write_buffer_size = 128;
+        static constexpr size_t max_write_buffer_size = 256;
+        size_t write_buffer_size = max_write_buffer_size;
 
         void resetSourcePiercingNodeDistances(CutterState<Type>& cs, bool reset = true) {
 			for (auto& sp: cs.sourcePiercingNodes)
@@ -150,7 +151,7 @@ namespace whfc {
             writeBuffer.rightBound = writeBuffer.leftBound + write_buffer_size;
         }
 
-		void searchFromNode(const Node u, CutterState<Type>& cs, const bool augment_flow) {
+		void searchFromNode(const Node u, CutterState<Type>& cs) {
             auto& n = cs.n;
             auto& h = cs.h;
 
@@ -181,8 +182,8 @@ namespace whfc {
                         auto visit = [&](const Pin &pv) {
                             const Node& v = pv.pin;
                             if (n.isTarget(v)) found_target = true;
-                            assert(augment_flow || !n.isTargetReachable(v));
-                            assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);
+                            //assert(augment_flow || !n.isTargetReachable(v));
+                            //assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);
 
                             if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)
                             && n.distance[v].exchange(n.runningDistance, std::memory_order_relaxed) < n.s.base) {
@@ -236,18 +237,19 @@ namespace whfc {
             }
             n.hop(); h.hop();
 
+            write_buffer_size = max_write_buffer_size;
             while (numNodesThisLayer > 0) {
                 timer.start("searchFromNodes", "buildLayeredNetwork");
                 // Only execute in parallel if there are enough nodes left
-                if (numNodesThisLayer > 100) {
+                if (numNodesThisLayer > 128) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, numNodesThisLayer, 100), [&](tbb::blocked_range<size_t>& r) {
                         for (size_t i = r.begin(); i < r.end(); ++i) {
-                            searchFromNode((*thisLayer)[i], cs, augment_flow);
+                            searchFromNode((*thisLayer)[i], cs);
                         }
                     });
                 } else {
                     for (size_t i = 0; i < numNodesThisLayer; ++i) {
-                        searchFromNode((*thisLayer)[i], cs, augment_flow);
+                        searchFromNode((*thisLayer)[i], cs);
                     }
                 }
                 timer.stop("searchFromNodes");
@@ -266,7 +268,7 @@ namespace whfc {
                 thisLayer.swap( nextLayer);
 
                 firstFreeBlockIndex = 0;
-
+                write_buffer_size = std::min<size_t>(numNodesThisLayer, max_write_buffer_size);
             }
             n.lockInSourceDistance(); h.lockInSourceDistance();
             h.compareDistances(n);
