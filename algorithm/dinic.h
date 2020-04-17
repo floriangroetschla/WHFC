@@ -136,6 +136,7 @@ namespace whfc {
         std::unique_ptr<std::vector<Node>> nextLayer;
         std::atomic<size_t> firstFreeBlockIndex = 0;
         tbb::enumerable_thread_specific<WriteBuffer> writeBuffer_thread_specific;
+        tbb::enumerable_thread_specific<whfc::NodeWeight> sourceReachableWeight_thread_specific;
         bool found_target;
 
         static constexpr size_t max_write_buffer_size = 128;
@@ -157,15 +158,15 @@ namespace whfc {
             auto& n = cs.n;
             auto& h = cs.h;
 
-            auto processIncidences = [&](const Node u, tbb::blocked_range<size_t>& indices) {
+            auto processIncidences = [&](const Node u, const tbb::blocked_range<std::vector<InHe>::iterator>& hes) {
                 WriteBuffer& writeBuffer = writeBuffer_thread_specific.local();
-                const auto& hes = hg.hyperedgesOf(u);
+                whfc::NodeWeight& weight_of_visited_nodes = sourceReachableWeight_thread_specific.local();
 
-                for (auto it = hes.begin() + indices.begin(); it < hes.begin() + indices.end(); ++it) {
-                    const Hyperedge e = it->e;
+                for (InHe& in_he : hes) {
+                    const Hyperedge e = in_he.e;
 
                     if (!h.areAllPinsSourceReachable__unsafe__(e)) {
-                        bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(*it) > 0;
+                        bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(in_he) > 0;
                         if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e))
                             continue;
 
@@ -188,10 +189,9 @@ namespace whfc {
                             //assert(augment_flow || !n.isTargetReachable(v));
                             //assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);
 
-                            if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)
-                            && n.distance[v].exchange(n.runningDistance, std::memory_order_relaxed) < n.s.base) {
+                            if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v) && n.distance[v].exchange(n.runningDistance, std::memory_order_relaxed) < n.s.base) {
                                 assert(v < hg.numNodes());
-                                n.sourceReachableWeight.fetch_add(hg.nodeWeight(v), std::memory_order_relaxed);
+                                weight_of_visited_nodes += hg.nodeWeight(v);
                                 assert(n.distance[u] + 1 == n.distance[v]);
                                 if (writeBuffer.leftBound >= writeBuffer.rightBound) updateWriteBuffer(writeBuffer);
                                 (*nextLayer)[writeBuffer.leftBound++] = v;
@@ -210,12 +210,10 @@ namespace whfc {
                 }
             };
 
-            tbb::blocked_range<size_t> range(0, hg.hyperedgesOf(u).size(), 100);
-
-            // Test without parallel processing of hyperedges
-            if (hg.hyperedgesOf(u).size() < 0) {
-                tbb::parallel_for(range, [&](tbb::blocked_range<size_t>& indices) {
-                    processIncidences(u, indices);
+            tbb::blocked_range<std::vector<InHe>::iterator> range(hg.beginHyperedges(u), hg.endHyperedges(u));
+            if (hg.hyperedgesOf(u).size() > 5000) {
+                tbb::parallel_for(range, [=](const tbb::blocked_range<std::vector<InHe>::iterator>& hes) {
+                    processIncidences(u, hes);
                 });
             } else {
                 processIncidences(u, range);
@@ -244,7 +242,7 @@ namespace whfc {
             write_buffer_size = max_write_buffer_size;
             while (numNodesThisLayer > 0) {
                 timer.start("searchFromNodes", "buildLayeredNetwork");
-                tbb::parallel_for(tbb::blocked_range<size_t>(0, numNodesThisLayer), [&](tbb::blocked_range<size_t>& r) {
+                tbb::parallel_for(tbb::blocked_range<size_t>(0, numNodesThisLayer), [&](const tbb::blocked_range<size_t>& r) {
                     for (size_t i = r.begin(); i < r.end(); ++i) {
                         if ((*thisLayer)[i] != Node::Invalid()) {
                             searchFromNode((*thisLayer)[i], cs);
@@ -260,6 +258,11 @@ namespace whfc {
                     std::fill(nextLayer->begin() + writeBuffer.leftBound, nextLayer->begin() + writeBuffer.rightBound, Node::Invalid());
                     validNodesThisLayer -= writeBuffer.rightBound - writeBuffer.leftBound;
                     writeBuffer = {0, 0};
+                }
+
+                for (whfc::NodeWeight& sourceReachableWeight : sourceReachableWeight_thread_specific) {
+                    n.sourceReachableWeight += sourceReachableWeight;
+                    sourceReachableWeight = 0;
                 }
 
                 if constexpr (sort_layers) {
