@@ -157,14 +157,15 @@ namespace whfc {
             auto& n = cs.n;
             auto& h = cs.h;
 
-            auto processIncidences = [&](const Node u, tbb::blocked_range<std::vector<InHe>::iterator>& range) {
+            auto processIncidences = [&](const Node u, tbb::blocked_range<size_t>& indices) {
                 WriteBuffer& writeBuffer = writeBuffer_thread_specific.local();
+                const auto& hes = hg.hyperedgesOf(u);
 
-                for (InHe& in_he : range) {
-                    const Hyperedge e = in_he.e;
+                for (auto it = hes.begin() + indices.begin(); it < hes.begin() + indices.end(); ++it) {
+                    const Hyperedge e = it->e;
 
                     if (!h.areAllPinsSourceReachable__unsafe__(e)) {
-                        bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(in_he) > 0;
+                        bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(*it) > 0;
                         if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e))
                             continue;
 
@@ -209,13 +210,14 @@ namespace whfc {
                 }
             };
 
-            if (hg.hyperedgesOf(u).size() > 100) {
-                tbb::parallel_for(tbb::blocked_range(hg.beginHyperedges(u), hg.endHyperedges(u), 100),
-                                  [&](tbb::blocked_range<std::vector<InHe>::iterator>& hes) {
-                                        processIncidences(u, hes);
-                                  });
+            tbb::blocked_range<size_t> range(0, hg.hyperedgesOf(u).size(), 100);
+
+            // Test without parallel processing of hyperedges
+            if (hg.hyperedgesOf(u).size() < 0) {
+                tbb::parallel_for(range, [&](tbb::blocked_range<size_t>& indices) {
+                    processIncidences(u, indices);
+                });
             } else {
-                tbb::blocked_range range = tbb::blocked_range(hg.beginHyperedges(u), hg.endHyperedges(u));
                 processIncidences(u, range);
             }
 		}
@@ -242,22 +244,13 @@ namespace whfc {
             write_buffer_size = max_write_buffer_size;
             while (numNodesThisLayer > 0) {
                 timer.start("searchFromNodes", "buildLayeredNetwork");
-                // Only execute in parallel if there are enough nodes left
-                if (numNodesThisLayer > 100) {
-                    tbb::parallel_for(tbb::blocked_range<size_t>(0, numNodesThisLayer, 100), [&](tbb::blocked_range<size_t>& r) {
-                        for (size_t i = r.begin(); i < r.end(); ++i) {
-                            if ((*thisLayer)[i] != Node::Invalid()) {
-                                searchFromNode((*thisLayer)[i], cs);
-                            }
-                        }
-                    });
-                } else {
-                    for (size_t i = 0; i < numNodesThisLayer; ++i) {
+                tbb::parallel_for(tbb::blocked_range<size_t>(0, numNodesThisLayer), [&](tbb::blocked_range<size_t>& r) {
+                    for (size_t i = r.begin(); i < r.end(); ++i) {
                         if ((*thisLayer)[i] != Node::Invalid()) {
                             searchFromNode((*thisLayer)[i], cs);
                         }
                     }
-                }
+                });
                 timer.stop("searchFromNodes");
 
                 n.hop(); h.hop();
