@@ -138,8 +138,10 @@ namespace whfc {
         tbb::enumerable_thread_specific<WriteBuffer> writeBuffer_thread_specific;
         bool found_target;
 
-        static constexpr size_t max_write_buffer_size = 256;
+        static constexpr size_t max_write_buffer_size = 128;
         size_t write_buffer_size = max_write_buffer_size;
+
+        static constexpr bool sort_layers = false;
 
         void resetSourcePiercingNodeDistances(CutterState<Type>& cs, bool reset = true) {
 			for (auto& sp: cs.sourcePiercingNodes)
@@ -188,7 +190,7 @@ namespace whfc {
                             if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)
                             && n.distance[v].exchange(n.runningDistance, std::memory_order_relaxed) < n.s.base) {
                                 assert(v < hg.numNodes());
-                                n.sourceReachableWeight += hg.nodeWeight(v);
+                                n.sourceReachableWeight.fetch_add(hg.nodeWeight(v), std::memory_order_relaxed);
                                 assert(n.distance[u] + 1 == n.distance[v]);
                                 if (writeBuffer.leftBound >= writeBuffer.rightBound) updateWriteBuffer(writeBuffer);
                                 (*nextLayer)[writeBuffer.leftBound++] = v;
@@ -241,34 +243,47 @@ namespace whfc {
             while (numNodesThisLayer > 0) {
                 timer.start("searchFromNodes", "buildLayeredNetwork");
                 // Only execute in parallel if there are enough nodes left
-                if (numNodesThisLayer > 128) {
+                if (numNodesThisLayer > 100) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, numNodesThisLayer, 100), [&](tbb::blocked_range<size_t>& r) {
                         for (size_t i = r.begin(); i < r.end(); ++i) {
-                            searchFromNode((*thisLayer)[i], cs);
+                            if ((*thisLayer)[i] != Node::Invalid()) {
+                                searchFromNode((*thisLayer)[i], cs);
+                            }
                         }
                     });
                 } else {
                     for (size_t i = 0; i < numNodesThisLayer; ++i) {
-                        searchFromNode((*thisLayer)[i], cs);
+                        if ((*thisLayer)[i] != Node::Invalid()) {
+                            searchFromNode((*thisLayer)[i], cs);
+                        }
                     }
                 }
                 timer.stop("searchFromNodes");
 
                 n.hop(); h.hop();
 
-                numNodesThisLayer = firstFreeBlockIndex.load();
+                size_t validNodesThisLayer = firstFreeBlockIndex.load();
                 for (WriteBuffer& writeBuffer : writeBuffer_thread_specific) {
                     std::fill(nextLayer->begin() + writeBuffer.leftBound, nextLayer->begin() + writeBuffer.rightBound, Node::Invalid());
-                    numNodesThisLayer -= writeBuffer.rightBound - writeBuffer.leftBound;
+                    validNodesThisLayer -= writeBuffer.rightBound - writeBuffer.leftBound;
                     writeBuffer = {0, 0};
                 }
 
-                tbb::parallel_sort(nextLayer->begin(), nextLayer->begin() + firstFreeBlockIndex);
+                if constexpr (sort_layers) {
+                    tbb::parallel_sort(nextLayer->begin(), nextLayer->begin() + firstFreeBlockIndex);
+                    numNodesThisLayer = validNodesThisLayer;
+                } else {
+                    if (validNodesThisLayer == 0) {
+                        numNodesThisLayer = 0;
+                    } else {
+                        numNodesThisLayer = firstFreeBlockIndex.load();
+                    }
+                }
 
                 thisLayer.swap( nextLayer);
 
                 firstFreeBlockIndex = 0;
-                write_buffer_size = std::min<size_t>(numNodesThisLayer, max_write_buffer_size);
+                write_buffer_size = std::min<size_t>(validNodesThisLayer, max_write_buffer_size);
             }
             n.lockInSourceDistance(); h.lockInSourceDistance();
             h.compareDistances(n);
