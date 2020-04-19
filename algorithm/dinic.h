@@ -63,8 +63,8 @@ namespace whfc {
         TimeReporter& timer;
 		
 		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer),
-		    thisLayer(new std::vector<Node>(hg.maxNumNodes, Node::Invalid())),
-		    nextLayer(new std::vector<Node>(hg.maxNumNodes, Node::Invalid()))
+		    thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()),
+		    nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>())
 		{
 			reset();
 		}
@@ -127,15 +127,8 @@ namespace whfc {
 		}
 		
 	private:
-	    struct WriteBuffer {
-		    size_t leftBound = 0;
-		    size_t rightBound = 0;
-		};
-
-        std::unique_ptr<std::vector<Node>> thisLayer;
-        std::unique_ptr<std::vector<Node>> nextLayer;
-        std::atomic<size_t> firstFreeBlockIndex = 0;
-        tbb::enumerable_thread_specific<WriteBuffer> writeBuffer_thread_specific;
+        std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> thisLayer_thread_specific;
+        std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> nextLayer_thread_specific;
         tbb::enumerable_thread_specific<whfc::NodeWeight> sourceReachableWeight_thread_specific;
         bool found_target;
 
@@ -149,17 +142,12 @@ namespace whfc {
 				cs.n.setPiercingNodeDistance(sp.node, reset);
 		}
 
-		inline void updateWriteBuffer(WriteBuffer& writeBuffer) {
-            writeBuffer.leftBound = firstFreeBlockIndex.fetch_add(write_buffer_size, std::memory_order_relaxed);
-            writeBuffer.rightBound = writeBuffer.leftBound + write_buffer_size;
-        }
-
 		void searchFromNode(const Node u, CutterState<Type>& cs) {
             auto& n = cs.n;
             auto& h = cs.h;
 
             auto processIncidences = [&](const Node u, const tbb::blocked_range<std::vector<InHe>::iterator>& hes) {
-                WriteBuffer& writeBuffer = writeBuffer_thread_specific.local();
+                std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
                 whfc::NodeWeight& weight_of_visited_nodes = sourceReachableWeight_thread_specific.local();
 
                 for (InHe& in_he : hes) {
@@ -193,8 +181,7 @@ namespace whfc {
                                 assert(v < hg.numNodes());
                                 weight_of_visited_nodes += hg.nodeWeight(v);
                                 assert(n.distance[u] + 1 == n.distance[v]);
-                                if (writeBuffer.leftBound >= writeBuffer.rightBound) updateWriteBuffer(writeBuffer);
-                                (*nextLayer)[writeBuffer.leftBound++] = v;
+                                nextLayer.push_back(v);
                                 current_hyperedge[v] = hg.beginIndexHyperedges(v);
                             }
                         };
@@ -228,58 +215,54 @@ namespace whfc {
 		    auto& n = cs.n;
 		    auto& h = cs.h;
 		    found_target = false;
-            size_t numNodesThisLayer = 0;
+
+            std::vector<std::vector<Node>*> currentLayers;
+            std::vector<Node> currentLayer;
 
             for (auto& sp : cs.sourcePiercingNodes) {
                 n.setPiercingNodeDistance(sp.node, false);
                 assert(n.isSourceReachable(sp.node));
-                (*thisLayer)[numNodesThisLayer] = sp.node;
+                currentLayer.push_back(sp.node);
                 current_hyperedge[sp.node] = hg.beginIndexHyperedges(sp.node);
-                numNodesThisLayer++;
             }
             n.hop(); h.hop();
 
-            write_buffer_size = max_write_buffer_size;
-            while (numNodesThisLayer > 0) {
+            currentLayers.push_back(&currentLayer);
+            uint num_nodes = currentLayer.size();
+
+            while (num_nodes > 0) {
                 timer.start("searchFromNodes", "buildLayeredNetwork");
-                tbb::parallel_for(tbb::blocked_range<size_t>(0, numNodesThisLayer), [&](const tbb::blocked_range<size_t>& r) {
+                tbb::parallel_for(tbb::blocked_range<size_t>(0, num_nodes), [&](const tbb::blocked_range<size_t>& r) {
+                    size_t i_layer = 0;
+                    size_t start = r.begin();
+                    size_t index_in_vector = start;
+                    while (index_in_vector > currentLayers[i_layer]->size()) {
+                        index_in_vector -= currentLayers[i_layer]->size();
+                        i_layer++;
+                    }
+                    size_t diff = start - index_in_vector;
                     for (size_t i = r.begin(); i < r.end(); ++i) {
-                        if ((*thisLayer)[i] != Node::Invalid()) {
-                            searchFromNode((*thisLayer)[i], cs);
-                        }
+                        if (i - diff >= currentLayers[i_layer]->size()) { diff += currentLayers[i_layer]->size(); i_layer++; }
+                        searchFromNode((*currentLayers[i_layer])[i - diff], cs);
                     }
                 });
                 timer.stop("searchFromNodes");
 
                 n.hop(); h.hop();
 
-                size_t validNodesThisLayer = firstFreeBlockIndex.load();
-                for (WriteBuffer& writeBuffer : writeBuffer_thread_specific) {
-                    std::fill(nextLayer->begin() + writeBuffer.leftBound, nextLayer->begin() + writeBuffer.rightBound, Node::Invalid());
-                    validNodesThisLayer -= writeBuffer.rightBound - writeBuffer.leftBound;
-                    writeBuffer = {0, 0};
-                }
-
-                for (whfc::NodeWeight& sourceReachableWeight : sourceReachableWeight_thread_specific) {
-                    n.sourceReachableWeight += sourceReachableWeight;
-                    sourceReachableWeight = 0;
-                }
-
-                if constexpr (sort_layers) {
-                    tbb::parallel_sort(nextLayer->begin(), nextLayer->begin() + firstFreeBlockIndex);
-                    numNodesThisLayer = validNodesThisLayer;
-                } else {
-                    if (validNodesThisLayer == 0) {
-                        numNodesThisLayer = 0;
-                    } else {
-                        numNodesThisLayer = firstFreeBlockIndex.load();
+                num_nodes = 0;
+                currentLayers.clear();
+                std::swap(thisLayer_thread_specific, nextLayer_thread_specific);
+                for (std::vector<Node>& thisLayer : *thisLayer_thread_specific) {
+                    if (thisLayer.size() > 0) {
+                        num_nodes += thisLayer.size();
+                        currentLayers.push_back(&thisLayer);
                     }
                 }
 
-                thisLayer.swap( nextLayer);
-
-                firstFreeBlockIndex = 0;
-                write_buffer_size = std::min<size_t>(validNodesThisLayer, max_write_buffer_size);
+                for (std::vector<Node>& nextLayer : *nextLayer_thread_specific) {
+                    nextLayer.clear();
+                }
             }
             n.lockInSourceDistance(); h.lockInSourceDistance();
             h.compareDistances(n);
