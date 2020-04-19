@@ -250,6 +250,11 @@ namespace whfc {
 
                 n.hop(); h.hop();
 
+                for (whfc::NodeWeight& sourceReachableWeight : sourceReachableWeight_thread_specific) {
+                    n.sourceReachableWeight += sourceReachableWeight;
+                    sourceReachableWeight = 0;
+                }
+
                 num_nodes = 0;
                 currentLayers.clear();
                 std::swap(thisLayer_thread_specific, nextLayer_thread_specific);
