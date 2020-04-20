@@ -63,8 +63,8 @@ namespace whfc {
         TimeReporter& timer;
 		
 		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer),
-		    thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()),
-		    nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>())
+		    thisLayer_thread_specific(new tls_enumerable_thread_specific<std::vector<Node>>()),
+		    nextLayer_thread_specific(new tls_enumerable_thread_specific<std::vector<Node>>())
 		{
 			reset();
 		}
@@ -127,9 +127,12 @@ namespace whfc {
 		}
 		
 	private:
-        std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> thisLayer_thread_specific;
-        std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> nextLayer_thread_specific;
-        tbb::enumerable_thread_specific<whfc::NodeWeight> sourceReachableWeight_thread_specific;
+        template<typename T>
+        using tls_enumerable_thread_specific = tbb::enumerable_thread_specific<T, tbb::cache_aligned_allocator<T>, tbb::ets_key_per_instance>;
+
+        std::unique_ptr<tls_enumerable_thread_specific<std::vector<Node>>> thisLayer_thread_specific;
+        std::unique_ptr<tls_enumerable_thread_specific<std::vector<Node>>> nextLayer_thread_specific;
+        tls_enumerable_thread_specific<whfc::NodeWeight> sourceReachableWeight_thread_specific;
         bool found_target;
 
         static constexpr size_t max_write_buffer_size = 128;
@@ -216,58 +219,49 @@ namespace whfc {
 		    auto& h = cs.h;
 		    found_target = false;
 
-            std::vector<std::vector<Node>*> currentLayers;
-            std::vector<Node> currentLayer;
+            std::vector<Node>& thisLayer = thisLayer_thread_specific->local();
+            thisLayer.clear();
+
+            bool nodes_left = false;
 
             for (auto& sp : cs.sourcePiercingNodes) {
                 n.setPiercingNodeDistance(sp.node, false);
                 assert(n.isSourceReachable(sp.node));
-                currentLayer.push_back(sp.node);
+                thisLayer.push_back(sp.node);
                 current_hyperedge[sp.node] = hg.beginIndexHyperedges(sp.node);
+                nodes_left = true;
             }
             n.hop(); h.hop();
 
-            currentLayers.push_back(&currentLayer);
-            uint num_nodes = currentLayer.size();
-
-            while (num_nodes > 0) {
+            while (nodes_left) {
                 timer.start("searchFromNodes", "buildLayeredNetwork");
-                tbb::parallel_for(tbb::blocked_range<size_t>(0, num_nodes), [&](const tbb::blocked_range<size_t>& r) {
-                    size_t i_layer = 0;
-                    size_t start = r.begin();
-                    size_t index_in_vector = start;
-                    while (index_in_vector > currentLayers[i_layer]->size()) {
-                        index_in_vector -= currentLayers[i_layer]->size();
-                        i_layer++;
-                    }
-                    size_t diff = start - index_in_vector;
-                    for (size_t i = r.begin(); i < r.end(); ++i) {
-                        if (i - diff >= currentLayers[i_layer]->size()) { diff += currentLayers[i_layer]->size(); i_layer++; }
-                        searchFromNode((*currentLayers[i_layer])[i - diff], cs);
+                tbb::parallel_for(thisLayer_thread_specific->range(), [&](const tbb::blocked_range<tls_enumerable_thread_specific<std::vector<Node>>::iterator>& range) {
+                    for (auto& vector : range)  {
+                        tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
+                            for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
+                                searchFromNode(vector[i], cs);
+                            }
+                        });
                     }
                 });
                 timer.stop("searchFromNodes");
 
                 n.hop(); h.hop();
 
+                nodes_left = false;
                 for (whfc::NodeWeight& sourceReachableWeight : sourceReachableWeight_thread_specific) {
+                    if (sourceReachableWeight > 0) nodes_left = true;
                     n.sourceReachableWeight += sourceReachableWeight;
                     sourceReachableWeight = 0;
                 }
 
-                num_nodes = 0;
-                currentLayers.clear();
                 std::swap(thisLayer_thread_specific, nextLayer_thread_specific);
-                for (std::vector<Node>& thisLayer : *thisLayer_thread_specific) {
-                    if (thisLayer.size() > 0) {
-                        num_nodes += thisLayer.size();
-                        currentLayers.push_back(&thisLayer);
-                    }
-                }
 
                 for (std::vector<Node>& nextLayer : *nextLayer_thread_specific) {
                     nextLayer.clear();
                 }
+
+
             }
             n.lockInSourceDistance(); h.lockInSourceDistance();
             h.compareDistances(n);
