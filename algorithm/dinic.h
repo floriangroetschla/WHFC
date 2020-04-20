@@ -132,11 +132,14 @@ namespace whfc {
 		    size_t rightBound = 0;
 		};
 
+        template<typename T>
+        using tls_enumerable_thread_specific = tbb::enumerable_thread_specific<T, tbb::cache_aligned_allocator<T>, tbb::ets_key_per_instance>;
+
         std::unique_ptr<std::vector<Node>> thisLayer;
         std::unique_ptr<std::vector<Node>> nextLayer;
         std::atomic<size_t> firstFreeBlockIndex = 0;
-        tbb::enumerable_thread_specific<WriteBuffer> writeBuffer_thread_specific;
-        tbb::enumerable_thread_specific<whfc::NodeWeight> sourceReachableWeight_thread_specific;
+        tls_enumerable_thread_specific<WriteBuffer> writeBuffer_thread_specific;
+        tls_enumerable_thread_specific<whfc::NodeWeight> sourceReachableWeight_thread_specific;
         bool found_target;
 
         static constexpr size_t max_write_buffer_size = 128;
