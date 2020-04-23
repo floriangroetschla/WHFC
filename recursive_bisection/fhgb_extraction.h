@@ -7,96 +7,18 @@
 #include "../datastructure/node_border.h"
 #include "config.h"
 #include "partition_threadsafe.h"
+#include "mock_builder.h"
 
 namespace whfc_rb {
     class FlowHypergraphBuilderExtractor {
     public:
-        class MockBuilder {
-        public:
-            using Flow = whfc::Flow;
-            using Node = whfc::Node;
-            using NodeData = whfc::FlowHypergraph::NodeData;
-            using HyperedgeData = whfc::FlowHypergraph::HyperedgeData;
-            using Pin = whfc::FlowHypergraph::Pin;
-            using InHeIndex = whfc::InHeIndex;
-            using PinIndex = whfc::PinIndex;
-
-            MockBuilder() {
-                clear();
-            }
-
-            void clear() {
-                nodes.clear();
-                hyperedges.clear();
-                pins.clear();
-
-                numPinsAtHyperedgeStart = 0;
-                maxHyperedgeCapacity = 0;
-
-                nodes.push_back({InHeIndex(0), NodeWeight(0)});
-                hyperedges.push_back({PinIndex(0), Flow(0), Flow(0)});
-            }
-
-            void startHyperedge(const Flow capacity) {
-                finishHyperedge();	//finish last hyperedge
-                hyperedges.back().capacity = capacity;	//exploit sentinel
-                numPinsAtHyperedgeStart = numPins();
-                maxHyperedgeCapacity = std::max(maxHyperedgeCapacity, capacity);
-            }
-
-            void addPin(const Node u) {
-                assert(u < numNodes());
-                pins.push_back(u);
-                nodes[u+1].first_out++;
-            }
-
-            void addNode(const NodeWeight w) {
-                nodes.back().weight = w;
-                nodes.push_back({InHeIndex(0), NodeWeight(0)});
-            }
-
-            inline size_t numPins() const { return pins.size(); }
-
-            inline size_t numNodes() const { return nodes.size() - 1 ; }
-
-            size_t currentHyperedgeSize() const {
-                return numPins() - numPinsAtHyperedgeStart;
-            }
-
-        private:
-            std::vector<NodeData> nodes;
-            std::vector<HyperedgeData> hyperedges;
-            std::vector<Node> pins;
-
-            size_t numPinsAtHyperedgeStart = 0;
-            Flow maxHyperedgeCapacity = 0;
-
-            void removeLastPin() {
-                nodes[ pins.back() + 1 ].first_out--;
-                pins.pop_back();
-            }
-
-            bool finishHyperedge() {
-                if (currentHyperedgeSize() == 1) {
-                    removeLastPin();
-                }
-
-                if (currentHyperedgeSize() > 0) {
-                    //pins_sending_flow.emplace_back(hyperedges.back().first_out, hyperedges.back().first_out);
-                    hyperedges.push_back({PinIndex::fromOtherValueType(numPins()), Flow(0), Flow(0)});//sentinel
-                    //pins_receiving_flow.emplace_back(hyperedges.back().first_out, hyperedges.back().first_out);
-                    return true;
-                }
-                return false;
-            }
-        };
-
         static constexpr NodeID invalid_node = std::numeric_limits<NodeID>::max();
         whfc::FlowHypergraphBuilder fhgb;
 
         FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, int seed, const PartitionConfig& config) :
                 fhgb(2 * config.percentage_bfs_from_cut * maxNumNodes + 2, maxNumEdges),
-                queue(maxNumNodes + 2),
+                layered_queue(maxNumNodes + 2),
+                second_queue(maxNumNodes + 2),
                 visitedNode(maxNumNodes), visitedHyperedge(maxNumEdges),
                 globalToLocalID(maxNumNodes),
                 mt(seed), config(config) {}
@@ -128,22 +50,39 @@ namespace whfc_rb {
             cut_hes.shuffle(mt);
             timer.stop("Shuffle");
 
-            assert(queue.empty());
+            assert(layered_queue.empty());
 
             timer.start("BFS", "Extraction");
 
             // Add source node and run BFS in part0
             fhgb.addNode(whfc::NodeWeight(0));
-            queue.push(invalid_node);
-            queue.reinitialize();
-            whfc::NodeWeight w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer);
+            layered_queue.push(invalid_node);
+            layered_queue.reinitialize();
+            whfc::NodeWeight w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, fhgb, layered_queue);
 
             // Add target node and run BFS in part1
+            /*
             result.target = whfc::Node(fhgb.numNodes());
             fhgb.addNode(whfc::NodeWeight(0));
-            queue.push(invalid_node);
-            queue.reinitialize();
-            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, timer);
+            layered_queue.push(invalid_node);
+            layered_queue.reinitialize();
+            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, timer, fhgb, layered_queue);
+            */
+
+            whfc::DistanceFromCut temp_dist(hg.numNodes());
+            mock_builder.addNode(whfc::NodeWeight(0));
+            second_queue.push(invalid_node);
+            second_queue.reinitialize();
+            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, whfc::Node(0), delta, temp_dist, timer, mock_builder, second_queue);
+
+            // set target here
+            result.target = whfc::Node(fhgb.numNodes());
+
+            fhgb.addMockBuilder(mock_builder);
+
+            for (NodeID u : second_queue.allElements()) {
+                layered_queue.push(u);
+            }
 
             timer.stop("BFS");
 
@@ -164,7 +103,7 @@ namespace whfc_rb {
         }
 
         auto localNodeIDs() const {
-            return boost::irange<whfc::Node>(whfc::Node(0), whfc::Node(queue.queueEnd()));
+            return boost::irange<whfc::Node>(whfc::Node(0), whfc::Node(layered_queue.queueEnd()));
         }
 
         whfc::Node global2local(const NodeID x) const {
@@ -172,10 +111,11 @@ namespace whfc_rb {
             return globalToLocalID[x];
         }
 
-        NodeID local2global(const whfc::Node x) const { return queue.elementAt(x); }
+        NodeID local2global(const whfc::Node x) const { return layered_queue.elementAt(x); }
 
     private:
-        LayeredQueue<NodeID> queue;
+        LayeredQueue<NodeID> layered_queue;
+        LayeredQueue<NodeID> second_queue;
         ldc::TimestampSet<> visitedNode;
         ldc::TimestampSet<> visitedHyperedge;
         std::vector<whfc::Node> globalToLocalID;
@@ -183,11 +123,14 @@ namespace whfc_rb {
         std::mt19937 mt;
         const PartitionConfig& config;
 
-        void visitNode(const NodeID node, CSRHypergraph &hg, whfc::NodeWeight &w) {
-            globalToLocalID[node] = whfc::Node(fhgb.numNodes());
+        MockBuilder mock_builder;
+
+        template<typename Builder>
+        void visitNode(const NodeID node, CSRHypergraph &hg, whfc::NodeWeight &w, Builder& builder, LayeredQueue<NodeID>& queue) {
+            globalToLocalID[node] = whfc::Node(builder.numNodes());
             queue.push(node);
             visitedNode.add(node);
-            fhgb.addNode(whfc::NodeWeight(hg.nodeWeight(node)));
+            builder.addNode(whfc::NodeWeight(hg.nodeWeight(node)));
             w += hg.nodeWeight(node);
         }
 
@@ -195,7 +138,8 @@ namespace whfc_rb {
         whfc::NodeWeight BreadthFirstSearch(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
                                             PartitionBase::PartitionID partID, PartitionBase::PartitionID otherPartID,
                                             NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta,
-                                            whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer, Builder& builder) {
+                                            whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer, Builder& builder,
+                                            LayeredQueue<NodeID>& queue) {
             whfc::NodeWeight w = 0;
             whfc::HopDistance d = delta;
 
@@ -205,7 +149,7 @@ namespace whfc_rb {
             for (const HyperedgeID e : cut_hes) {
                 for (NodeID v : hg.pinsOf(e)) {
                     if (!visitedNode.contains(v) && partition[v] == partID && w + hg.nodeWeight(v) <= maxWeight) {
-                        visitNode(v, hg, w);
+                        visitNode(v, hg, w, builder, queue);
                         distanceFromCut[globalToLocalID[v]] = d;
                     }
                 }
@@ -226,26 +170,26 @@ namespace whfc_rb {
                 for (HyperedgeID e : hg.hyperedgesOf(u)) {
                     if (!visitedHyperedge.contains(e) && partition.pinsInPart(otherPartID, e) == 0 &&
                         partition.pinsInPart(partID, e) > 1) {
-                        fhgb.startHyperedge(hg.hyperedgeWeight(e));
+                        builder.startHyperedge(hg.hyperedgeWeight(e));
                         bool connectToTerminal = false;
                         for (NodeID v : hg.pinsOf(e)) {
                             if (partition[v] == partID) {
                                 if (!visitedNode.contains(v) && w + hg.nodeWeight(v) <= maxWeight) {
-                                    visitNode(v, hg, w);
+                                    visitNode(v, hg, w, builder, queue);
                                     distanceFromCut[globalToLocalID[v]] = d;
                                 }
 
                                 if (visitedNode.contains(v)) {
-                                    assert(globalToLocalID[v] < fhgb.numNodes());
-                                    fhgb.addPin(globalToLocalID[v]);
+                                    assert(globalToLocalID[v] < builder.numNodes());
+                                    builder.addPin(globalToLocalID[v]);
                                 } else {
                                     connectToTerminal = true;
                                 }
                             }
                         }
                         if (connectToTerminal) {
-                            assert(terminal < fhgb.numNodes());
-                            fhgb.addPin(terminal);
+                            assert(terminal < builder.numNodes());
+                            builder.addPin(terminal);
                         }
                         visitedHyperedge.add(e);
                     }
@@ -300,7 +244,8 @@ namespace whfc_rb {
 
         void initialize(uint numNodes, uint numHyperedges) {
             fhgb.clear();
-            queue.clear();
+            layered_queue.clear();
+            second_queue.clear();
             visitedNode.clear();
             visitedHyperedge.clear();
             result = {whfc::Node(0), whfc::Node(0), 0, 0};
