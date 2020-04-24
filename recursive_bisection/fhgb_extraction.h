@@ -54,6 +54,8 @@ namespace whfc_rb {
 
             timer.start("BFS", "Extraction");
 
+            timer.start("Parallel_BFS", "BFS");
+
             whfc::NodeWeight w0, w1;
 
             tbb::parallel_invoke([&]() {
@@ -69,6 +71,9 @@ namespace whfc_rb {
                 w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, whfc::Node(0), delta, temp_dist, timer, mock_builder, second_queue);
             });
 
+            timer.stop("Parallel_BFS");
+
+            timer.start("Merging", "BFS");
             size_t num_nodes_first_search = fhgb.numNodes();
             result.target = whfc::Node(fhgb.numNodes());
 
@@ -80,6 +85,7 @@ namespace whfc_rb {
                     globalToLocalID[u] = globalToLocalID[u] + whfc::Node(num_nodes_first_search);
                 }
             }
+            timer.stop("Merging");
 
             timer.stop("BFS");
 
@@ -95,8 +101,6 @@ namespace whfc_rb {
             timer.start("Finalize", "Extraction");
             fhgb.finalize();
             timer.stop("Finalize");
-
-            //fhgb.printHypergraph(std::cout);
 
             return result;
         }
@@ -202,7 +206,6 @@ namespace whfc_rb {
                 bool connectToSource = false;
                 bool connectToTarget = false;
                 result.cutAtStake += hg.hyperedgeWeight(e);
-                // visitedHyperedge.add(e);
                 fhgb.startHyperedge(hg.hyperedgeWeight(e));
 
                 for (NodeID v : hg.pinsOf(e)) {
