@@ -55,26 +55,20 @@ namespace whfc_rb {
 
             timer.start("BFS", "Extraction");
 
-            // Add source node and run BFS in part0
-            fhgb.addNode(whfc::NodeWeight(0));
-            layered_queue.push(invalid_node);
-            layered_queue.reinitialize();
-            whfc::NodeWeight w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, fhgb, layered_queue, globalToLocalID_mapper1);
+            whfc::NodeWeight w0, w1;
 
-            // Add target node and run BFS in part1
-            /*
-            result.target = whfc::Node(fhgb.numNodes());
-            fhgb.addNode(whfc::NodeWeight(0));
-            layered_queue.push(invalid_node);
-            layered_queue.reinitialize();
-            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, timer, fhgb, layered_queue);
-            */
-
-            whfc::DistanceFromCut temp_dist(hg.numNodes());
-            mock_builder.addNode(whfc::NodeWeight(0));
-            second_queue.push(invalid_node);
-            second_queue.reinitialize();
-            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, whfc::Node(0), delta, temp_dist, timer, mock_builder, second_queue, globalToLocalID_mapper2);
+            tbb::parallel_invoke([&]() {
+                fhgb.addNode(whfc::NodeWeight(0));
+                layered_queue.push(invalid_node);
+                layered_queue.reinitialize();
+                w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, fhgb, layered_queue, globalToLocalID_mapper1);
+            }, [&]() {
+                whfc::DistanceFromCut temp_dist(hg.numNodes());
+                mock_builder.addNode(whfc::NodeWeight(0));
+                second_queue.push(invalid_node);
+                second_queue.reinitialize();
+                w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, whfc::Node(0), delta, temp_dist, timer, mock_builder, second_queue, globalToLocalID_mapper2);
+            });
 
             size_t num_nodes_first_search = fhgb.numNodes();
             result.target = whfc::Node(fhgb.numNodes());
@@ -150,7 +144,7 @@ namespace whfc_rb {
             whfc::NodeWeight w = 0;
             whfc::HopDistance d = delta;
 
-            timer.start("Collect Boundary Vertices", "BFS");
+            //timer.start("Collect Boundary Vertices", "BFS");
 
             // Collect boundary vertices
             for (const HyperedgeID e : cut_hes) {
@@ -162,9 +156,9 @@ namespace whfc_rb {
                 }
             }
 
-            timer.stop("Collect Boundary Vertices");
+            //timer.stop("Collect Boundary Vertices");
 
-            timer.start("Scan Levels", "BFS");
+            //timer.start("Scan Levels", "BFS");
 
             // Do the actual breadth first search
             while (!queue.empty()) {
@@ -203,7 +197,7 @@ namespace whfc_rb {
                 }
             }
 
-            timer.stop("Scan Levels");
+            //timer.stop("Scan Levels");
 
             d += delta;
             distanceFromCut[terminal] = d;
