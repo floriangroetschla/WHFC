@@ -215,7 +215,8 @@ namespace whfc_rb {
             size_t bucket = bucketPQ.firstNonEmptyBucket();
             while (bucket < bucketPQ.numBuckets()) {
                 std::vector<WorkElement> bucket_elements = bucketPQ.getBucket(bucket);
-                for (size_t i = 0; i < bucket_elements.size(); ++i) {
+                size_t current_size = bucket_elements.size();
+                for (size_t i = 0; i < current_size; ++i) {
                     const WorkElement element = bucket_elements[i];
                     if (!partScheduled[element.part0] && !partScheduled[element.part1]) {
                         tasks.push_back(element);
@@ -223,6 +224,8 @@ namespace whfc_rb {
                         partScheduled[element.part0] = true;
                         partScheduled[element.part1] = true;
                         bucketPQ.removeElement(bucket, i);
+                        i--;
+                        current_size--;
                     }
                 }
                 bucket++;
@@ -256,7 +259,8 @@ namespace whfc_rb {
                 size_t bucket = bucketPQ.firstNonEmptyBucket();
                 while (bucket < bucketPQ.numBuckets()) {
                     std::vector<WorkElement> bucket_elements = bucketPQ.getBucket(bucket);
-                    for (size_t i = 0; i < bucket_elements.size(); ++i) {
+                    size_t current_size = bucket_elements.size();
+                    for (size_t i = 0; i < current_size; ++i) {
                         const WorkElement element = bucket_elements[i];
                         if (!partScheduled[element.part0] && !partScheduled[element.part1] && isEligible(element.part0, element.part1)) {
                             feeder.add({element});
@@ -264,6 +268,8 @@ namespace whfc_rb {
                             partScheduled[element.part0] = true;
                             partScheduled[element.part1] = true;
                             bucketPQ.removeElement(bucket, i);
+                            i--;
+                            current_size--;
                         }
                     }
                     bucket++;

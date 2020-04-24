@@ -97,7 +97,10 @@ namespace whfc {
             PinIndex first_out = hyperedges.back().first_out;
             hyperedges.pop_back();
 
-            pins_receiving_flow.back() = PinIndexRange(first_out + builder.hyperedges[0].first_out, first_out + builder.hyperedges[0].first_out);
+            if (pins_receiving_flow.size() > 0) {
+                pins_receiving_flow.back() = PinIndexRange(first_out + builder.hyperedges[0].first_out, first_out + builder.hyperedges[0].first_out);
+            }
+
             hyperedges.push_back({first_out + builder.hyperedges[0].first_out, Flow(0), builder.hyperedges[0].capacity});
             maxHyperedgeCapacity = std::max(maxHyperedgeCapacity, builder.hyperedges[0].capacity);
 
