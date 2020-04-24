@@ -20,8 +20,7 @@ namespace whfc_rb {
                 layered_queue(maxNumNodes + 2),
                 second_queue(maxNumNodes + 2),
                 visitedNode(maxNumNodes), visitedHyperedge(maxNumEdges),
-                globalToLocalID_mapper1(maxNumNodes),
-                globalToLocalID_mapper2(maxNumNodes),
+                globalToLocalID(maxNumNodes),
                 mt(seed), config(config) {}
 
         struct ExtractorInfo {
@@ -61,13 +60,13 @@ namespace whfc_rb {
                 fhgb.addNode(whfc::NodeWeight(0));
                 layered_queue.push(invalid_node);
                 layered_queue.reinitialize();
-                w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, fhgb, layered_queue, globalToLocalID_mapper1);
+                w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, fhgb, layered_queue);
             }, [&]() {
                 whfc::DistanceFromCut temp_dist(hg.numNodes());
                 mock_builder.addNode(whfc::NodeWeight(0));
                 second_queue.push(invalid_node);
                 second_queue.reinitialize();
-                w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, whfc::Node(0), delta, temp_dist, timer, mock_builder, second_queue, globalToLocalID_mapper2);
+                w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, whfc::Node(0), delta, temp_dist, timer, mock_builder, second_queue);
             });
 
             size_t num_nodes_first_search = fhgb.numNodes();
@@ -78,7 +77,7 @@ namespace whfc_rb {
             for (NodeID u : second_queue.allElements()) {
                 layered_queue.push(u);
                 if (u != whfc::Node::InvalidValue) {
-                    globalToLocalID_mapper1[u] = globalToLocalID_mapper2[u] + whfc::Node(num_nodes_first_search);
+                    globalToLocalID[u] = globalToLocalID[u] + whfc::Node(num_nodes_first_search);
                 }
             }
 
@@ -108,7 +107,7 @@ namespace whfc_rb {
 
         whfc::Node global2local(const NodeID x) const {
             assert(visitedNode.contains(x));
-            return globalToLocalID_mapper1[x];
+            return globalToLocalID[x];
         }
 
         NodeID local2global(const whfc::Node x) const { return layered_queue.elementAt(x); }
@@ -118,8 +117,7 @@ namespace whfc_rb {
         LayeredQueue<NodeID> second_queue;
         ldc::TimestampSet<> visitedNode;
         ldc::TimestampSet<> visitedHyperedge;
-        std::vector<whfc::Node> globalToLocalID_mapper1;
-        std::vector<whfc::Node> globalToLocalID_mapper2;
+        std::vector<whfc::Node> globalToLocalID;
         ExtractorInfo result;
         std::mt19937 mt;
         const PartitionConfig& config;
@@ -127,7 +125,7 @@ namespace whfc_rb {
         MockBuilder mock_builder;
 
         template<typename Builder>
-        void visitNode(const NodeID node, CSRHypergraph &hg, whfc::NodeWeight &w, Builder& builder, LayeredQueue<NodeID>& queue, std::vector<whfc::Node>& globalToLocalID) {
+        void visitNode(const NodeID node, CSRHypergraph &hg, whfc::NodeWeight &w, Builder& builder, LayeredQueue<NodeID>& queue) {
             globalToLocalID[node] = whfc::Node(builder.numNodes());
             queue.push(node);
             visitedNode.add(node);
@@ -140,27 +138,20 @@ namespace whfc_rb {
                                             PartitionBase::PartitionID partID, PartitionBase::PartitionID otherPartID,
                                             NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta,
                                             whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer, Builder& builder,
-                                            LayeredQueue<NodeID>& queue, std::vector<whfc::Node>& globalToLocalID) {
+                                            LayeredQueue<NodeID>& queue) {
             whfc::NodeWeight w = 0;
             whfc::HopDistance d = delta;
-
-            //timer.start("Collect Boundary Vertices", "BFS");
 
             // Collect boundary vertices
             for (const HyperedgeID e : cut_hes) {
                 for (NodeID v : hg.pinsOf(e)) {
                     if (!visitedNode.contains(v) && partition[v] == partID && w + hg.nodeWeight(v) <= maxWeight) {
-                        visitNode(v, hg, w, builder, queue, globalToLocalID);
+                        visitNode(v, hg, w, builder, queue);
                         distanceFromCut[globalToLocalID[v]] = d;
                     }
                 }
             }
 
-            //timer.stop("Collect Boundary Vertices");
-
-            //timer.start("Scan Levels", "BFS");
-
-            // Do the actual breadth first search
             while (!queue.empty()) {
                 if (queue.currentLayerEmpty()) {
                     queue.finishNextLayer();
@@ -176,7 +167,7 @@ namespace whfc_rb {
                         for (NodeID v : hg.pinsOf(e)) {
                             if (partition[v] == partID) {
                                 if (!visitedNode.contains(v) && w + hg.nodeWeight(v) <= maxWeight) {
-                                    visitNode(v, hg, w, builder, queue, globalToLocalID);
+                                    visitNode(v, hg, w, builder, queue);
                                     distanceFromCut[globalToLocalID[v]] = d;
                                 }
 
@@ -196,9 +187,6 @@ namespace whfc_rb {
                     }
                 }
             }
-
-            //timer.stop("Scan Levels");
-
             d += delta;
             distanceFromCut[terminal] = d;
 
@@ -219,8 +207,8 @@ namespace whfc_rb {
 
                 for (NodeID v : hg.pinsOf(e)) {
                     if (visitedNode.contains(v)) {
-                        assert(globalToLocalID_mapper1[v] < fhgb.numNodes());
-                        fhgb.addPin(globalToLocalID_mapper1[v]);
+                        assert(globalToLocalID[v] < fhgb.numNodes());
+                        fhgb.addPin(globalToLocalID[v]);
                     } else {
                         connectToSource |= (partition[v] == part0);
                         connectToTarget |= (partition[v] == part1);
