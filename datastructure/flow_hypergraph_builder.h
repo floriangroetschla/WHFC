@@ -99,16 +99,20 @@ namespace whfc {
 
             pins_receiving_flow.back() = PinIndexRange(first_out + builder.hyperedges[0].first_out, first_out + builder.hyperedges[0].first_out);
             hyperedges.push_back({first_out + builder.hyperedges[0].first_out, Flow(0), builder.hyperedges[0].capacity});
+            maxHyperedgeCapacity = std::max(maxHyperedgeCapacity, builder.hyperedges[0].capacity);
 
             for (size_t i = 1; i < builder.hyperedges.size(); ++i) {
                 pins_sending_flow.emplace_back(hyperedges.back().first_out, hyperedges.back().first_out);
                 hyperedges.push_back({first_out + builder.hyperedges[i].first_out, Flow(0), builder.hyperedges[i].capacity});
                 pins_receiving_flow.emplace_back(hyperedges.back().first_out, hyperedges.back().first_out);
+                maxHyperedgeCapacity = std::max(maxHyperedgeCapacity, builder.hyperedges[i].capacity);
             }
 
             for (Node u : builder.pins) {
                 pins.push_back({u + Node(numNodesBefore), InHeIndex::Invalid()});
             }
+
+            numPinsAtHyperedgeStart = numPins();
 		}
 		
 		void finalize() {
