@@ -78,10 +78,12 @@ namespace whfc {
 		}
 
 		void addMockBuilder(MockBuilder& builder) {
-		    builder.finishHyperedge();
+		    //builder.finishHyperedge();
 		    if ( !finishHyperedge() ) {
 		        hyperedges.back().capacity = 0;
 		    }
+
+		    size_t numNodesBefore = numNodes();
 
 		    // remove sentinel
 		    NodeData node_data = nodes.back();
@@ -96,16 +98,16 @@ namespace whfc {
             hyperedges.pop_back();
 
             pins_receiving_flow.back() = PinIndexRange(first_out + builder.hyperedges[0].first_out, first_out + builder.hyperedges[0].first_out);
+            hyperedges.push_back({first_out + builder.hyperedges[0].first_out, Flow(0), builder.hyperedges[0].capacity});
 
-            for (HyperedgeData e : builder.hyperedges) {
+            for (size_t i = 1; i < builder.hyperedges.size(); ++i) {
                 pins_sending_flow.emplace_back(hyperedges.back().first_out, hyperedges.back().first_out);
-                hyperedges.push_back({first_out + e.first_out, Flow(0), e.capacity});
+                hyperedges.push_back({first_out + builder.hyperedges[i].first_out, Flow(0), builder.hyperedges[i].capacity});
                 pins_receiving_flow.emplace_back(hyperedges.back().first_out, hyperedges.back().first_out);
             }
 
             for (Node u : builder.pins) {
-                pins.push_back({u, InHeIndex::Invalid()});
-                nodes[u+1].first_out++;
+                pins.push_back({u + Node(numNodesBefore), InHeIndex::Invalid()});
             }
 		}
 		

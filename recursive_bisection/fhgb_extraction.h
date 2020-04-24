@@ -20,7 +20,8 @@ namespace whfc_rb {
                 layered_queue(maxNumNodes + 2),
                 second_queue(maxNumNodes + 2),
                 visitedNode(maxNumNodes), visitedHyperedge(maxNumEdges),
-                globalToLocalID(maxNumNodes),
+                globalToLocalID_mapper1(maxNumNodes),
+                globalToLocalID_mapper2(maxNumNodes),
                 mt(seed), config(config) {}
 
         struct ExtractorInfo {
@@ -58,7 +59,7 @@ namespace whfc_rb {
             fhgb.addNode(whfc::NodeWeight(0));
             layered_queue.push(invalid_node);
             layered_queue.reinitialize();
-            whfc::NodeWeight w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, fhgb, layered_queue);
+            whfc::NodeWeight w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, fhgb, layered_queue, globalToLocalID_mapper1);
 
             // Add target node and run BFS in part1
             /*
@@ -73,15 +74,18 @@ namespace whfc_rb {
             mock_builder.addNode(whfc::NodeWeight(0));
             second_queue.push(invalid_node);
             second_queue.reinitialize();
-            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, whfc::Node(0), delta, temp_dist, timer, mock_builder, second_queue);
+            whfc::NodeWeight w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, whfc::Node(0), delta, temp_dist, timer, mock_builder, second_queue, globalToLocalID_mapper2);
 
-            // set target here
+            size_t num_nodes_first_search = fhgb.numNodes();
             result.target = whfc::Node(fhgb.numNodes());
 
             fhgb.addMockBuilder(mock_builder);
 
             for (NodeID u : second_queue.allElements()) {
                 layered_queue.push(u);
+                if (u != whfc::Node::InvalidValue) {
+                    globalToLocalID_mapper1[u] = globalToLocalID_mapper2[u] + whfc::Node(num_nodes_first_search);
+                }
             }
 
             timer.stop("BFS");
@@ -99,6 +103,8 @@ namespace whfc_rb {
             fhgb.finalize();
             timer.stop("Finalize");
 
+            //fhgb.printHypergraph(std::cout);
+
             return result;
         }
 
@@ -108,7 +114,7 @@ namespace whfc_rb {
 
         whfc::Node global2local(const NodeID x) const {
             assert(visitedNode.contains(x));
-            return globalToLocalID[x];
+            return globalToLocalID_mapper1[x];
         }
 
         NodeID local2global(const whfc::Node x) const { return layered_queue.elementAt(x); }
@@ -118,7 +124,8 @@ namespace whfc_rb {
         LayeredQueue<NodeID> second_queue;
         ldc::TimestampSet<> visitedNode;
         ldc::TimestampSet<> visitedHyperedge;
-        std::vector<whfc::Node> globalToLocalID;
+        std::vector<whfc::Node> globalToLocalID_mapper1;
+        std::vector<whfc::Node> globalToLocalID_mapper2;
         ExtractorInfo result;
         std::mt19937 mt;
         const PartitionConfig& config;
@@ -126,7 +133,7 @@ namespace whfc_rb {
         MockBuilder mock_builder;
 
         template<typename Builder>
-        void visitNode(const NodeID node, CSRHypergraph &hg, whfc::NodeWeight &w, Builder& builder, LayeredQueue<NodeID>& queue) {
+        void visitNode(const NodeID node, CSRHypergraph &hg, whfc::NodeWeight &w, Builder& builder, LayeredQueue<NodeID>& queue, std::vector<whfc::Node>& globalToLocalID) {
             globalToLocalID[node] = whfc::Node(builder.numNodes());
             queue.push(node);
             visitedNode.add(node);
@@ -139,7 +146,7 @@ namespace whfc_rb {
                                             PartitionBase::PartitionID partID, PartitionBase::PartitionID otherPartID,
                                             NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta,
                                             whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer, Builder& builder,
-                                            LayeredQueue<NodeID>& queue) {
+                                            LayeredQueue<NodeID>& queue, std::vector<whfc::Node>& globalToLocalID) {
             whfc::NodeWeight w = 0;
             whfc::HopDistance d = delta;
 
@@ -149,7 +156,7 @@ namespace whfc_rb {
             for (const HyperedgeID e : cut_hes) {
                 for (NodeID v : hg.pinsOf(e)) {
                     if (!visitedNode.contains(v) && partition[v] == partID && w + hg.nodeWeight(v) <= maxWeight) {
-                        visitNode(v, hg, w, builder, queue);
+                        visitNode(v, hg, w, builder, queue, globalToLocalID);
                         distanceFromCut[globalToLocalID[v]] = d;
                     }
                 }
@@ -175,7 +182,7 @@ namespace whfc_rb {
                         for (NodeID v : hg.pinsOf(e)) {
                             if (partition[v] == partID) {
                                 if (!visitedNode.contains(v) && w + hg.nodeWeight(v) <= maxWeight) {
-                                    visitNode(v, hg, w, builder, queue);
+                                    visitNode(v, hg, w, builder, queue, globalToLocalID);
                                     distanceFromCut[globalToLocalID[v]] = d;
                                 }
 
@@ -218,8 +225,8 @@ namespace whfc_rb {
 
                 for (NodeID v : hg.pinsOf(e)) {
                     if (visitedNode.contains(v)) {
-                        assert(globalToLocalID[v] < fhgb.numNodes());
-                        fhgb.addPin(globalToLocalID[v]);
+                        assert(globalToLocalID_mapper1[v] < fhgb.numNodes());
+                        fhgb.addPin(globalToLocalID_mapper1[v]);
                     } else {
                         connectToSource |= (partition[v] == part0);
                         connectToTarget |= (partition[v] == part1);
@@ -244,6 +251,7 @@ namespace whfc_rb {
 
         void initialize(uint numNodes, uint numHyperedges) {
             fhgb.clear();
+            mock_builder.clear();
             layered_queue.clear();
             second_queue.clear();
             visitedNode.clear();
