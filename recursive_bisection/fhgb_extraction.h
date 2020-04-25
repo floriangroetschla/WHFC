@@ -67,9 +67,9 @@ namespace whfc_rb {
 
             timer.stop("BFS");
 
-            timer.start("Process Cut Hyperedges", "Extraction");
+            timer.start("Process_Cut_Hyperedges", "Extraction");
             processCutHyperedges(hg, cut_hes, partition, part0, part1);
-            timer.stop("Process Cut Hyperedges");
+            timer.stop("Process_Cut_Hyperedges");
 
             std::vector<NodeWeight> totalWeights = partition.partitionWeights();
 
@@ -119,7 +119,7 @@ namespace whfc_rb {
             whfc::NodeWeight w = 0;
             whfc::HopDistance d = delta;
 
-            timer.start("Collect Boundary Vertices", "BFS");
+            timer.start("Collect_Boundary_Vertices", "BFS");
 
             // Collect boundary vertices
             for (const HyperedgeID e : cut_hes) {
@@ -131,9 +131,9 @@ namespace whfc_rb {
                 }
             }
 
-            timer.stop("Collect Boundary Vertices");
+            timer.stop("Collect_Boundary_Vertices");
 
-            timer.start("Scan Levels", "BFS");
+            timer.start("Scan_Levels", "BFS");
 
             // Do the actual breadth first search
             while (!queue.empty()) {
@@ -173,7 +173,7 @@ namespace whfc_rb {
                 }
             }
 
-            timer.stop("Scan Levels");
+            timer.stop("Scan_Levels");
 
             d += delta;
             distanceFromCut[terminal] = d;
