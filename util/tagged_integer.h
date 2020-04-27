@@ -24,7 +24,7 @@ public:
     template<typename T, typename = typename std::enable_if_t<Meta::Contains<T, AdditionalCasts>()>>
     constexpr inline operator T() const noexcept {return T(internalValue);}
 
-    constexpr inline const ValueType& value() const noexcept {return internalValue;}
+    constexpr inline ValueType& value() noexcept {return internalValue;}
 
     template<typename OtherValueType>
     static inline Type fromOtherValueType(OtherValueType x) { return Type(static_cast<OtherValueType>(x)); }

@@ -44,7 +44,7 @@ int main(int argc, const char *argv[]) {
 
     bool precomputeCuts = true;
 
-    whfc_rb::PartitionConfig config = {true, patoh_preset, precomputeCuts, distancePiercing};
+    whfc_rb::PartitionConfig config = {true, patoh_preset, precomputeCuts, distancePiercing, numThreads};
     std::cout << "useThreadPinning: " << useThreadPinning << std::endl;
     std::cout << "precomputeCuts: " << precomputeCuts << std::endl;
     std::cout << "distancePiercing: " << distancePiercing << std::endl;

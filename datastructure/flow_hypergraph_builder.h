@@ -1,6 +1,7 @@
 #pragma once
 
 #include "flow_hypergraph.h"
+#include "../recursive_bisection/mock_builder.h"
 
 /*
  * hyperedges with zero/one pins are removed automatically during build process
@@ -74,6 +75,56 @@ namespace whfc {
 		void removeCurrentHyperedge() {
 			while (numPins() > numPinsAtHyperedgeStart)
 				removeLastPin();
+		}
+
+		void addMockBuilder(MockBuilder& builder, bool add_nodes) {
+		    if ( !builder.finishHyperedge() ) {
+		        builder.hyperedges.back().capacity = 0;
+		    }
+		    if ( !finishHyperedge() ) {
+		        hyperedges.back().capacity = 0;
+		    }
+
+		    size_t numNodesBefore = numNodes();
+
+		    if (add_nodes) {
+		        // remove sentinel
+		        NodeData node_data = nodes.back();
+		        nodes.pop_back();
+		        builder.nodes[0].first_out = node_data.first_out;
+
+                for (NodeData u : builder.nodes) {
+                    nodes.push_back(u);
+                }
+		    }
+
+            PinIndex first_out = hyperedges.back().first_out;
+            hyperedges.pop_back();
+
+            if (pins_receiving_flow.size() > 0) {
+                pins_receiving_flow.back() = PinIndexRange(first_out + builder.hyperedges[0].first_out, first_out + builder.hyperedges[0].first_out);
+            }
+
+            hyperedges.push_back({first_out + builder.hyperedges[0].first_out, Flow(0), builder.hyperedges[0].capacity});
+            maxHyperedgeCapacity = std::max(maxHyperedgeCapacity, builder.hyperedges[0].capacity);
+
+            for (size_t i = 1; i < builder.hyperedges.size(); ++i) {
+                pins_sending_flow.emplace_back(hyperedges.back().first_out, hyperedges.back().first_out);
+                hyperedges.push_back({first_out + builder.hyperedges[i].first_out, Flow(0), builder.hyperedges[i].capacity});
+                pins_receiving_flow.emplace_back(hyperedges.back().first_out, hyperedges.back().first_out);
+                maxHyperedgeCapacity = std::max(maxHyperedgeCapacity, builder.hyperedges[i].capacity);
+            }
+
+            for (Node u : builder.pins) {
+                if (add_nodes) {
+                    pins.push_back({u + Node(numNodesBefore), InHeIndex::Invalid()});
+                } else {
+                    pins.push_back({u, InHeIndex::Invalid()});
+                }
+            }
+
+            numPinsAtHyperedgeStart = numPins();
+            assert(hyperedges.back().first_out == numPins());
 		}
 		
 		void finalize() {

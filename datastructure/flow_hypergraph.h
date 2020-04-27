@@ -276,6 +276,10 @@ namespace whfc {
 			assert(pin_is_categorized_correctly(inc_u) && "Pin categorized incorrectly");
 			assert(pin_is_categorized_correctly(inc_v) && "Pin categorized incorrectly");
 		}
+
+		std::vector<NodeData>& getNodes() {
+		    return nodes;
+		}
 		
 		Flow maxHyperedgeCapacity = maxFlow;
 
