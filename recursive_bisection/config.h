@@ -8,5 +8,6 @@ namespace whfc_rb {
         bool precomputeCuts;
         bool distancePiercing;
         double percentage_bfs_from_cut = 0.2;
+        int numThreads;
     };
 }

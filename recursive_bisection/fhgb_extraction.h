@@ -77,7 +77,7 @@ namespace whfc_rb {
             size_t num_nodes_first_search = fhgb.numNodes();
             result.target = whfc::Node(fhgb.numNodes());
 
-            fhgb.addMockBuilder(mock_builder);
+            fhgb.addMockBuilder(mock_builder, true);
 
             for (NodeID u : second_queue.allElements()) {
                 layered_queue.push(u);
@@ -89,9 +89,26 @@ namespace whfc_rb {
 
             timer.stop("BFS");
 
-            timer.start("Process Cut Hyperedges", "Extraction");
-            processCutHyperedges(hg, cut_hes, partition, part0, part1);
+            tbb::blocked_range<size_t> range(0, cut_hes.size());
+
+            //timer.start("Process Cut Hyperedges", "Extraction");
+            processCutHyperedges(hg, cut_hes, partition, part0, part1, fhgb, range);
+
+            /*
+            mockBuilder_thread_specific = tbb::enumerable_thread_specific<MockBuilder>(std::ref(fhgb.getNodes()));
+
+            tbb::parallel_for(range, [=](const tbb::blocked_range<size_t>& sub_range) {
+                MockBuilder& builder = mockBuilder_thread_specific.local();
+                processCutHyperedges(hg, cut_hes, partition, part0, part1, builder, sub_range);
+            });
             timer.stop("Process Cut Hyperedges");
+
+            for (MockBuilder& builder : mockBuilder_thread_specific) {
+                std::cout << builder.numPins() << std::endl;
+                fhgb.addMockBuilder(builder, false);
+                //builder.clear();
+            }
+             */
 
             std::vector<NodeWeight> totalWeights = partition.partitionWeights();
 
@@ -127,6 +144,7 @@ namespace whfc_rb {
         const PartitionConfig& config;
 
         MockBuilder mock_builder;
+        tbb::enumerable_thread_specific<MockBuilder> mockBuilder_thread_specific;
 
         template<typename Builder>
         void visitNode(const NodeID node, CSRHypergraph &hg, whfc::NodeWeight &w, Builder& builder, LayeredQueue<NodeID>& queue) {
@@ -197,21 +215,23 @@ namespace whfc_rb {
             return w;
         }
 
-        template<class PartitionImpl, class CutEdgeRange>
-        void processCutHyperedges(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
-                                  const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1) {
-            for (const HyperedgeID e : cut_hes) {
+        template<class PartitionImpl, class CutEdgeRange, class Builder>
+        void processCutHyperedges(const CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
+                                  const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
+                                  Builder& builder, const tbb::blocked_range<size_t>& range) {
+            for (size_t i = range.begin(); i < range.end(); ++i) {
+                const HyperedgeID e = cut_hes[i];
                 assert(!visitedHyperedge.contains(e));
                 assert(partition.pinsInPart(part0, e) > 0 && partition.pinsInPart(part1, e) > 0);
                 bool connectToSource = false;
                 bool connectToTarget = false;
                 result.cutAtStake += hg.hyperedgeWeight(e);
-                fhgb.startHyperedge(hg.hyperedgeWeight(e));
+                builder.startHyperedge(hg.hyperedgeWeight(e));
 
                 for (NodeID v : hg.pinsOf(e)) {
                     if (visitedNode.contains(v)) {
                         assert(globalToLocalID[v] < fhgb.numNodes());
-                        fhgb.addPin(globalToLocalID[v]);
+                        builder.addPin(globalToLocalID[v]);
                     } else {
                         connectToSource |= (partition[v] == part0);
                         connectToTarget |= (partition[v] == part1);
@@ -221,14 +241,14 @@ namespace whfc_rb {
                     }
                 }
                 if (connectToSource && connectToTarget) {
-                    fhgb.removeCurrentHyperedge();
+                    builder.removeCurrentHyperedge();
                     result.baseCut += hg.hyperedgeWeight(e);
                 } else {
                     if (connectToSource) {
-                        fhgb.addPin(result.source);
+                        builder.addPin(result.source);
                     }
                     if (connectToTarget) {
-                        fhgb.addPin(result.target);
+                        builder.addPin(result.target);
                     }
                 }
             }

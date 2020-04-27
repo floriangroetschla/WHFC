@@ -77,22 +77,23 @@ namespace whfc {
 				removeLastPin();
 		}
 
-		void addMockBuilder(MockBuilder& builder) {
-		    //builder.finishHyperedge();
+		void addMockBuilder(MockBuilder& builder, bool add_nodes) {
 		    if ( !finishHyperedge() ) {
 		        hyperedges.back().capacity = 0;
 		    }
 
 		    size_t numNodesBefore = numNodes();
 
-		    // remove sentinel
-		    NodeData node_data = nodes.back();
-		    nodes.pop_back();
-		    builder.nodes[0].first_out = node_data.first_out;
+		    if (add_nodes) {
+		        // remove sentinel
+		        NodeData node_data = nodes.back();
+		        nodes.pop_back();
+		        builder.nodes[0].first_out = node_data.first_out;
 
-            for (NodeData u : builder.nodes) {
-                nodes.push_back(u);
-            }
+                for (NodeData u : builder.nodes) {
+                    nodes.push_back(u);
+                }
+		    }
 
             PinIndex first_out = hyperedges.back().first_out;
             hyperedges.pop_back();
@@ -112,7 +113,11 @@ namespace whfc {
             }
 
             for (Node u : builder.pins) {
-                pins.push_back({u + Node(numNodesBefore), InHeIndex::Invalid()});
+                if (add_nodes) {
+                    pins.push_back({u + Node(numNodesBefore), InHeIndex::Invalid()});
+                } else {
+                    pins.push_back({u, InHeIndex::Invalid()});
+                }
             }
 
             numPinsAtHyperedgeStart = numPins();

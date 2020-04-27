@@ -13,26 +13,31 @@ public:
     using InHeIndex = whfc::InHeIndex;
     using PinIndex = whfc::PinIndex;
 
-    std::vector<NodeData> nodes;
+    std::vector<NodeData>& nodes;
+    std::vector<NodeData> nodes_internal;
     std::vector<HyperedgeData> hyperedges;
     std::vector<Node> pins;
 
     size_t numPinsAtHyperedgeStart = 0;
     Flow maxHyperedgeCapacity = 0;
 
-    MockBuilder() {
+    MockBuilder() : nodes(nodes_internal) {
         clear();
     }
 
-    void clear() {
-        nodes.clear();
+    MockBuilder(std::vector<NodeData>& existing_nodes) : nodes(existing_nodes) {
+        clear(false);
+    }
+
+    void clear(bool clearNodes = true) {
+        if (clearNodes) nodes.clear();
         hyperedges.clear();
         pins.clear();
 
         numPinsAtHyperedgeStart = 0;
         maxHyperedgeCapacity = 0;
 
-        nodes.push_back({InHeIndex(0), whfc::NodeWeight(0)});
+        if (clearNodes) nodes.push_back({InHeIndex(0), whfc::NodeWeight(0)});
         hyperedges.push_back({PinIndex(0), Flow(0), Flow(0)});
     }
 
@@ -62,15 +67,18 @@ public:
         return numPins() - numPinsAtHyperedgeStart;
     }
 
+    void removeCurrentHyperedge() {
+        while (numPins() > numPinsAtHyperedgeStart)
+            removeLastPin();
+    }
+
     bool finishHyperedge() {
         if (currentHyperedgeSize() == 1) {
             removeLastPin();
         }
 
         if (currentHyperedgeSize() > 0) {
-            //pins_sending_flow.emplace_back(hyperedges.back().first_out, hyperedges.back().first_out);
             hyperedges.push_back({PinIndex::fromOtherValueType(numPins()), Flow(0), Flow(0)});//sentinel
-            //pins_receiving_flow.emplace_back(hyperedges.back().first_out, hyperedges.back().first_out);
             return true;
         }
         return false;
