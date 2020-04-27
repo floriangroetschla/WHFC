@@ -78,6 +78,7 @@ namespace whfc {
 		}
 
 		void addMockBuilder(MockBuilder& builder, bool add_nodes) {
+		    builder.finishHyperedge();
 		    if ( !finishHyperedge() ) {
 		        hyperedges.back().capacity = 0;
 		    }

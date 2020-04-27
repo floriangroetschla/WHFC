@@ -89,12 +89,13 @@ namespace whfc_rb {
 
             timer.stop("BFS");
 
+            std::cout << "Hyperedges after BFS: " << fhgb.numHyperedges() << std::endl;
+
             tbb::blocked_range<size_t> range(0, cut_hes.size());
 
-            //timer.start("Process Cut Hyperedges", "Extraction");
-            processCutHyperedges(hg, cut_hes, partition, part0, part1, fhgb, range);
+            timer.start("Process Cut Hyperedges", "Extraction");
+            //processCutHyperedges(hg, cut_hes, partition, part0, part1, fhgb, range);
 
-            /*
             mockBuilder_thread_specific = tbb::enumerable_thread_specific<MockBuilder>(std::ref(fhgb.getNodes()));
 
             tbb::parallel_for(range, [=](const tbb::blocked_range<size_t>& sub_range) {
@@ -104,11 +105,18 @@ namespace whfc_rb {
             timer.stop("Process Cut Hyperedges");
 
             for (MockBuilder& builder : mockBuilder_thread_specific) {
-                std::cout << builder.numPins() << std::endl;
                 fhgb.addMockBuilder(builder, false);
-                //builder.clear();
             }
-             */
+
+            for (whfc::Flow& baseCut : baseCut_thread_specific) {
+                result.baseCut += baseCut;
+                baseCut = 0;
+            }
+
+            for (whfc::Flow& cutAtStake : cutAtStake_thread_specific) {
+                result.cutAtStake += cutAtStake;
+                cutAtStake = 0;
+            }
 
             std::vector<NodeWeight> totalWeights = partition.partitionWeights();
 
@@ -118,6 +126,8 @@ namespace whfc_rb {
             timer.start("Finalize", "Extraction");
             fhgb.finalize();
             timer.stop("Finalize");
+
+            std::cout << "Hyperedges after processCutHyperedges: " << fhgb.numHyperedges() << std::endl;
 
             return result;
         }
@@ -145,6 +155,8 @@ namespace whfc_rb {
 
         MockBuilder mock_builder;
         tbb::enumerable_thread_specific<MockBuilder> mockBuilder_thread_specific;
+        tbb::enumerable_thread_specific<whfc::Flow> baseCut_thread_specific;
+        tbb::enumerable_thread_specific<whfc::Flow> cutAtStake_thread_specific;
 
         template<typename Builder>
         void visitNode(const NodeID node, CSRHypergraph &hg, whfc::NodeWeight &w, Builder& builder, LayeredQueue<NodeID>& queue) {
@@ -219,13 +231,16 @@ namespace whfc_rb {
         void processCutHyperedges(const CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
                                   const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
                                   Builder& builder, const tbb::blocked_range<size_t>& range) {
+            whfc::Flow& baseCut = baseCut_thread_specific.local();
+            whfc::Flow& cutAtStake = cutAtStake_thread_specific.local();
+
             for (size_t i = range.begin(); i < range.end(); ++i) {
                 const HyperedgeID e = cut_hes[i];
                 assert(!visitedHyperedge.contains(e));
                 assert(partition.pinsInPart(part0, e) > 0 && partition.pinsInPart(part1, e) > 0);
                 bool connectToSource = false;
                 bool connectToTarget = false;
-                result.cutAtStake += hg.hyperedgeWeight(e);
+                cutAtStake += hg.hyperedgeWeight(e);
                 builder.startHyperedge(hg.hyperedgeWeight(e));
 
                 for (NodeID v : hg.pinsOf(e)) {
@@ -242,7 +257,7 @@ namespace whfc_rb {
                 }
                 if (connectToSource && connectToTarget) {
                     builder.removeCurrentHyperedge();
-                    result.baseCut += hg.hyperedgeWeight(e);
+                    baseCut += hg.hyperedgeWeight(e);
                 } else {
                     if (connectToSource) {
                         builder.addPin(result.source);
