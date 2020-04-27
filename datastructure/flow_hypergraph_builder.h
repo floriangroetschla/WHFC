@@ -78,7 +78,9 @@ namespace whfc {
 		}
 
 		void addMockBuilder(MockBuilder& builder, bool add_nodes) {
-		    builder.finishHyperedge();
+		    if ( !builder.finishHyperedge() ) {
+		        builder.hyperedges.back().capacity = 0;
+		    }
 		    if ( !finishHyperedge() ) {
 		        hyperedges.back().capacity = 0;
 		    }
@@ -122,6 +124,7 @@ namespace whfc {
             }
 
             numPinsAtHyperedgeStart = numPins();
+            assert(hyperedges.back().first_out == numPins());
 		}
 		
 		void finalize() {

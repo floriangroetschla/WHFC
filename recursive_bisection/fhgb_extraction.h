@@ -89,23 +89,22 @@ namespace whfc_rb {
 
             timer.stop("BFS");
 
-            std::cout << "Hyperedges after BFS: " << fhgb.numHyperedges() << std::endl;
-
-            tbb::blocked_range<size_t> range(0, cut_hes.size());
-
             timer.start("Process Cut Hyperedges", "Extraction");
-            //processCutHyperedges(hg, cut_hes, partition, part0, part1, fhgb, range);
+            tbb::blocked_range<size_t> range(0, cut_hes.size(), 1000);
 
-            mockBuilder_thread_specific = tbb::enumerable_thread_specific<MockBuilder>(std::ref(fhgb.getNodes()));
+            if (cut_hes.size() > 1000) {
+                mockBuilder_thread_specific = tbb::enumerable_thread_specific<MockBuilder>(std::ref(fhgb.getNodes()));
 
-            tbb::parallel_for(range, [=](const tbb::blocked_range<size_t>& sub_range) {
-                MockBuilder& builder = mockBuilder_thread_specific.local();
-                processCutHyperedges(hg, cut_hes, partition, part0, part1, builder, sub_range);
-            });
-            timer.stop("Process Cut Hyperedges");
+                tbb::parallel_for(range, [=](const tbb::blocked_range<size_t>& sub_range) {
+                    MockBuilder& builder = mockBuilder_thread_specific.local();
+                    processCutHyperedges(hg, cut_hes, partition, part0, part1, builder, sub_range);
+                });
 
-            for (MockBuilder& builder : mockBuilder_thread_specific) {
-                fhgb.addMockBuilder(builder, false);
+                for (MockBuilder& builder : mockBuilder_thread_specific) {
+                    fhgb.addMockBuilder(builder, false);
+                }
+            } else {
+                processCutHyperedges(hg, cut_hes, partition, part0, part1, fhgb, range);
             }
 
             for (whfc::Flow& baseCut : baseCut_thread_specific) {
@@ -118,6 +117,8 @@ namespace whfc_rb {
                 cutAtStake = 0;
             }
 
+            timer.stop("Process Cut Hyperedges");
+
             std::vector<NodeWeight> totalWeights = partition.partitionWeights();
 
             fhgb.nodeWeight(result.source) = partition.partWeight(part0) - w0;
@@ -126,8 +127,6 @@ namespace whfc_rb {
             timer.start("Finalize", "Extraction");
             fhgb.finalize();
             timer.stop("Finalize");
-
-            std::cout << "Hyperedges after processCutHyperedges: " << fhgb.numHyperedges() << std::endl;
 
             return result;
         }
