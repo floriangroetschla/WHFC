@@ -85,6 +85,10 @@ public:
         return false;
     }
 
+    std::vector<NodeData>& getNodes() {
+        return nodes;
+    }
+
 private:
     void removeLastPin() {
         nodes[ pins.back() + 1 ].first_out--;
