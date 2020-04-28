@@ -21,7 +21,9 @@ namespace whfc_rb {
                 second_queue(maxNumNodes + 2),
                 visitedNode(maxNumNodes), visitedHyperedge(maxNumEdges),
                 globalToLocalID(maxNumNodes),
-                mt(seed), config(config) {}
+                mt(seed), config(config),
+                thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<whfc::Node>>()),
+                nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<whfc::Node>>()) {}
 
         struct ExtractorInfo {
             whfc::Node source;
@@ -58,6 +60,7 @@ namespace whfc_rb {
 
             whfc::NodeWeight w0, w1;
 
+            /*
             tbb::parallel_invoke([&]() {
                 fhgb.addNode(whfc::NodeWeight(0));
                 layered_queue.push(invalid_node);
@@ -70,21 +73,34 @@ namespace whfc_rb {
                 second_queue.reinitialize();
                 w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, whfc::Node(0), delta, temp_dist, timer, mock_builder, second_queue);
             });
+             */
+
+            fhgb.addNode(whfc::NodeWeight(0));
+            layered_queue.push(invalid_node);
+            layered_queue.reinitialize();
+            w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, fhgb, layered_queue);
+
+            result.target = whfc::Node(fhgb.numNodes());
+            fhgb.addNode(whfc::NodeWeight(0));
+            layered_queue.push(invalid_node);
+            layered_queue.reinitialize();
+            w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, timer, fhgb, layered_queue);
 
             timer.stop("Parallel_BFS");
 
             timer.start("Merging", "BFS");
-            size_t num_nodes_first_search = fhgb.numNodes();
-            result.target = whfc::Node(fhgb.numNodes());
+            //size_t num_nodes_first_search = fhgb.numNodes();
+            //result.target = whfc::Node(fhgb.numNodes());
 
-            fhgb.addMockBuilder(mock_builder, true);
+            //fhgb.addMockBuilder(mock_builder, true);
 
+            /*
             for (NodeID u : second_queue.allElements()) {
                 layered_queue.push(u);
                 if (u != whfc::Node::InvalidValue) {
                     globalToLocalID[u] = globalToLocalID[u] + whfc::Node(num_nodes_first_search);
                 }
-            }
+            }*/
             timer.stop("Merging");
 
             timer.stop("BFS");
@@ -156,70 +172,48 @@ namespace whfc_rb {
         tbb::enumerable_thread_specific<MockBuilder> mockBuilder_thread_specific;
         tbb::enumerable_thread_specific<whfc::Flow> baseCut_thread_specific;
         tbb::enumerable_thread_specific<whfc::Flow> cutAtStake_thread_specific;
+        tbb::enumerable_thread_specific<whfc::NodeWeight> weights_thread_specific;
 
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<whfc::Node>>> thisLayer_thread_specific;
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<whfc::Node>>> nextLayer_thread_specific;
-        tbb::enumerable_thread_specific<whfc::NodeWeight> w_thread_specific;
 
-        template<typename Builder>
-        inline void tryToVisitNode(const NodeID u, CSRHypergraph &hg, std::atomic<whfc::NodeWeight> &w, Builder& builder,
+        inline bool tryToVisitNode(const NodeID u, CSRHypergraph &hg, std::atomic<whfc::NodeWeight> &w, std::vector<whfc::Node>& vectorToPush,
                 LayeredQueue<NodeID>& queue, const whfc::NodeWeight& maxWeight) {
-            // TODO: add spinlock here, w and visitedNode have to be set together, remove atomic from w
             if (!visitedNode.contains(u) && w.fetch_add(hg.nodeWeight(u)) + hg.nodeWeight(u) <= maxWeight) {
-                std::vector<whfc::Node>& nextLayer = nextLayer_thread_specific->local();
-                whfc::NodeWeight& weight_local = w_thread_specific.local();
-
-                nextLayer.push_back(static_cast<whfc::Node>(u));
-                weight_local += hg.nodeWeight(u);
+                vectorToPush.push_back(static_cast<whfc::Node>(u));
+                queue.push(u);
                 visitedNode.add(u);
+                auto& local_weight = weights_thread_specific.local();
+                local_weight += hg.nodeWeight(u);
+                return true;
+            } else {
+                return false;
             }
-
-            /*
-            globalToLocalID[node] = whfc::Node(builder.numNodes());
-            queue.push(node);
-            visitedNode.add(node);
-            builder.addNode(whfc::NodeWeight(hg.nodeWeight(node)));
-            w += hg.nodeWeight(node);
-             */
         }
 
-        template<class PartitionImpl, typename CutEdgeRange, typename Builder>
-        whfc::NodeWeight BreadthFirstSearch(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
-                                            PartitionBase::PartitionID partID, PartitionBase::PartitionID otherPartID,
-                                            NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta,
-                                            whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer, Builder& builder,
-                                            LayeredQueue<NodeID>& queue) {
-            std::atomic<whfc::NodeWeight> w = 0;
-            whfc::HopDistance d = delta;
-            std::atomic<size_t> node_counter = 0;
-            size_t num_nodes = 0;
-
+        template<class Builder>
+        bool writeNodeLayerToBuilder(Builder& builder, tbb::enumerable_thread_specific<std::vector<whfc::Node>>& layer,
+                CSRHypergraph& hg, whfc::DistanceFromCut& distanceFromCut, whfc::HopDistance d) {
+            std::atomic<size_t> node_counter = builder.numNodes();
+            size_t num_nodes = builder.numNodes();
             std::vector<whfc::FlowHypergraph::NodeData>& nodes = builder.getNodes();
-            mockBuilder_thread_specific = tbb::enumerable_thread_specific<MockBuilder>(std::ref(nodes));
 
-            // Collect boundary vertices
-            for (const HyperedgeID e : cut_hes) {
-                for (NodeID v : hg.pinsOf(e)) {
-                    if (!visitedNode.contains(v) && partition[v] == partID) {
-                        tryToVisitNode(v, hg, w, builder, queue, maxWeight);
-                    }
-                }
+            for (std::vector<whfc::Node>& localLayer : layer) {
+                num_nodes += localLayer.size();
             }
 
-            // while wird hier beginnen
-
-            for (std::vector<whfc::Node>& nextLayer : *nextLayer_thread_specific) {
-                num_nodes += nextLayer.size();
-            }
+            bool has_nodes = num_nodes > builder.numNodes();
 
             // Write node data into builder
             nodes.resize(num_nodes + 1);
-            tbb::parallel_for(nextLayer_thread_specific->range(), [&](const tbb::blocked_range<tbb::enumerable_thread_specific<std::vector<whfc::Node>>::iterator>& range) {
+            tbb::parallel_for(layer.range(), [&](const tbb::blocked_range<tbb::enumerable_thread_specific<std::vector<whfc::Node>>::iterator>& range) {
                 for (auto& vector : range) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
-                        size_t begin_index = node_counter.fetch_add(nodes.size());
+                        size_t begin_index = node_counter.fetch_add(indices.size());
                         for (size_t i = indices.begin(); i < indices.end(); ++i) {
-                            const whfc::Node localID(begin_index + i);
+                            const whfc::Node localID(begin_index);
+                            begin_index++;
+                            assert(localID < num_nodes);
                             nodes[localID] = {whfc::InHeIndex(0), whfc::NodeWeight(hg.nodeWeight(vector[i]))};
                             globalToLocalID[vector[i]] = localID;
                             distanceFromCut[localID] = d;
@@ -230,91 +224,133 @@ namespace whfc_rb {
             nodes.back() = {whfc::InHeIndex(0), whfc::NodeWeight(0)};
             assert(num_nodes == node_counter.load());
 
-            // clear nextLayer
+            return has_nodes;
+        }
 
-            tbb::parallel_for(thisLayer_thread_specific->range(), [&](const tbb::blocked_range<tbb::enumerable_thread_specific<std::vector<whfc::Node>>::iterator>& range) {
-                for (auto& vector : range) {
-                    tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
-                        MockBuilder& local_builder = mockBuilder_thread_specific.local();
+        template<class PartitionImpl, typename CutEdgeRange, typename Builder>
+        whfc::NodeWeight BreadthFirstSearch(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
+                                            PartitionBase::PartitionID partID, PartitionBase::PartitionID otherPartID,
+                                            NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta,
+                                            whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer, Builder& builder,
+                                            LayeredQueue<NodeID>& queue) {
+            std::atomic<whfc::NodeWeight> w = 0;
+            weights_thread_specific.clear();
+            whfc::HopDistance d = delta;
 
-                        for (size_t i = indices.begin(); i < indices.end(); ++i) {
-                            const NodeID u = vector[i];
+            std::vector<whfc::FlowHypergraph::NodeData>& nodes = builder.getNodes();
+            mockBuilder_thread_specific = tbb::enumerable_thread_specific<MockBuilder>(std::ref(nodes));
 
-                            // TODO: hyperedges have to be set atomically
-                            for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                                if (!visitedHyperedge.contains(e) && partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
-                                    local_builder.startHyperedge(hg.hyperedgeWeight(e));
-                                    bool connectToTerminal = false;
-                                    for (NodeID v : hg.pinsOf(e)) {
-                                        if (partition[v] == partID) {
-                                            if (!visitedNode.contains(v)) {
-                                                tryToVisitNode(v, hg, w, local_builder, queue, maxWeight);
-                                                //distanceFromCut[globalToLocalID[v]] = d;
-                                            }
+            visitedNode.clear();
+            visitedHyperedge.clear();
 
-                                            if (visitedNode.contains(v)) {
-                                                assert(globalToLocalID[v] < builder.numNodes());
-                                                local_builder.addPin(globalToLocalID[v]);
-                                            } else {
-                                                connectToTerminal = true;
-                                            }
-                                        }
-                                    }
-                                    if (connectToTerminal) {
-                                        assert(terminal < builder.numNodes());
-                                        local_builder.addPin(terminal);
-                                    }
-                                    visitedHyperedge.add(e);
-                                }
-                            }
-                        }
-                    });
-                }
-            });
+            bool nodes_left = false;
 
-
-
-
-            while (!queue.empty()) {
-                if (queue.currentLayerEmpty()) {
-                    queue.finishNextLayer();
-                    d += delta;
-                }
-                NodeID u = queue.pop();
-
-                for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                    if (!visitedHyperedge.contains(e) && partition.pinsInPart(otherPartID, e) == 0 &&
-                        partition.pinsInPart(partID, e) > 1) {
-                        builder.startHyperedge(hg.hyperedgeWeight(e));
-                        bool connectToTerminal = false;
-                        for (NodeID v : hg.pinsOf(e)) {
-                            if (partition[v] == partID) {
-                                if (!visitedNode.contains(v) && w + hg.nodeWeight(v) <= maxWeight) {
-                                    visitNode(v, hg, w, builder, queue);
-                                    distanceFromCut[globalToLocalID[v]] = d;
-                                }
-
-                                if (visitedNode.contains(v)) {
-                                    assert(globalToLocalID[v] < builder.numNodes());
-                                    builder.addPin(globalToLocalID[v]);
-                                } else {
-                                    connectToTerminal = true;
-                                }
-                            }
-                        }
-                        if (connectToTerminal) {
-                            assert(terminal < builder.numNodes());
-                            builder.addPin(terminal);
-                        }
-                        visitedHyperedge.add(e);
+            auto& thisLayer = thisLayer_thread_specific->local();
+            // Collect boundary vertices
+            for (const HyperedgeID e : cut_hes) {
+                for (NodeID v : hg.pinsOf(e)) {
+                    if (!visitedNode.contains(v) && partition[v] == partID) {
+                        tryToVisitNode(v, hg, w, thisLayer, queue, maxWeight);
                     }
                 }
             }
 
+            // Write nodes to the builder, this also ensures globalToLocal-mapping is set correctly
+            nodes_left = writeNodeLayerToBuilder(builder, *thisLayer_thread_specific, hg, distanceFromCut, d);
             d += delta;
+
+            while (nodes_left) {
+                visitedHyperedge.clear();
+
+                // scan hyperedges and add nodes to the next layer
+                tbb::parallel_for(thisLayer_thread_specific->range(), [&](const tbb::blocked_range<tbb::enumerable_thread_specific<std::vector<whfc::Node>>::iterator>& range) {
+                    for (auto& vector : range) {
+                        tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
+                            auto& nextLayer = nextLayer_thread_specific->local();
+
+                            for (size_t i = indices.begin(); i < indices.end(); ++i) {
+                                const NodeID u = vector[i];
+
+                                // TODO: hyperedges have to be set atomically
+                                for (HyperedgeID e : hg.hyperedgesOf(u)) {
+                                    if (!visitedHyperedge.contains(e) && partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
+                                        for (NodeID v : hg.pinsOf(e)) {
+                                            if (partition[v] == partID) {
+                                                if (!visitedNode.contains(v)) {
+                                                    tryToVisitNode(v, hg, w, nextLayer, queue, maxWeight);
+                                                }
+                                            }
+                                        }
+                                        visitedHyperedge.add(e);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
+
+                // This ensures a correct globalToLocal-mapping for the next step
+                nodes_left = writeNodeLayerToBuilder(builder, *nextLayer_thread_specific, hg, distanceFromCut, d);
+
+                // TODO: use one for every BFS
+                visitedHyperedge.clear();
+
+                // scan hyperedges again and write them to local builders
+                tbb::parallel_for(thisLayer_thread_specific->range(), [&](const tbb::blocked_range<tbb::enumerable_thread_specific<std::vector<whfc::Node>>::iterator>& range) {
+                    for (auto& vector : range) {
+                        tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
+                            auto& local_builder = mockBuilder_thread_specific.local();
+
+                            for (size_t i = indices.begin(); i < indices.end(); ++i) {
+                                const NodeID u = vector[i];
+
+                                for (HyperedgeID e : hg.hyperedgesOf(u)) {
+                                    if (!visitedHyperedge.contains(e) && partition.pinsInPart(otherPartID, e) == 0 &&
+                                        partition.pinsInPart(partID, e) > 1) {
+                                        local_builder.startHyperedge(hg.hyperedgeWeight(e));
+                                        bool connectToTerminal = false;
+                                        for (NodeID v : hg.pinsOf(e)) {
+                                            if (partition[v] == partID) {
+                                                if (visitedNode.contains(v)) {
+                                                    local_builder.addPin(globalToLocalID[v]);
+                                                } else {
+                                                    connectToTerminal = true;
+                                                }
+                                            }
+                                        }
+                                        if (connectToTerminal) {
+                                            local_builder.addPin(terminal);
+                                        }
+                                        visitedHyperedge.add(e);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
+
+                std::swap(thisLayer_thread_specific, nextLayer_thread_specific);
+
+                for (auto& vector : *nextLayer_thread_specific) {
+                    vector.clear();
+                }
+
+                d += delta;
+
+            }
+
             distanceFromCut[terminal] = d;
 
-            return w;
+            for (MockBuilder& local_builder : mockBuilder_thread_specific) {
+                builder.addMockBuilder(local_builder, false);
+            }
+
+            whfc::NodeWeight totalWeight = 0;
+            for (NodeWeight weight : weights_thread_specific) {
+                totalWeight += weight;
+            }
+
+            return totalWeight;
         }
 
         template<class PartitionImpl, class CutEdgeRange, class Builder>
