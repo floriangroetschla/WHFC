@@ -240,9 +240,6 @@ namespace whfc_rb {
             std::vector<whfc::FlowHypergraph::NodeData>& nodes = builder.getNodes();
             mockBuilder_thread_specific = tbb::enumerable_thread_specific<MockBuilder>(std::ref(nodes));
 
-            visitedNode.clear();
-            visitedHyperedge.clear();
-
             thisLayer_thread_specific->clear();
             nextLayer_thread_specific->clear();
 
