@@ -205,7 +205,7 @@ namespace whfc_rb {
             bool has_nodes = num_nodes > builder.numNodes();
 
             // Write node data into builder
-            nodes.resize(num_nodes + 1);
+            nodes.resize(num_nodes + 1); // maybe use reserve
             tbb::parallel_for(layer.range(), [&](const tbb::blocked_range<tbb::enumerable_thread_specific<std::vector<whfc::Node>>::iterator>& range) {
                 for (auto& vector : range) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
@@ -214,14 +214,14 @@ namespace whfc_rb {
                             const whfc::Node localID(begin_index);
                             begin_index++;
                             assert(localID < num_nodes);
-                            nodes[localID] = {whfc::InHeIndex(0), whfc::NodeWeight(hg.nodeWeight(vector[i]))};
+                            nodes[localID].weight = whfc::NodeWeight(hg.nodeWeight(vector[i]));
+                            //nodes[localID] = {whfc::InHeIndex(0), whfc::NodeWeight(hg.nodeWeight(vector[i]))};
                             globalToLocalID[vector[i]] = localID;
                             distanceFromCut[localID] = d;
                         }
                     });
                 }
             });
-            nodes.back() = {whfc::InHeIndex(0), whfc::NodeWeight(0)};
             assert(num_nodes == node_counter.load());
 
             return has_nodes;
@@ -243,6 +243,9 @@ namespace whfc_rb {
             visitedNode.clear();
             visitedHyperedge.clear();
 
+            thisLayer_thread_specific->clear();
+            nextLayer_thread_specific->clear();
+
             bool nodes_left = false;
 
             auto& thisLayer = thisLayer_thread_specific->local();
@@ -260,8 +263,6 @@ namespace whfc_rb {
             d += delta;
 
             while (nodes_left) {
-                visitedHyperedge.clear();
-
                 // scan hyperedges and add nodes to the next layer
                 tbb::parallel_for(thisLayer_thread_specific->range(), [&](const tbb::blocked_range<tbb::enumerable_thread_specific<std::vector<whfc::Node>>::iterator>& range) {
                     for (auto& vector : range) {
@@ -281,7 +282,7 @@ namespace whfc_rb {
                                                 }
                                             }
                                         }
-                                        visitedHyperedge.add(e);
+                                        //visitedHyperedge.add(e);
                                     }
                                 }
                             }
@@ -291,9 +292,6 @@ namespace whfc_rb {
 
                 // This ensures a correct globalToLocal-mapping for the next step
                 nodes_left = writeNodeLayerToBuilder(builder, *nextLayer_thread_specific, hg, distanceFromCut, d);
-
-                // TODO: use one for every BFS
-                visitedHyperedge.clear();
 
                 // scan hyperedges again and write them to local builders
                 tbb::parallel_for(thisLayer_thread_specific->range(), [&](const tbb::blocked_range<tbb::enumerable_thread_specific<std::vector<whfc::Node>>::iterator>& range) {
