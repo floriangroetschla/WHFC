@@ -78,8 +78,12 @@ public:
         return timestamps[i].exchange(generation) != generation;
     }
 
-    bool isSet(size_t i) {
+    bool isSet(size_t i) const {
         return timestamps[i] == generation;
+    }
+
+    void reset(size_t i) {
+        timestamps[i] = generation - 1;
     }
 
     void reset() {
