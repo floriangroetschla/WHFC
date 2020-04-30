@@ -20,9 +20,9 @@ namespace whfc_rb {
 
         FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, int seed, const PartitionConfig& config) :
                 fhgb(2 * config.percentage_bfs_from_cut * maxNumNodes + 2, maxNumEdges),
-                localToGlobalID(maxNumNodes + 2),
                 visitedNode(maxNumNodes), visitedHyperedge(maxNumEdges),
                 globalToLocalID(maxNumNodes),
+                localToGlobalID(maxNumNodes + 2),
                 mt(seed), config(config),
                 thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<whfc::Node>>()),
                 nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<whfc::Node>>()) {}
@@ -245,15 +245,19 @@ namespace whfc_rb {
             bool nodes_left = false;
             whfc::NodeWeight& localWeight = weights_thread_specific.local();
 
-            auto& thisLayer = thisLayer_thread_specific->local();
-            // Collect boundary vertices, do this in parallel in the future
-            for (const HyperedgeID e : cut_hes) {
-                for (NodeID v : hg.pinsOf(e)) {
-                    if (!visitedNode.isSet(v) && partition[v] == partID) {
-                        tryToVisitNode(v, hg, w, thisLayer, maxWeight, localWeight);
+            // Collect boundary vertices
+            tbb::blocked_range<size_t> range(0, cut_hes.size(), 1000);
+            tbb::parallel_for(range, [&](const tbb::blocked_range<size_t>& sub_range) {
+                auto& thisLayer = thisLayer_thread_specific->local();
+                for (size_t i = sub_range.begin(); i < sub_range.end(); ++i) {
+                    const HyperedgeID e = cut_hes[i];
+                    for (NodeID v : hg.pinsOf(e)) {
+                        if (partition[v] == partID) {
+                            tryToVisitNode(v, hg, w, thisLayer, maxWeight, localWeight);
+                        }
                     }
                 }
-            }
+            });
 
             // Write nodes to the builder, this also ensures globalToLocal-mapping is set correctly
             nodes_left = writeNodeLayerToBuilder(builder, *thisLayer_thread_specific, hg, distanceFromCut, d);
