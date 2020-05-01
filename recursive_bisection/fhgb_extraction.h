@@ -143,6 +143,8 @@ namespace whfc_rb {
             fhgb.finalize();
             timer.stop("Finalize");
 
+            //fhgb.printHypergraph(std::cout);
+
             return result;
         }
 
@@ -336,10 +338,7 @@ namespace whfc_rb {
 
             distanceFromCut[terminal] = d;
 
-            //TODO: do this in parallel
-            for (MockBuilder& local_builder : mockBuilder_thread_specific) {
-                builder.addMockBuilder(local_builder, false);
-            }
+            builder.addMockBuildersParallel(mockBuilder_thread_specific);
 
             whfc::NodeWeight totalWeight = 0;
             for (NodeWeight weight : weights_thread_specific) {

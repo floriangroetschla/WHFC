@@ -1,5 +1,8 @@
 #pragma once
 
+#include <atomic>
+#include <tbb/parallel_for.h>
+#include <tbb/enumerable_thread_specific.h>
 #include "flow_hypergraph.h"
 #include "../recursive_bisection/mock_builder.h"
 
@@ -75,6 +78,51 @@ namespace whfc {
 		void removeCurrentHyperedge() {
 			while (numPins() > numPinsAtHyperedgeStart)
 				removeLastPin();
+		}
+
+		void addMockBuildersParallel(tbb::enumerable_thread_specific<MockBuilder>& mockBuilder_thread_specific) {
+            finishHyperedge();
+		    std::atomic<size_t> hyperedgeStartIndex = numHyperedges();
+		    std::atomic<size_t> pinsStartIndex = numPins();
+
+		    size_t numberOfHyperedges = numHyperedges();
+		    size_t numberOfPins = numPins();
+
+		    // resize datastructures
+		    for (MockBuilder& builder : mockBuilder_thread_specific) {
+                builder.finishHyperedge();
+		        numberOfHyperedges += builder.numHyperedges();
+		        numberOfPins += builder.numPins();
+		    }
+
+		    hyperedges.resize(numberOfHyperedges + 1);
+		    pins_sending_flow.resize(numberOfHyperedges);
+		    pins_receiving_flow.resize(numberOfHyperedges);
+		    pins.resize(numberOfPins);
+
+		    tbb::parallel_for(mockBuilder_thread_specific.range(1), [&](tbb::blocked_range<tbb::enumerable_thread_specific<MockBuilder>::iterator>& builder_it) {
+		        for (auto& builder : builder_it) {
+                    size_t hyperedgeStart = hyperedgeStartIndex.fetch_add(builder.numHyperedges());
+                    size_t pinCounter = pinsStartIndex.fetch_add(builder.numPins());
+                    size_t pinOffset = pinCounter;
+
+                    for (size_t i = 0; i < builder.pins.size(); ++i) {
+                        pins[pinCounter++] = {builder.pins[i], InHeIndex::Invalid()};
+                    }
+
+                    for (size_t i = 0; i < builder.numHyperedges(); ++i) {
+                        pins_sending_flow[hyperedgeStart + i] = PinIndexRange(PinIndex(pinOffset) + builder.hyperedges[i].first_out, PinIndex(pinOffset) + builder.hyperedges[i].first_out);
+                        hyperedges[hyperedgeStart + i] = {PinIndex(pinOffset) + builder.hyperedges[i].first_out, Flow(0), builder.hyperedges[i].capacity};
+                        pins_receiving_flow[hyperedgeStart + i] = PinIndexRange(PinIndex(pinOffset) + builder.hyperedges[i+1].first_out, PinIndex(pinOffset) + builder.hyperedges[i+1].first_out);
+                        maxHyperedgeCapacity = std::max(maxHyperedgeCapacity, builder.hyperedges[i].capacity);
+                    }
+		        }
+
+		    });
+		    hyperedges.back().first_out = PinIndex(numPins());
+            numPinsAtHyperedgeStart = numPins();
+
+            assert(numberOfPins == pinsStartIndex.load());
 		}
 
 		void addMockBuilder(MockBuilder& builder, bool add_nodes) {

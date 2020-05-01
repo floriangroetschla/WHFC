@@ -64,6 +64,8 @@ public:
 
     inline size_t numNodes() const { return nodes.size() - 1 ; }
 
+    inline size_t numHyperedges() const { return hyperedges.size() - 1 ; }
+
     size_t currentHyperedgeSize() const {
         return numPins() - numPinsAtHyperedgeStart;
     }
