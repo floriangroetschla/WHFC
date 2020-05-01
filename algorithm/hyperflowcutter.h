@@ -17,16 +17,18 @@ namespace whfc {
 		Flow upperFlowBound;
 		Piercer<FlowAlgorithm> piercer;
 		bool find_most_balanced = true;
+		whfc_rb::PartitionConfig config;
 
 		static constexpr bool log = false;
 		
-		HyperFlowCutter(FlowHypergraph& hg, int seed) :
+		HyperFlowCutter(FlowHypergraph& hg, int seed, whfc_rb::PartitionConfig config) :
 				timer("HyperFlowCutter"),
 				hg(hg),
 				cs(hg, timer),
-				flow_algo(hg, timer),
+				flow_algo(hg, timer, config.numThreads),
 				upperFlowBound(maxFlow),
-				piercer(hg, cs, timer)
+				piercer(hg, cs, timer),
+				config(config)
 		{
 			cs.rng.setSeed(seed);
 		}

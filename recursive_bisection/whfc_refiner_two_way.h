@@ -15,7 +15,7 @@ namespace whfc_rb {
 
         WHFCRefinerTwoWay(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, int seed, const PartitionConfig& config) :
                 extractor(maxNumNodes, maxNumEdges, maxNumPins, seed, config),
-                hfc(extractor.fhgb, seed), timer("WHFCRefinerTwoWay"), config(config)
+                hfc(extractor.fhgb, seed, config), timer("WHFCRefinerTwoWay"), config(config)
         {
         }
 
@@ -61,11 +61,13 @@ namespace whfc_rb {
             assert(hfc.cs.n.sourceReachableWeight <= maxBlockWeight0 &&
                    hfc.cs.n.targetReachableWeight <= maxBlockWeight1);
 
+
             if (newCut < extractor_info.cutAtStake ||
                 (newCut == extractor_info.cutAtStake && imbalanceAfter < imbalanceBefore)) {
                 timer.start("Reassignment", "WHFCRefinerTwoWay");
                 reassign(partition, extractor_info, part0, part1);
                 timer.stop("Reassignment");
+
                 return true;
             }
 
