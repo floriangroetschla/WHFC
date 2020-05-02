@@ -102,12 +102,14 @@ namespace whfc_rb {
                 w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, timer, fhgb);
             }
 
+
             timer.stop("BFS");
 
             timer.start("Process Cut Hyperedges", "Extraction");
             tbb::blocked_range<size_t> range(0, cut_hes.size(), 1000);
 
             if (processCutHyperedgesInParallel && cut_hes.size() > 1000) {
+                // TODO: fix mockBuilders to fhgb and don't reinitialize every time
                 mockBuilder_thread_specific = tbb::enumerable_thread_specific<MockBuilder>(std::ref(fhgb.getNodes()));
 
                 tbb::parallel_for(range, [=](const tbb::blocked_range<size_t>& sub_range) {
@@ -115,9 +117,7 @@ namespace whfc_rb {
                     processCutHyperedges(hg, cut_hes, partition, part0, part1, builder, sub_range);
                 });
 
-                for (MockBuilder& builder : mockBuilder_thread_specific) {
-                    fhgb.addMockBuilder(builder, false);
-                }
+                fhgb.addMockBuildersParallel(mockBuilder_thread_specific);
             } else {
                 processCutHyperedges(hg, cut_hes, partition, part0, part1, fhgb, range);
             }
@@ -366,7 +366,7 @@ namespace whfc_rb {
 
                 for (NodeID v : hg.pinsOf(e)) {
                     if (visitedNode.isSet(v)) {
-                        assert(globalToLocalID[v] < fhgb.numNodes());
+                        assert(globalToLocalID[v] < builder.numNodes());
                         builder.addPin(globalToLocalID[v]);
                     } else {
                         connectToSource |= (partition[v] == part0);

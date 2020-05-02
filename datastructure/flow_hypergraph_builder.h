@@ -184,9 +184,10 @@ namespace whfc {
 				nodes[u+1].first_out += nodes[u].first_out;
 				total_node_weight += nodes[u].weight;
 			}
-			
+
 			incident_hyperedges.resize(numPins());
 			for (Hyperedge e : hyperedgeIDs()) {
+			    assert(beginIndexPins(e) < endIndexPins(e));
 				for (auto pin_it = beginIndexPins(e); pin_it != endIndexPins(e); pin_it++) {
 					Pin& p = pins[pin_it];
 					InHeIndex ind_he = nodes[p.pin].first_out++;	//destroy first_out temporarily and reset later

@@ -52,7 +52,6 @@ public:
         assert(u < numNodes());
         pins.push_back(u);
         __sync_fetch_and_add(&nodes[u+1].first_out.value(), 1);
-        //nodes[u+1].first_out++;
     }
 
     void addNode(const whfc::NodeWeight w) {
@@ -93,7 +92,7 @@ public:
 
 private:
     void removeLastPin() {
-        nodes[ pins.back() + 1 ].first_out--;
+        __sync_fetch_and_sub(&nodes[pins.back() + 1].first_out.value(), 1);
         pins.pop_back();
     }
 };
