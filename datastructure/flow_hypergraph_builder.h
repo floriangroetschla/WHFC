@@ -82,11 +82,13 @@ namespace whfc {
 
 		void addMockBuildersParallel(tbb::enumerable_thread_specific<MockBuilder>& mockBuilder_thread_specific) {
             finishHyperedge();
-		    std::atomic<size_t> hyperedgeStartIndex = numHyperedges();
-		    std::atomic<size_t> pinsStartIndex = numPins();
+		    size_t hyperedgeStartIndex = numHyperedges();
+		    size_t pinsStartIndex = numPins();
 
 		    size_t numberOfHyperedges = numHyperedges();
 		    size_t numberOfPins = numPins();
+
+            std::atomic_flag lock = ATOMIC_FLAG_INIT;
 
 		    // resize datastructures
 		    for (MockBuilder& builder : mockBuilder_thread_specific) {
@@ -102,8 +104,13 @@ namespace whfc {
 
 		    tbb::parallel_for(mockBuilder_thread_specific.range(1), [&](tbb::blocked_range<tbb::enumerable_thread_specific<MockBuilder>::iterator>& builder_it) {
 		        for (auto& builder : builder_it) {
-                    size_t hyperedgeStart = hyperedgeStartIndex.fetch_add(builder.numHyperedges());
-                    size_t pinCounter = pinsStartIndex.fetch_add(builder.numPins());
+                    while (lock.test_and_set(std::memory_order_acquire))
+                        ;
+                    size_t hyperedgeStart = hyperedgeStartIndex;
+                    hyperedgeStartIndex += builder.numHyperedges();
+                    size_t pinCounter = pinsStartIndex;
+                    pinsStartIndex += builder.numPins();
+                    lock.clear(std::memory_order_release);
                     size_t pinOffset = pinCounter;
 
                     for (size_t i = 0; i < builder.pins.size(); ++i) {
@@ -122,7 +129,7 @@ namespace whfc {
 		    hyperedges.back().first_out = PinIndex(numPins());
             numPinsAtHyperedgeStart = numPins();
 
-            assert(numberOfPins == pinsStartIndex.load());
+            assert(numberOfPins == pinsStartIndex);
 		}
 
 		void addMockBuilder(MockBuilder& builder, bool add_nodes) {
@@ -188,6 +195,10 @@ namespace whfc {
 			incident_hyperedges.resize(numPins());
 			for (Hyperedge e : hyperedgeIDs()) {
 			    assert(beginIndexPins(e) < endIndexPins(e));
+			    if (beginIndexPins(e) >= endIndexPins(e)) {
+			        std::cout << "Fehler: [" << beginIndexPins(e) << ", " << endIndexPins(e) << "] -- ["
+			        << hyperedges[e-2].first_out << ", " << hyperedges[e-1].first_out << ", " << hyperedges[e].first_out << ", " << hyperedges[e+1].first_out << ", " << hyperedges[e+2].first_out << hyperedges[e+3].first_out << "]" << std::endl;
+			    }
 				for (auto pin_it = beginIndexPins(e); pin_it != endIndexPins(e); pin_it++) {
 					Pin& p = pins[pin_it];
 					InHeIndex ind_he = nodes[p.pin].first_out++;	//destroy first_out temporarily and reset later
