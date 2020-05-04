@@ -3,6 +3,7 @@
 #include <atomic>
 #include <tbb/parallel_for.h>
 #include <tbb/enumerable_thread_specific.h>
+#include <tbb/parallel_for_each.h>
 #include "flow_hypergraph.h"
 #include "../recursive_bisection/mock_builder.h"
 
@@ -102,28 +103,26 @@ namespace whfc {
 		    pins_receiving_flow.resize(numberOfHyperedges);
 		    pins.resize(numberOfPins);
 
-		    tbb::parallel_for(mockBuilder_thread_specific.range(1), [&](tbb::blocked_range<tbb::enumerable_thread_specific<MockBuilder>::iterator>& builder_it) {
-		        for (auto& builder : builder_it) {
-                    while (lock.test_and_set(std::memory_order_acquire))
-                        ;
-                    size_t hyperedgeStart = hyperedgeStartIndex;
-                    hyperedgeStartIndex += builder.numHyperedges();
-                    size_t pinCounter = pinsStartIndex;
-                    pinsStartIndex += builder.numPins();
-                    lock.clear(std::memory_order_release);
-                    size_t pinOffset = pinCounter;
+		    tbb::parallel_for_each(mockBuilder_thread_specific.range(), [&](MockBuilder& builder) {
+                while (lock.test_and_set(std::memory_order_acquire))
+                    ;
+                size_t hyperedgeStart = hyperedgeStartIndex;
+                hyperedgeStartIndex += builder.numHyperedges();
+                size_t pinCounter = pinsStartIndex;
+                pinsStartIndex += builder.numPins();
+                lock.clear(std::memory_order_release);
+                size_t pinOffset = pinCounter;
 
-                    for (size_t i = 0; i < builder.pins.size(); ++i) {
-                        pins[pinCounter++] = {builder.pins[i], InHeIndex::Invalid()};
-                    }
+                for (size_t i = 0; i < builder.pins.size(); ++i) {
+                    pins[pinCounter++] = {builder.pins[i], InHeIndex::Invalid()};
+                }
 
-                    for (size_t i = 0; i < builder.numHyperedges(); ++i) {
-                        pins_sending_flow[hyperedgeStart + i] = PinIndexRange(PinIndex(pinOffset) + builder.hyperedges[i].first_out, PinIndex(pinOffset) + builder.hyperedges[i].first_out);
-                        hyperedges[hyperedgeStart + i] = {PinIndex(pinOffset) + builder.hyperedges[i].first_out, Flow(0), builder.hyperedges[i].capacity};
-                        pins_receiving_flow[hyperedgeStart + i] = PinIndexRange(PinIndex(pinOffset) + builder.hyperedges[i+1].first_out, PinIndex(pinOffset) + builder.hyperedges[i+1].first_out);
-                        maxHyperedgeCapacity = std::max(maxHyperedgeCapacity, builder.hyperedges[i].capacity);
-                    }
-		        }
+                for (size_t i = 0; i < builder.numHyperedges(); ++i) {
+                    pins_sending_flow[hyperedgeStart + i] = PinIndexRange(PinIndex(pinOffset) + builder.hyperedges[i].first_out, PinIndex(pinOffset) + builder.hyperedges[i].first_out);
+                    hyperedges[hyperedgeStart + i] = {PinIndex(pinOffset) + builder.hyperedges[i].first_out, Flow(0), builder.hyperedges[i].capacity};
+                    pins_receiving_flow[hyperedgeStart + i] = PinIndexRange(PinIndex(pinOffset) + builder.hyperedges[i+1].first_out, PinIndex(pinOffset) + builder.hyperedges[i+1].first_out);
+                    maxHyperedgeCapacity = std::max(maxHyperedgeCapacity, builder.hyperedges[i].capacity);
+                }
 
 				// REVIEW NOTE Where do you clear the mock builder?
 

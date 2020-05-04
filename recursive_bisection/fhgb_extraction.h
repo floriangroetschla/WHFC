@@ -209,22 +209,19 @@ namespace whfc_rb {
             // Write node data into builder
             nodes.resize(num_nodes + 1); // maybe use reserve
 
-            // REVIEW NOTE use tbb::parallel_for_each (to avoid loop over range of size 1) and const auto& (to avoid huge type names) ?
-            tbb::parallel_for(layer.range(), [&](const tbb::blocked_range<tbb::enumerable_thread_specific<std::vector<whfc::Node>>::iterator>& range) {
-                for (auto& vector : range) {
-                    tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
-                        size_t begin_index = node_counter.fetch_add(indices.size());
-                        for (size_t i = indices.begin(); i < indices.end(); ++i) {
-                            const whfc::Node localID(begin_index);
-                            begin_index++;
-                            assert(localID < num_nodes);
-                            nodes[localID].weight = whfc::NodeWeight(hg.nodeWeight(vector[i]));
-                            globalToLocalID[vector[i]] = localID;
-                            localToGlobalID[localID] = vector[i];
-                            distanceFromCut[localID] = d;
-                        }
-                    });
-                }
+            tbb::parallel_for_each(layer.range(), [&](const std::vector<whfc::Node>& vector) {
+                tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
+                    size_t begin_index = node_counter.fetch_add(indices.size());
+                    for (size_t i = indices.begin(); i < indices.end(); ++i) {
+                        const whfc::Node localID(begin_index);
+                        begin_index++;
+                        assert(localID < num_nodes);
+                        nodes[localID].weight = whfc::NodeWeight(hg.nodeWeight(vector[i]));
+                        globalToLocalID[vector[i]] = localID;
+                        localToGlobalID[localID] = vector[i];
+                        distanceFromCut[localID] = d;
+                    }
+                });
             });
             assert(num_nodes == node_counter.load());
 
@@ -288,7 +285,6 @@ namespace whfc_rb {
                                 const NodeID u = vector[i];
 
                                 for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                                    // REVIEW NOTE this is too expensive! could be quadratic in edge sizes. you have to set the marker!
                                     if (visitedHyperedge.set(e) == 0 && partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
                                         for (NodeID v : hg.pinsOf(e)) {
                                             if (partition[v] == partID) {
