@@ -125,6 +125,8 @@ namespace whfc {
                     }
 		        }
 
+				// REVIEW NOTE Where do you clear the mock builder?
+
 		    });
 		    hyperedges.back().first_out = PinIndex(numPins());
             numPinsAtHyperedgeStart = numPins();

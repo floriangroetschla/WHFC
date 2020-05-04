@@ -75,7 +75,7 @@ public:
     AtomicTimestampSet(size_t n) : timestamps(n), generation(0) {}
 
     bool set(size_t i) {
-        return timestamps[i].exchange(generation) != generation;
+        return timestamps[i].exchange(generation) != generation;	// REVIEW NOTE. specify memory order? efficiency of atomic operations on 16 bit ints?
     }
 
     bool isSet(size_t i) const {

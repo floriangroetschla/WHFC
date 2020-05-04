@@ -134,7 +134,7 @@ namespace whfc_rb {
 
             timer.stop("Process Cut Hyperedges");
 
-            std::vector<NodeWeight> totalWeights = partition.partitionWeights();
+            std::vector<NodeWeight> totalWeights = partition.partitionWeights();    // REVIEW NOTE where do you need this?
 
             fhgb.nodeWeight(result.source) = partition.partWeight(part0) - w0;
             fhgb.nodeWeight(result.target) = partition.partWeight(part1) - w1;
@@ -182,11 +182,12 @@ namespace whfc_rb {
             if (visitedNode.set(u)) {
                 if (w.fetch_add(hg.nodeWeight(u)) + hg.nodeWeight(u) <= maxWeight) {
                     vectorToPush.push_back(static_cast<whfc::Node>(u));
-                    localWeight += hg.nodeWeight(u);
+                    localWeight += hg.nodeWeight(u);        // REVIEW NOTE why have a thread local weight if you also have an atomic?
                     return true;
                 } else {
                     w.fetch_sub(hg.nodeWeight(u));
-                    visitedNode.reset(u);
+                    visitedNode.reset(u);   // REVIEW NOTE is this a good idea? this means other threads will try to add u again --> more contention on w
+                                            // --> necessary when adding pins
                 }
             }
             return false;
@@ -207,6 +208,8 @@ namespace whfc_rb {
 
             // Write node data into builder
             nodes.resize(num_nodes + 1); // maybe use reserve
+
+            // REVIEW NOTE use tbb::parallel_for_each (to avoid loop over range of size 1) and const auto& (to avoid huge type names) ?
             tbb::parallel_for(layer.range(), [&](const tbb::blocked_range<tbb::enumerable_thread_specific<std::vector<whfc::Node>>::iterator>& range) {
                 for (auto& vector : range) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
@@ -282,6 +285,7 @@ namespace whfc_rb {
                                 const NodeID u = vector[i];
 
                                 for (HyperedgeID e : hg.hyperedgesOf(u)) {
+                                    // REVIEW NOTE this is too expensive! could be quadratic in edge sizes. you have to set the marker!
                                     if (!visitedHyperedge.isSet(e) && partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
                                         for (NodeID v : hg.pinsOf(e)) {
                                             if (partition[v] == partID) {
@@ -300,6 +304,12 @@ namespace whfc_rb {
                 timer.start("Write_layer_to_builder", "BFS");
                 nodes_left = writeNodeLayerToBuilder(builder, *nextLayer_thread_specific, hg, distanceFromCut, d);
                 timer.stop("Write_layer_to_builder");
+
+                // REVIEW NOTE why do you write the pins to the local builders after every layer
+                // I thought we should collect all nodes first --> more work volume in just one call gives better speedups
+                // this solves the hyperedge marker issue
+                // if we know the number of pins we can also get rid of the mock builders --> sum up pin count in part in the beginning and do resize if necessary?
+
 
                 // scan hyperedges again and write them to local builders
                 timer.start("Scan_hyperedges_and_add_hyperedges", "BFS");
@@ -349,7 +359,7 @@ namespace whfc_rb {
             distanceFromCut[terminal] = d;
 
             timer.start("addMockBuildersParallel", "BFS");
-            builder.addMockBuildersParallel(mockBuilder_thread_specific);
+            builder.addMockBuildersParallel(mockBuilder_thread_specific);       // REVIEW NOTE this guy doesn't clear the mock builder --> adds earlier layers multiple times?
             timer.stop("addMockBuildersParallel");
 
             whfc::NodeWeight totalWeight = 0;

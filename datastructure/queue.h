@@ -22,6 +22,7 @@ public:
 	inline T pop() { return queue[qfront++]; }
 	inline T previousLayerPop() { return queue[layerfront++]; }
 	inline void finishNextLayer() { layerend = qend; }
+	inline void clearCurrentLayer() { qfront = layerend; }
 	inline void push(const T x) { assert(qend < queue.size()); queue[qend++] = x; }
 	inline bool previousLayerEmpty() const { return layerfront == layerend; }
 	inline T capacity() const { return static_cast<T>(queue.size()); }

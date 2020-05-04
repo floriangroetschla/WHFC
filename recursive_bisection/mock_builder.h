@@ -52,6 +52,9 @@ public:
         assert(u < numNodes());
         pins.push_back(u);
         __sync_fetch_and_add(&nodes[u+1].first_out.value(), 1);
+        // REVIEW NOTE this should give high contention on the two terminals
+        // A different approach could be to accumulate the number of occurences locally (distribute the pin array)
+        // which are merged in a second parallel step (distributing nodes)
     }
 
     void addNode(const whfc::NodeWeight w) {
