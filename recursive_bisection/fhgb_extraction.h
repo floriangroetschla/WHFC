@@ -100,6 +100,8 @@ namespace whfc_rb {
                 fhgb.addNode(whfc::NodeWeight(0));
                 localToGlobalID[result.target] = invalid_node;
                 w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, timer, fhgb);
+
+                addHyperedges(fhgb, hg, partition, part0, part1, timer);
             }
 
 
@@ -134,8 +136,6 @@ namespace whfc_rb {
 
             timer.stop("Process Cut Hyperedges");
 
-            std::vector<NodeWeight> totalWeights = partition.partitionWeights();    // REVIEW NOTE where do you need this?
-
             fhgb.nodeWeight(result.source) = partition.partWeight(part0) - w0;
             fhgb.nodeWeight(result.target) = partition.partWeight(part1) - w1;
 
@@ -161,7 +161,7 @@ namespace whfc_rb {
 
     private:
         ldc::AtomicTimestampSet<> visitedNode;
-        ldc::AtomicTimestampCounter<> visitedHyperedge;
+        ldc::AtomicTimestampSet<> visitedHyperedge;
         std::vector<whfc::Node> globalToLocalID;
         std::vector<NodeID> localToGlobalID;
         ExtractorInfo result;
@@ -209,12 +209,11 @@ namespace whfc_rb {
             // Write node data into builder
             nodes.resize(num_nodes + 1); // maybe use reserve
 
-            tbb::parallel_for_each(layer.range(), [&](const std::vector<whfc::Node>& vector) {
+            tbb::parallel_for_each(layer, [&](const std::vector<whfc::Node>& vector) {
+                size_t begin_index = node_counter.fetch_add(vector.size());
                 tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
-                    size_t begin_index = node_counter.fetch_add(indices.size());
                     for (size_t i = indices.begin(); i < indices.end(); ++i) {
-                        const whfc::Node localID(begin_index);
-                        begin_index++;
+                        const whfc::Node localID(begin_index + i);
                         assert(localID < num_nodes);
                         nodes[localID].weight = whfc::NodeWeight(hg.nodeWeight(vector[i]));
                         globalToLocalID[vector[i]] = localID;
@@ -237,13 +236,8 @@ namespace whfc_rb {
             weights_thread_specific.clear();
             whfc::HopDistance d = delta;
 
-            std::vector<whfc::FlowHypergraph::NodeData>& nodes = builder.getNodes();
-            mockBuilder_thread_specific = tbb::enumerable_thread_specific<MockBuilder>(std::ref(nodes));
-
             thisLayer_thread_specific->clear();
             nextLayer_thread_specific->clear();
-
-            visitedHyperedge.nextRound();
 
             bool nodes_left = false;
             whfc::NodeWeight& localWeight = weights_thread_specific.local();
@@ -270,13 +264,12 @@ namespace whfc_rb {
             d += delta;
             timer.stop("Write_boundary_to_builder");
 
-            size_t counterValue = visitedHyperedge.getCounter();
 
             while (nodes_left) {
                 timer.start("Scan_hyperedges_and_add_nodes", "BFS");
                 // scan hyperedges and add nodes to the next layer
-                tbb::parallel_for_each(thisLayer_thread_specific->range(), [&](const std::vector<whfc::Node>& vector) {
-                    tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
+                tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<whfc::Node>& vector) {
+                    tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size(), 1000), [&](const tbb::blocked_range<size_t>& indices) {
                         auto& nextLayer = nextLayer_thread_specific->local();
                         whfc::NodeWeight& localWeight = weights_thread_specific.local();
 
@@ -284,7 +277,7 @@ namespace whfc_rb {
                             const NodeID u = vector[i];
 
                             for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                                if (visitedHyperedge.set(e) == 0 && partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
+                                if (visitedHyperedge.set(e) && partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
                                     for (NodeID v : hg.pinsOf(e)) {
                                         if (partition[v] == partID) {
                                             tryToVisitNode(v, hg, w, nextLayer, maxWeight, localWeight);
@@ -302,45 +295,6 @@ namespace whfc_rb {
                 nodes_left = writeNodeLayerToBuilder(builder, *nextLayer_thread_specific, hg, distanceFromCut, d);
                 timer.stop("Write_layer_to_builder");
 
-                // REVIEW NOTE why do you write the pins to the local builders after every layer
-                // I thought we should collect all nodes first --> more work volume in just one call gives better speedups
-                // this solves the hyperedge marker issue
-                // if we know the number of pins we can also get rid of the mock builders --> sum up pin count in part in the beginning and do resize if necessary?
-
-                visitedHyperedge.nextRound();
-
-                // scan hyperedges again and write them to local builders
-                timer.start("Scan_hyperedges_and_add_hyperedges", "BFS");
-                tbb::parallel_for_each(thisLayer_thread_specific->range(), [&](const std::vector<whfc::Node>& vector) {
-                    tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
-                        auto& local_builder = mockBuilder_thread_specific.local();
-
-                        for (size_t i = indices.begin(); i < indices.end(); ++i) {
-                            const NodeID u = vector[i];
-
-                            for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                                if (visitedHyperedge.set(e) == counterValue && partition.pinsInPart(otherPartID, e) == 0 &&
-                                    partition.pinsInPart(partID, e) > 1) {
-                                    local_builder.startHyperedge(hg.hyperedgeWeight(e));
-                                    bool connectToTerminal = false;
-                                    for (NodeID v : hg.pinsOf(e)) {
-                                        if (partition[v] == partID) {
-                                            if (visitedNode.isSet(v)) {
-                                                local_builder.addPin(globalToLocalID[v]);
-                                            } else {
-                                                connectToTerminal = true;
-                                            }
-                                        }
-                                    }
-                                    if (connectToTerminal) {
-                                        local_builder.addPin(terminal);
-                                    }
-                                }
-                            }
-                        }
-                    });
-                });
-                timer.stop("Scan_hyperedges_and_add_hyperedges");
 
                 std::swap(thisLayer_thread_specific, nextLayer_thread_specific);
 
@@ -354,16 +308,63 @@ namespace whfc_rb {
 
             distanceFromCut[terminal] = d;
 
-            timer.start("addMockBuildersParallel", "BFS");
-            builder.addMockBuildersParallel(mockBuilder_thread_specific);       // REVIEW NOTE this guy doesn't clear the mock builder --> adds earlier layers multiple times?
-            timer.stop("addMockBuildersParallel");
-
             whfc::NodeWeight totalWeight = 0;
             for (NodeWeight weight : weights_thread_specific) {
                 totalWeight += weight;
             }
 
             return totalWeight;
+        }
+
+        template<typename Builder, typename PartitionImpl>
+        void addHyperedges(Builder& builder, CSRHypergraph& hg, const PartitionImpl &partition, PartitionBase::PartitionID part0, PartitionBase::PartitionID part1, whfc::TimeReporter& timer) {
+            std::vector<whfc::FlowHypergraph::NodeData>& nodes = builder.getNodes();
+            mockBuilder_thread_specific = tbb::enumerable_thread_specific<MockBuilder>(std::ref(nodes));
+
+            visitedHyperedge.reset();
+
+            timer.start("Add_hyperedges", "BFS");
+            tbb::parallel_for(tbb::blocked_range<size_t>(0, builder.numNodes(), 1000), [&](const tbb::blocked_range<size_t>& indices) {
+                auto& local_builder = mockBuilder_thread_specific.local();
+
+                for (size_t i = indices.begin(); i < indices.end(); ++i) {
+                    const NodeID u = localToGlobalID[i];
+
+                    // skip terminals
+                    if (u == invalid_node) {
+                        continue;
+                    }
+
+                    PartitionBase::PartitionID partID = i < result.target ? part0 : part1;
+                    PartitionBase::PartitionID otherPartID = i < result.target ? part1 : part0;
+                    whfc::Node terminal = i < result.target ? result.source : result.target;
+
+                    for (HyperedgeID e : hg.hyperedgesOf(u)) {
+                        if (visitedHyperedge.set(e) && partition.pinsInPart(otherPartID, e) == 0 &&
+                            partition.pinsInPart(partID, e) > 1) {
+                            local_builder.startHyperedge(hg.hyperedgeWeight(e));
+                            bool connectToTerminal = false;
+                            for (NodeID v : hg.pinsOf(e)) {
+                                if (partition[v] == partID) {
+                                    if (visitedNode.isSet(v)) {
+                                        local_builder.addPin(globalToLocalID[v]);
+                                    } else {
+                                        connectToTerminal = true;
+                                    }
+                                }
+                            }
+                            if (connectToTerminal) {
+                                local_builder.addPin(terminal);
+                            }
+                        }
+                    }
+                }
+            });
+            timer.stop("Add_hyperedges");
+
+            timer.start("addMockBuildersParallel", "BFS");
+            builder.addMockBuildersParallel(mockBuilder_thread_specific);
+            timer.stop("addMockBuildersParallel");
         }
 
         template<class PartitionImpl, class CutEdgeRange, class Builder>
