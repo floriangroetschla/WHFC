@@ -195,10 +195,6 @@ namespace whfc {
 			incident_hyperedges.resize(numPins());
 			for (Hyperedge e : hyperedgeIDs()) {
 			    assert(beginIndexPins(e) < endIndexPins(e));
-			    if (beginIndexPins(e) >= endIndexPins(e)) {
-			        std::cout << "Fehler: [" << beginIndexPins(e) << ", " << endIndexPins(e) << "] -- ["
-			        << hyperedges[e-2].first_out << ", " << hyperedges[e-1].first_out << ", " << hyperedges[e].first_out << ", " << hyperedges[e+1].first_out << ", " << hyperedges[e+2].first_out << hyperedges[e+3].first_out << "]" << std::endl;
-			    }
 				for (auto pin_it = beginIndexPins(e); pin_it != endIndexPins(e); pin_it++) {
 					Pin& p = pins[pin_it];
 					InHeIndex ind_he = nodes[p.pin].first_out++;	//destroy first_out temporarily and reset later
