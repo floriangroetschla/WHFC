@@ -107,34 +107,6 @@ namespace whfc_rb {
 
             timer.stop("BFS");
 
-            timer.start("Process Cut Hyperedges", "Extraction");
-            tbb::blocked_range<size_t> range(0, cut_hes.size(), 1000);
-
-            if (processCutHyperedgesInParallel && cut_hes.size() > 1000) {
-                // TODO: fix mockBuilders to fhgb and don't reinitialize every time
-                mockBuilder_thread_specific = tbb::enumerable_thread_specific<MockBuilder>(std::ref(fhgb.getNodes()));
-
-                tbb::parallel_for(range, [=](const tbb::blocked_range<size_t>& sub_range) {
-                    MockBuilder& builder = mockBuilder_thread_specific.local();
-                    processCutHyperedges(hg, cut_hes, partition, part0, part1, builder, sub_range);
-                });
-
-                fhgb.addMockBuildersParallel(mockBuilder_thread_specific);
-            } else {
-                processCutHyperedges(hg, cut_hes, partition, part0, part1, fhgb, range);
-            }
-
-            for (whfc::Flow& baseCut : baseCut_thread_specific) {
-                result.baseCut += baseCut;
-                baseCut = 0;
-            }
-
-            for (whfc::Flow& cutAtStake : cutAtStake_thread_specific) {
-                result.cutAtStake += cutAtStake;
-                cutAtStake = 0;
-            }
-
-            timer.stop("Process Cut Hyperedges");
 
             fhgb.nodeWeight(result.source) = partition.partWeight(part0) - w0;
             fhgb.nodeWeight(result.target) = partition.partWeight(part1) - w1;
@@ -326,6 +298,8 @@ namespace whfc_rb {
             timer.start("Add_hyperedges", "BFS");
             tbb::parallel_for(tbb::blocked_range<size_t>(0, builder.numNodes(), 1000), [&](const tbb::blocked_range<size_t>& indices) {
                 auto& local_builder = mockBuilder_thread_specific.local();
+                whfc::Flow& baseCut = baseCut_thread_specific.local();
+                whfc::Flow& cutAtStake = cutAtStake_thread_specific.local();
 
                 for (size_t i = indices.begin(); i < indices.end(); ++i) {
                     const NodeID u = localToGlobalID[i];
@@ -340,23 +314,55 @@ namespace whfc_rb {
                     whfc::Node terminal = i < result.target ? result.source : result.target;
 
                     for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                        if (visitedHyperedge.set(e) && partition.pinsInPart(otherPartID, e) == 0 &&
-                            partition.pinsInPart(partID, e) > 1) {
-                            local_builder.startHyperedge(hg.hyperedgeWeight(e));
-                            bool connectToTerminal = false;
-                            for (NodeID v : hg.pinsOf(e)) {
-                                if (partition[v] == partID) {
+                        if (visitedHyperedge.set(e)) {
+                            if (partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
+                                local_builder.startHyperedge(hg.hyperedgeWeight(e));
+                                bool connectToTerminal = false;
+                                for (NodeID v : hg.pinsOf(e)) {
+                                    if (partition[v] == partID) {
+                                        if (visitedNode.isSet(v)) {
+                                            local_builder.addPin(globalToLocalID[v]);
+                                        } else {
+                                            connectToTerminal = true;
+                                        }
+                                    }
+                                }
+                                if (connectToTerminal) {
+                                    local_builder.addPin(terminal);
+                                }
+                            } else if (partition.pinsInPart(part0, e) > 0 && partition.pinsInPart(part1, e) > 0) {
+                                // This is a cut hyperedge
+                                bool connectToSource = false;
+                                bool connectToTarget = false;
+                                cutAtStake += hg.hyperedgeWeight(e);
+                                local_builder.startHyperedge(hg.hyperedgeWeight(e));
+
+                                for (NodeID v : hg.pinsOf(e)) {
                                     if (visitedNode.isSet(v)) {
+                                        assert(globalToLocalID[v] < local_builder.numNodes());
                                         local_builder.addPin(globalToLocalID[v]);
                                     } else {
-                                        connectToTerminal = true;
+                                        connectToSource |= (partition[v] == part0);
+                                        connectToTarget |= (partition[v] == part1);
+                                        if (connectToSource && connectToTarget) {
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (connectToSource && connectToTarget) {
+                                    local_builder.removeCurrentHyperedge();
+                                    baseCut += hg.hyperedgeWeight(e);
+                                } else {
+                                    if (connectToSource) {
+                                        local_builder.addPin(result.source);
+                                    }
+                                    if (connectToTarget) {
+                                        local_builder.addPin(result.target);
                                     }
                                 }
                             }
-                            if (connectToTerminal) {
-                                local_builder.addPin(terminal);
-                            }
                         }
+
                     }
                 }
             });
@@ -365,6 +371,16 @@ namespace whfc_rb {
             timer.start("addMockBuildersParallel", "BFS");
             builder.addMockBuildersParallel(mockBuilder_thread_specific);
             timer.stop("addMockBuildersParallel");
+
+            for (whfc::Flow& baseCut : baseCut_thread_specific) {
+                result.baseCut += baseCut;
+                baseCut = 0;
+            }
+
+            for (whfc::Flow& cutAtStake : cutAtStake_thread_specific) {
+                result.cutAtStake += cutAtStake;
+                cutAtStake = 0;
+            }
         }
 
         template<class PartitionImpl, class CutEdgeRange, class Builder>
