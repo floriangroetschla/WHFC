@@ -161,7 +161,7 @@ namespace whfc_rb {
 
     private:
         ldc::AtomicTimestampSet<> visitedNode;
-        ldc::AtomicTimestampSet<> visitedHyperedge;
+        ldc::AtomicTimestampCounter<> visitedHyperedge;
         std::vector<whfc::Node> globalToLocalID;
         std::vector<NodeID> localToGlobalID;
         ExtractorInfo result;
@@ -219,7 +219,6 @@ namespace whfc_rb {
                             begin_index++;
                             assert(localID < num_nodes);
                             nodes[localID].weight = whfc::NodeWeight(hg.nodeWeight(vector[i]));
-                            //nodes[localID] = {whfc::InHeIndex(0), whfc::NodeWeight(hg.nodeWeight(vector[i]))};
                             globalToLocalID[vector[i]] = localID;
                             localToGlobalID[localID] = vector[i];
                             distanceFromCut[localID] = d;
@@ -247,6 +246,8 @@ namespace whfc_rb {
             thisLayer_thread_specific->clear();
             nextLayer_thread_specific->clear();
 
+            visitedHyperedge.nextRound();
+
             bool nodes_left = false;
             whfc::NodeWeight& localWeight = weights_thread_specific.local();
 
@@ -272,6 +273,8 @@ namespace whfc_rb {
             d += delta;
             timer.stop("Write_boundary_to_builder");
 
+            size_t counterValue = visitedHyperedge.getCounter();
+
             while (nodes_left) {
                 timer.start("Scan_hyperedges_and_add_nodes", "BFS");
                 // scan hyperedges and add nodes to the next layer
@@ -286,7 +289,7 @@ namespace whfc_rb {
 
                                 for (HyperedgeID e : hg.hyperedgesOf(u)) {
                                     // REVIEW NOTE this is too expensive! could be quadratic in edge sizes. you have to set the marker!
-                                    if (!visitedHyperedge.isSet(e) && partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
+                                    if (visitedHyperedge.set(e) == 0 && partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
                                         for (NodeID v : hg.pinsOf(e)) {
                                             if (partition[v] == partID) {
                                                 tryToVisitNode(v, hg, w, nextLayer, maxWeight, localWeight);
@@ -310,6 +313,7 @@ namespace whfc_rb {
                 // this solves the hyperedge marker issue
                 // if we know the number of pins we can also get rid of the mock builders --> sum up pin count in part in the beginning and do resize if necessary?
 
+                visitedHyperedge.nextRound();
 
                 // scan hyperedges again and write them to local builders
                 timer.start("Scan_hyperedges_and_add_hyperedges", "BFS");
@@ -322,7 +326,7 @@ namespace whfc_rb {
                                 const NodeID u = vector[i];
 
                                 for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                                    if (visitedHyperedge.set(e) && partition.pinsInPart(otherPartID, e) == 0 &&
+                                    if (visitedHyperedge.set(e) == counterValue && partition.pinsInPart(otherPartID, e) == 0 &&
                                         partition.pinsInPart(partID, e) > 1) {
                                         local_builder.startHyperedge(hg.hyperedgeWeight(e));
                                         bool connectToTerminal = false;

@@ -99,5 +99,42 @@ private:
     std::atomic<TimestampT> generation;
 };
 
+template<typename TimestampT = uint32_t>
+class AtomicTimestampCounter {
+public:
+    AtomicTimestampCounter(size_t n) : timestamps(n), generation_start(0), generation_current(0) {}
+
+    bool isSet(size_t i) const {
+        return timestamps[i] >= generation_start && timestamps[i] <= generation_current;
+    }
+
+    TimestampT set(size_t i) {
+        return std::max<TimestampT>(timestamps[i].exchange(generation_current) - generation_start, 0);
+    }
+
+    TimestampT value(size_t i) {
+        assert(isSet(i));
+        return timestamps[i] - generation_start;
+    }
+
+    TimestampT getCounter() {
+        return generation_current - generation_start;
+    }
+
+    void nextRound() {
+        assert(generation_current != std::numeric_limits<TimestampT>::max());
+        generation_current++;
+    }
+
+    void reset() {
+        generation_start = ++generation_current;
+    }
+
+private:
+    std::vector<std::atomic<TimestampT>> timestamps;
+    std::atomic<TimestampT> generation_start;
+    std::atomic<TimestampT> generation_current;
+};
+
 
 }
