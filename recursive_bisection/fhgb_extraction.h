@@ -275,27 +275,25 @@ namespace whfc_rb {
             while (nodes_left) {
                 timer.start("Scan_hyperedges_and_add_nodes", "BFS");
                 // scan hyperedges and add nodes to the next layer
-                tbb::parallel_for(thisLayer_thread_specific->range(), [&](const tbb::blocked_range<tbb::enumerable_thread_specific<std::vector<whfc::Node>>::iterator>& range) {
-                    for (auto& vector : range) {
-                        tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
-                            auto& nextLayer = nextLayer_thread_specific->local();
-                            whfc::NodeWeight& localWeight = weights_thread_specific.local();
+                tbb::parallel_for_each(thisLayer_thread_specific->range(), [&](const std::vector<whfc::Node>& vector) {
+                    tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
+                        auto& nextLayer = nextLayer_thread_specific->local();
+                        whfc::NodeWeight& localWeight = weights_thread_specific.local();
 
-                            for (size_t i = indices.begin(); i < indices.end(); ++i) {
-                                const NodeID u = vector[i];
+                        for (size_t i = indices.begin(); i < indices.end(); ++i) {
+                            const NodeID u = vector[i];
 
-                                for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                                    if (visitedHyperedge.set(e) == 0 && partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
-                                        for (NodeID v : hg.pinsOf(e)) {
-                                            if (partition[v] == partID) {
-                                                tryToVisitNode(v, hg, w, nextLayer, maxWeight, localWeight);
-                                            }
+                            for (HyperedgeID e : hg.hyperedgesOf(u)) {
+                                if (visitedHyperedge.set(e) == 0 && partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
+                                    for (NodeID v : hg.pinsOf(e)) {
+                                        if (partition[v] == partID) {
+                                            tryToVisitNode(v, hg, w, nextLayer, maxWeight, localWeight);
                                         }
                                     }
                                 }
                             }
-                        });
-                    }
+                        }
+                    });
                 });
                 timer.stop("Scan_hyperedges_and_add_nodes");
 
@@ -313,36 +311,34 @@ namespace whfc_rb {
 
                 // scan hyperedges again and write them to local builders
                 timer.start("Scan_hyperedges_and_add_hyperedges", "BFS");
-                tbb::parallel_for(thisLayer_thread_specific->range(), [&](const tbb::blocked_range<tbb::enumerable_thread_specific<std::vector<whfc::Node>>::iterator>& range) {
-                    for (auto& vector : range) {
-                        tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
-                            auto& local_builder = mockBuilder_thread_specific.local();
+                tbb::parallel_for_each(thisLayer_thread_specific->range(), [&](const std::vector<whfc::Node>& vector) {
+                    tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
+                        auto& local_builder = mockBuilder_thread_specific.local();
 
-                            for (size_t i = indices.begin(); i < indices.end(); ++i) {
-                                const NodeID u = vector[i];
+                        for (size_t i = indices.begin(); i < indices.end(); ++i) {
+                            const NodeID u = vector[i];
 
-                                for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                                    if (visitedHyperedge.set(e) == counterValue && partition.pinsInPart(otherPartID, e) == 0 &&
-                                        partition.pinsInPart(partID, e) > 1) {
-                                        local_builder.startHyperedge(hg.hyperedgeWeight(e));
-                                        bool connectToTerminal = false;
-                                        for (NodeID v : hg.pinsOf(e)) {
-                                            if (partition[v] == partID) {
-                                                if (visitedNode.isSet(v)) {
-                                                    local_builder.addPin(globalToLocalID[v]);
-                                                } else {
-                                                    connectToTerminal = true;
-                                                }
+                            for (HyperedgeID e : hg.hyperedgesOf(u)) {
+                                if (visitedHyperedge.set(e) == counterValue && partition.pinsInPart(otherPartID, e) == 0 &&
+                                    partition.pinsInPart(partID, e) > 1) {
+                                    local_builder.startHyperedge(hg.hyperedgeWeight(e));
+                                    bool connectToTerminal = false;
+                                    for (NodeID v : hg.pinsOf(e)) {
+                                        if (partition[v] == partID) {
+                                            if (visitedNode.isSet(v)) {
+                                                local_builder.addPin(globalToLocalID[v]);
+                                            } else {
+                                                connectToTerminal = true;
                                             }
                                         }
-                                        if (connectToTerminal) {
-                                            local_builder.addPin(terminal);
-                                        }
+                                    }
+                                    if (connectToTerminal) {
+                                        local_builder.addPin(terminal);
                                     }
                                 }
                             }
-                        });
-                    }
+                        }
+                    });
                 });
                 timer.stop("Scan_hyperedges_and_add_hyperedges");
 
