@@ -149,20 +149,22 @@ namespace whfc_rb {
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<whfc::Node>>> thisLayer_thread_specific;
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<whfc::Node>>> nextLayer_thread_specific;
 
-        inline bool tryToVisitNode(const NodeID u, CSRHypergraph &hg, std::atomic<whfc::NodeWeight> &w, std::vector<whfc::Node>& vectorToPush,
+        // returns last value of w
+        inline NodeWeight tryToVisitNode(const NodeID u, CSRHypergraph &hg, std::atomic<whfc::NodeWeight> &w, std::vector<whfc::Node>& vectorToPush,
                 const whfc::NodeWeight& maxWeight, whfc::NodeWeight& localWeight) {
+            NodeWeight lastSeenValue = 0;
             if (visitedNode.set(u)) {
-                if (w.fetch_add(hg.nodeWeight(u), std::memory_order_relaxed) + hg.nodeWeight(u) <= maxWeight) {
+                lastSeenValue = w.fetch_add(hg.nodeWeight(u));
+                if (lastSeenValue + hg.nodeWeight(u) <= maxWeight) {
                     vectorToPush.push_back(static_cast<whfc::Node>(u));
                     localWeight += hg.nodeWeight(u);        // REVIEW NOTE why have a thread local weight if you also have an atomic?
-                    return true;
                 } else {
                     w.fetch_sub(hg.nodeWeight(u), std::memory_order_relaxed);
                     visitedNode.reset(u);   // REVIEW NOTE is this a good idea? this means other threads will try to add u again --> more contention on w
                                             // --> necessary when adding pins
                 }
             }
-            return false;
+            return lastSeenValue;
         }
 
         template<class Builder>
@@ -218,14 +220,16 @@ namespace whfc_rb {
             timer.start("Collect_boundary_vertices", "BFS");
             tbb::blocked_range<size_t> range(0, cut_hes.size(), 1000);
             tbb::parallel_for(range, [&](const tbb::blocked_range<size_t>& sub_range) {
+                NodeWeight lastSeenValue = 0;
                 auto& thisLayer = thisLayer_thread_specific->local();
                 for (size_t i = sub_range.begin(); i < sub_range.end(); ++i) {
                     const HyperedgeID e = cut_hes[i];
                     for (NodeID v : hg.pinsOf(e)) {
-                        if (partition[v] == partID) {
-                            tryToVisitNode(v, hg, w, thisLayer, maxWeight, localWeight);
+                        if (partition[v] == partID && lastSeenValue + hg.nodeWeight(v) <= maxWeight) {
+                            lastSeenValue = tryToVisitNode(v, hg, w, thisLayer, maxWeight, localWeight);
                         }
                     }
+                    if (lastSeenValue == maxWeight) break;
                 }
             });
             timer.stop("Collect_boundary_vertices");
@@ -244,6 +248,7 @@ namespace whfc_rb {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size(), 1000), [&](const tbb::blocked_range<size_t>& indices) {
                         auto& nextLayer = nextLayer_thread_specific->local();
                         whfc::NodeWeight& localWeight = weights_thread_specific.local();
+                        NodeWeight lastSeenValue = 0;
 
                         for (size_t i = indices.begin(); i < indices.end(); ++i) {
                             const NodeID u = vector[i];
@@ -251,11 +256,12 @@ namespace whfc_rb {
                             for (HyperedgeID e : hg.hyperedgesOf(u)) {
                                 if (partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1 && visitedHyperedge.set(e)) {
                                     for (NodeID v : hg.pinsOf(e)) {
-                                        if (partition[v] == partID) {
-                                            tryToVisitNode(v, hg, w, nextLayer, maxWeight, localWeight);
+                                        if (partition[v] == partID && lastSeenValue + hg.nodeWeight(v) <= maxWeight) {
+                                            lastSeenValue = tryToVisitNode(v, hg, w, nextLayer, maxWeight, localWeight);
                                         }
                                     }
                                 }
+                                if (lastSeenValue == maxWeight) break;
                             }
                         }
                     });
@@ -350,7 +356,7 @@ namespace whfc_rb {
                                     }
                                 }
                             }
-                            
+
                             if (connectToSource && connectToTarget) {
                                 local_builder.removeCurrentHyperedge();
                                 baseCut += hg.hyperedgeWeight(e);
