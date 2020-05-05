@@ -91,14 +91,20 @@ namespace whfc_rb {
                 timer.stop("Merging");
                  */
             } else {
+                queue_thread_specific.clear();
+
                 localToGlobalID[0] = invalid_node;
                 fhgb.addNode(whfc::NodeWeight(0));
                 w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, fhgb);
 
-                result.target = whfc::Node(fhgb.numNodes());
+                result.target = whfc::Node(1);
                 fhgb.addNode(whfc::NodeWeight(0));
                 localToGlobalID[result.target] = invalid_node;
                 w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, timer, fhgb);
+
+                timer.start("writeQueuesToBuilder", "BFS");
+                writeQueuesToBuilder(fhgb, queue_thread_specific, hg, distanceFromCut, 0);
+                timer.stop("writeQueuesToBuilder");
 
                 addHyperedges(fhgb, hg, partition, part0, part1, timer);
             }
@@ -205,9 +211,6 @@ namespace whfc_rb {
             std::atomic<whfc::NodeWeight> w = 0;
             whfc::HopDistance d = delta;
 
-            queue_thread_specific.clear();
-
-            bool nodes_left = true;
 
             // Collect boundary vertices
             timer.start("Collect_boundary_vertices", "BFS");
@@ -229,8 +232,13 @@ namespace whfc_rb {
 
             d += delta;
 
+            bool nodes_left = false;
+
             for (LayeredQueue<whfc::Node>& queue : queue_thread_specific) {
                 queue.finishNextLayer();
+                if (!queue.currentLayerEmpty()) {
+                    nodes_left = true;
+                }
             }
 
             while (nodes_left) {
@@ -275,9 +283,6 @@ namespace whfc_rb {
 
             distanceFromCut[terminal] = d;
 
-            timer.start("writeQueuesToBuilder", "BFS");
-            writeQueuesToBuilder(builder, queue_thread_specific, hg, distanceFromCut, d);
-            timer.stop("writeQueuesToBuilder");
 
             return w.load();
         }
@@ -287,79 +292,81 @@ namespace whfc_rb {
             visitedHyperedge.reset();
 
             timer.start("Add_hyperedges", "BFS");
-            tbb::parallel_for(tbb::blocked_range<size_t>(0, builder.numNodes()), [&](const tbb::blocked_range<size_t>& indices) {
-                auto& local_builder = mockBuilder_thread_specific.local();
-                local_builder.setSource(result.source);
-                local_builder.setTarget(result.target);
-                whfc::Flow& baseCut = baseCut_thread_specific.local();
-                whfc::Flow& cutAtStake = cutAtStake_thread_specific.local();
+            tbb::parallel_for_each(queue_thread_specific, [&](LayeredQueue<whfc::Node>& queue) {
+                tbb::parallel_for(tbb::blocked_range<size_t>(0, queue.allElements().size()), [&](const tbb::blocked_range<size_t>& indices) {
+                    auto &local_builder = mockBuilder_thread_specific.local();
+                    local_builder.setSource(result.source);
+                    local_builder.setTarget(result.target);
+                    whfc::Flow &baseCut = baseCut_thread_specific.local();
+                    whfc::Flow &cutAtStake = cutAtStake_thread_specific.local();
 
-                for (size_t i = indices.begin(); i < indices.end(); ++i) {
-                    const NodeID u = localToGlobalID[i];
+                    for (size_t i = indices.begin(); i < indices.end(); ++i) {
+                        const NodeID u = queue.elementAt(i);
 
-                    // skip terminals
-                    if (u == invalid_node) {
-                        continue;
-                    }
+                        // skip terminals
+                        if (u == invalid_node) {
+                            continue;
+                        }
 
-                    const PartitionBase::PartitionID partID = i < result.target ? part0 : part1;
-                    const PartitionBase::PartitionID otherPartID = i < result.target ? part1 : part0;
-                    const whfc::Node terminal = i < result.target ? result.source : result.target;
+                        const PartitionBase::PartitionID partID = partition[u];
+                        const PartitionBase::PartitionID otherPartID = partID == part0 ? part1 : part0;
+                        const whfc::Node terminal = partID == part0 ? result.source : result.target;
 
-                    for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                        if (visitedHyperedge.set(e)) {
-                            bool connectToSource = false;
-                            bool connectToTarget = false;
-                            if (partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
-                                local_builder.startHyperedge(hg.hyperedgeWeight(e));
-                                for (NodeID v : hg.pinsOf(e)) {
-                                    if (partition[v] == partID) {
+                        for (HyperedgeID e : hg.hyperedgesOf(u)) {
+                            if (visitedHyperedge.set(e)) {
+                                bool connectToSource = false;
+                                bool connectToTarget = false;
+                                if (partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
+                                    local_builder.startHyperedge(hg.hyperedgeWeight(e));
+                                    for (NodeID v : hg.pinsOf(e)) {
+                                        if (partition[v] == partID) {
+                                            if (visitedNode.isSet(v)) {
+                                                local_builder.addPin(globalToLocalID[v]);
+                                            } else {
+                                                if (terminal == result.source) {
+                                                    connectToSource = true;
+                                                } else {
+                                                    connectToTarget = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else if (partition.pinsInPart(part0, e) > 0 && partition.pinsInPart(part1, e) > 0) {
+                                    // This is a cut hyperedge
+
+                                    cutAtStake += hg.hyperedgeWeight(e);
+                                    local_builder.startHyperedge(hg.hyperedgeWeight(e));
+
+                                    for (NodeID v : hg.pinsOf(e)) {
                                         if (visitedNode.isSet(v)) {
+                                            assert(globalToLocalID[v] < local_builder.numNodes());
                                             local_builder.addPin(globalToLocalID[v]);
                                         } else {
-                                            if (terminal == result.source) {
-                                                connectToSource = true;
-                                            } else {
-                                                connectToTarget = true;
+                                            connectToSource |= (partition[v] == part0);
+                                            connectToTarget |= (partition[v] == part1);
+                                            if (connectToSource && connectToTarget) {
+                                                break;
                                             }
                                         }
                                     }
                                 }
-                            } else if (partition.pinsInPart(part0, e) > 0 && partition.pinsInPart(part1, e) > 0) {
-                                // This is a cut hyperedge
 
-                                cutAtStake += hg.hyperedgeWeight(e);
-                                local_builder.startHyperedge(hg.hyperedgeWeight(e));
-
-                                for (NodeID v : hg.pinsOf(e)) {
-                                    if (visitedNode.isSet(v)) {
-                                        assert(globalToLocalID[v] < local_builder.numNodes());
-                                        local_builder.addPin(globalToLocalID[v]);
-                                    } else {
-                                        connectToSource |= (partition[v] == part0);
-                                        connectToTarget |= (partition[v] == part1);
-                                        if (connectToSource && connectToTarget) {
-                                            break;
-                                        }
+                                if (connectToSource && connectToTarget) {
+                                    local_builder.removeCurrentHyperedge();
+                                    baseCut += hg.hyperedgeWeight(e);
+                                } else {
+                                    if (connectToSource) {
+                                        local_builder.addPin(result.source);
+                                    }
+                                    if (connectToTarget) {
+                                        local_builder.addPin(result.target);
                                     }
                                 }
                             }
 
-                            if (connectToSource && connectToTarget) {
-                                local_builder.removeCurrentHyperedge();
-                                baseCut += hg.hyperedgeWeight(e);
-                            } else {
-                                if (connectToSource) {
-                                    local_builder.addPin(result.source);
-                                }
-                                if (connectToTarget) {
-                                    local_builder.addPin(result.target);
-                                }
-                            }
                         }
-
                     }
-                }
+                });
             });
             timer.stop("Add_hyperedges");
 
