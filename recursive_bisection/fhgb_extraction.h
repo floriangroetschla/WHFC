@@ -23,6 +23,7 @@ namespace whfc_rb {
                 globalToLocalID(maxNumNodes),
                 localToGlobalID(maxNumNodes + 2),
                 mt(seed), config(config),
+                mockBuilder_thread_specific(std::ref(fhgb.getNodes()), whfc::invalidNode, whfc::invalidNode),
                 thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<whfc::Node>>()),
                 nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<whfc::Node>>()) {}
 
@@ -289,14 +290,13 @@ namespace whfc_rb {
 
         template<typename Builder, typename PartitionImpl>
         void addHyperedges(Builder& builder, CSRHypergraph& hg, const PartitionImpl &partition, PartitionBase::PartitionID part0, PartitionBase::PartitionID part1, whfc::TimeReporter& timer) {
-            std::vector<whfc::FlowHypergraph::NodeData>& nodes = builder.getNodes();
-            mockBuilder_thread_specific = tbb::enumerable_thread_specific<MockBuilder>(std::ref(nodes), result.source, result.target);
-
             visitedHyperedge.reset();
 
             timer.start("Add_hyperedges", "BFS");
             tbb::parallel_for(tbb::blocked_range<size_t>(0, builder.numNodes(), 1000), [&](const tbb::blocked_range<size_t>& indices) {
                 auto& local_builder = mockBuilder_thread_specific.local();
+                local_builder.setSource(result.source);
+                local_builder.setTarget(result.target);
                 whfc::Flow& baseCut = baseCut_thread_specific.local();
                 whfc::Flow& cutAtStake = cutAtStake_thread_specific.local();
 
@@ -388,6 +388,9 @@ namespace whfc_rb {
             visitedNode.reset();
             visitedHyperedge.reset();
             result = {whfc::Node(0), whfc::Node(0), 0, 0};
+            for (MockBuilder& mockBuilder : mockBuilder_thread_specific) {
+                mockBuilder.clear();
+            }
         }
     };
 }

@@ -40,6 +40,14 @@ public:
         targetOccurences = 0;
     }
 
+    void setSource(Node new_source) {
+        source = new_source;
+    }
+
+    void setTarget(Node new_target) {
+        target = new_target;
+    }
+
     void clear(bool clearNodes = true) {
         if (clearNodes) nodes.clear();
         hyperedges.clear();
