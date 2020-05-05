@@ -314,25 +314,26 @@ namespace whfc_rb {
 
                     for (HyperedgeID e : hg.hyperedgesOf(u)) {
                         if (visitedHyperedge.set(e)) {
+                            bool connectToSource = false;
+                            bool connectToTarget = false;
                             if (partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
                                 local_builder.startHyperedge(hg.hyperedgeWeight(e));
-                                bool connectToTerminal = false;
                                 for (NodeID v : hg.pinsOf(e)) {
                                     if (partition[v] == partID) {
                                         if (visitedNode.isSet(v)) {
                                             local_builder.addPin(globalToLocalID[v]);
                                         } else {
-                                            connectToTerminal = true;
+                                            if (terminal == result.source) {
+                                                connectToSource = true;
+                                            } else {
+                                                connectToTarget = true;
+                                            }
                                         }
                                     }
                                 }
-                                if (connectToTerminal) {
-                                    local_builder.addPin(terminal);
-                                }
                             } else if (partition.pinsInPart(part0, e) > 0 && partition.pinsInPart(part1, e) > 0) {
                                 // This is a cut hyperedge
-                                bool connectToSource = false;
-                                bool connectToTarget = false;
+
                                 cutAtStake += hg.hyperedgeWeight(e);
                                 local_builder.startHyperedge(hg.hyperedgeWeight(e));
 
@@ -348,16 +349,17 @@ namespace whfc_rb {
                                         }
                                     }
                                 }
-                                if (connectToSource && connectToTarget) {
-                                    local_builder.removeCurrentHyperedge();
-                                    baseCut += hg.hyperedgeWeight(e);
-                                } else {
-                                    if (connectToSource) {
-                                        local_builder.addPin(result.source);
-                                    }
-                                    if (connectToTarget) {
-                                        local_builder.addPin(result.target);
-                                    }
+                            }
+                            
+                            if (connectToSource && connectToTarget) {
+                                local_builder.removeCurrentHyperedge();
+                                baseCut += hg.hyperedgeWeight(e);
+                            } else {
+                                if (connectToSource) {
+                                    local_builder.addPin(result.source);
+                                }
+                                if (connectToTarget) {
+                                    local_builder.addPin(result.target);
                                 }
                             }
                         }
