@@ -299,7 +299,7 @@ namespace whfc_rb {
             visitedHyperedge.reset();
 
             timer.start("Add_hyperedges", "BFS");
-            tbb::parallel_for(tbb::blocked_range<size_t>(0, builder.numNodes(), 1000), [&](const tbb::blocked_range<size_t>& indices) {
+            tbb::parallel_for(tbb::blocked_range<size_t>(0, builder.numNodes()), [&](const tbb::blocked_range<size_t>& indices) {
                 auto& local_builder = mockBuilder_thread_specific.local();
                 local_builder.setSource(result.source);
                 local_builder.setTarget(result.target);
@@ -314,9 +314,9 @@ namespace whfc_rb {
                         continue;
                     }
 
-                    PartitionBase::PartitionID partID = i < result.target ? part0 : part1;
-                    PartitionBase::PartitionID otherPartID = i < result.target ? part1 : part0;
-                    whfc::Node terminal = i < result.target ? result.source : result.target;
+                    const PartitionBase::PartitionID partID = i < result.target ? part0 : part1;
+                    const PartitionBase::PartitionID otherPartID = i < result.target ? part1 : part0;
+                    const whfc::Node terminal = i < result.target ? result.source : result.target;
 
                     for (HyperedgeID e : hg.hyperedgesOf(u)) {
                         if (visitedHyperedge.set(e)) {

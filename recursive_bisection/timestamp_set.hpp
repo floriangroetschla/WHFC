@@ -83,7 +83,7 @@ public:
     }
 
     void reset(size_t i) {
-        timestamps[i] = generation - 1;
+        timestamps[i].store(generation - 1, std::memory_order_relaxed);
     }
 
     void reset() {

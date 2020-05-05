@@ -34,8 +34,8 @@ public:
     }
 
     void addTerminalOccurences() {
-        __sync_fetch_and_add(&nodes[source+1].first_out.value(), sourceOccurences);
-        __sync_fetch_and_add(&nodes[target+1].first_out.value(), targetOccurences);
+        nodes[source+1].first_out += sourceOccurences;
+        nodes[target+1].first_out += targetOccurences;
         sourceOccurences = 0;
         targetOccurences = 0;
     }
