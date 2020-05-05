@@ -144,20 +144,18 @@ namespace whfc_rb {
         tbb::enumerable_thread_specific<MockBuilder> mockBuilder_thread_specific;
         tbb::enumerable_thread_specific<whfc::Flow> baseCut_thread_specific;
         tbb::enumerable_thread_specific<whfc::Flow> cutAtStake_thread_specific;
-        tbb::enumerable_thread_specific<whfc::NodeWeight> weights_thread_specific;
 
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<whfc::Node>>> thisLayer_thread_specific;
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<whfc::Node>>> nextLayer_thread_specific;
 
         // returns last value of w
         inline NodeWeight tryToVisitNode(const NodeID u, CSRHypergraph &hg, std::atomic<whfc::NodeWeight> &w, std::vector<whfc::Node>& vectorToPush,
-                const whfc::NodeWeight& maxWeight, whfc::NodeWeight& localWeight) {
+                const whfc::NodeWeight& maxWeight) {
             NodeWeight lastSeenValue = 0;
             if (visitedNode.set(u)) {
                 lastSeenValue = w.fetch_add(hg.nodeWeight(u));
                 if (lastSeenValue + hg.nodeWeight(u) <= maxWeight) {
                     vectorToPush.push_back(static_cast<whfc::Node>(u));
-                    localWeight += hg.nodeWeight(u);        // REVIEW NOTE why have a thread local weight if you also have an atomic?
                 } else {
                     w.fetch_sub(hg.nodeWeight(u), std::memory_order_relaxed);
                     visitedNode.reset(u);   // REVIEW NOTE is this a good idea? this means other threads will try to add u again --> more contention on w
@@ -207,14 +205,12 @@ namespace whfc_rb {
                                             NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta,
                                             whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer, Builder& builder) {
             std::atomic<whfc::NodeWeight> w = 0;
-            weights_thread_specific.clear();
             whfc::HopDistance d = delta;
 
             thisLayer_thread_specific->clear();
             nextLayer_thread_specific->clear();
 
             bool nodes_left = false;
-            whfc::NodeWeight& localWeight = weights_thread_specific.local();
 
             // Collect boundary vertices
             timer.start("Collect_boundary_vertices", "BFS");
@@ -226,7 +222,7 @@ namespace whfc_rb {
                     const HyperedgeID e = cut_hes[i];
                     for (NodeID v : hg.pinsOf(e)) {
                         if (partition[v] == partID && lastSeenValue + hg.nodeWeight(v) <= maxWeight) {
-                            lastSeenValue = tryToVisitNode(v, hg, w, thisLayer, maxWeight, localWeight);
+                            lastSeenValue = tryToVisitNode(v, hg, w, thisLayer, maxWeight);
                         }
                     }
                     if (lastSeenValue == maxWeight) break;
@@ -247,7 +243,6 @@ namespace whfc_rb {
                 tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<whfc::Node>& vector) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size(), 1000), [&](const tbb::blocked_range<size_t>& indices) {
                         auto& nextLayer = nextLayer_thread_specific->local();
-                        whfc::NodeWeight& localWeight = weights_thread_specific.local();
                         NodeWeight lastSeenValue = 0;
 
                         for (size_t i = indices.begin(); i < indices.end(); ++i) {
@@ -257,7 +252,7 @@ namespace whfc_rb {
                                 if (partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1 && visitedHyperedge.set(e)) {
                                     for (NodeID v : hg.pinsOf(e)) {
                                         if (partition[v] == partID && lastSeenValue + hg.nodeWeight(v) <= maxWeight) {
-                                            lastSeenValue = tryToVisitNode(v, hg, w, nextLayer, maxWeight, localWeight);
+                                            lastSeenValue = tryToVisitNode(v, hg, w, nextLayer, maxWeight);
                                         }
                                     }
                                 }
@@ -286,12 +281,7 @@ namespace whfc_rb {
 
             distanceFromCut[terminal] = d;
 
-            whfc::NodeWeight totalWeight = 0;
-            for (NodeWeight weight : weights_thread_specific) {
-                totalWeight += weight;
-            }
-
-            return totalWeight;
+            return w.load();
         }
 
         template<typename Builder, typename PartitionImpl>
