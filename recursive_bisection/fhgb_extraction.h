@@ -16,7 +16,6 @@ namespace whfc_rb {
         whfc::FlowHypergraphBuilder fhgb;
 
         static constexpr bool doBothBFSInParallel = false;
-        static constexpr bool processCutHyperedgesInParallel = true;
 
         FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, int seed, const PartitionConfig& config) :
                 fhgb(2 * config.percentage_bfs_from_cut * maxNumNodes + 2, maxNumEdges),
@@ -152,12 +151,12 @@ namespace whfc_rb {
         inline bool tryToVisitNode(const NodeID u, CSRHypergraph &hg, std::atomic<whfc::NodeWeight> &w, std::vector<whfc::Node>& vectorToPush,
                 const whfc::NodeWeight& maxWeight, whfc::NodeWeight& localWeight) {
             if (visitedNode.set(u)) {
-                if (w.fetch_add(hg.nodeWeight(u)) + hg.nodeWeight(u) <= maxWeight) {
+                if (w.fetch_add(hg.nodeWeight(u), std::memory_order_relaxed) + hg.nodeWeight(u) <= maxWeight) {
                     vectorToPush.push_back(static_cast<whfc::Node>(u));
                     localWeight += hg.nodeWeight(u);        // REVIEW NOTE why have a thread local weight if you also have an atomic?
                     return true;
                 } else {
-                    w.fetch_sub(hg.nodeWeight(u));
+                    w.fetch_sub(hg.nodeWeight(u), std::memory_order_relaxed);
                     visitedNode.reset(u);   // REVIEW NOTE is this a good idea? this means other threads will try to add u again --> more contention on w
                                             // --> necessary when adding pins
                 }
@@ -249,7 +248,7 @@ namespace whfc_rb {
                             const NodeID u = vector[i];
 
                             for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                                if (visitedHyperedge.set(e) && partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
+                                if (partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1 && visitedHyperedge.set(e)) {
                                     for (NodeID v : hg.pinsOf(e)) {
                                         if (partition[v] == partID) {
                                             tryToVisitNode(v, hg, w, nextLayer, maxWeight, localWeight);
@@ -380,48 +379,6 @@ namespace whfc_rb {
             for (whfc::Flow& cutAtStake : cutAtStake_thread_specific) {
                 result.cutAtStake += cutAtStake;
                 cutAtStake = 0;
-            }
-        }
-
-        template<class PartitionImpl, class CutEdgeRange, class Builder>
-        void processCutHyperedges(const CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
-                                  const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
-                                  Builder& builder, const tbb::blocked_range<size_t>& range) {
-            whfc::Flow& baseCut = baseCut_thread_specific.local();
-            whfc::Flow& cutAtStake = cutAtStake_thread_specific.local();
-
-            for (size_t i = range.begin(); i < range.end(); ++i) {
-                const HyperedgeID e = cut_hes[i];
-                //assert(!visitedHyperedge.isSet(e));
-                assert(partition.pinsInPart(part0, e) > 0 && partition.pinsInPart(part1, e) > 0);
-                bool connectToSource = false;
-                bool connectToTarget = false;
-                cutAtStake += hg.hyperedgeWeight(e);
-                builder.startHyperedge(hg.hyperedgeWeight(e));
-
-                for (NodeID v : hg.pinsOf(e)) {
-                    if (visitedNode.isSet(v)) {
-                        assert(globalToLocalID[v] < builder.numNodes());
-                        builder.addPin(globalToLocalID[v]);
-                    } else {
-                        connectToSource |= (partition[v] == part0);
-                        connectToTarget |= (partition[v] == part1);
-                        if (connectToSource && connectToTarget) {
-                            break;
-                        }
-                    }
-                }
-                if (connectToSource && connectToTarget) {
-                    builder.removeCurrentHyperedge();
-                    baseCut += hg.hyperedgeWeight(e);
-                } else {
-                    if (connectToSource) {
-                        builder.addPin(result.source);
-                    }
-                    if (connectToTarget) {
-                        builder.addPin(result.target);
-                    }
-                }
             }
         }
 
