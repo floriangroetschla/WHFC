@@ -99,6 +99,7 @@ namespace whfc {
 		    // resize datastructures
 		    for (MockBuilder& builder : mockBuilder_thread_specific) {
                 builder.finishHyperedge();
+                builder.addTerminalOccurences();
                 workElements.push_back({builder, numberOfHyperedges, numberOfPins});
 		        numberOfHyperedges += builder.numHyperedges();
 		        numberOfPins += builder.numPins();

@@ -17,6 +17,10 @@ public:
     std::vector<NodeData> nodes_internal;
     std::vector<HyperedgeData> hyperedges;
     std::vector<Node> pins;
+    whfc::Node source = whfc::invalidNode;
+    whfc::Node target = whfc::invalidNode;
+    size_t sourceOccurences = 0;
+    size_t targetOccurences = 0;
 
     size_t numPinsAtHyperedgeStart = 0;
     Flow maxHyperedgeCapacity = 0;
@@ -25,8 +29,15 @@ public:
         clear();
     }
 
-    MockBuilder(std::vector<NodeData>& existing_nodes) : nodes(existing_nodes) {
+    MockBuilder(std::vector<NodeData>& existing_nodes, Node source, Node target) : nodes(existing_nodes), source(source), target(target) {
         clear(false);
+    }
+
+    void addTerminalOccurences() {
+        __sync_fetch_and_add(&nodes[source+1].first_out.value(), sourceOccurences);
+        __sync_fetch_and_add(&nodes[target+1].first_out.value(), targetOccurences);
+        sourceOccurences = 0;
+        targetOccurences = 0;
     }
 
     void clear(bool clearNodes = true) {
@@ -36,6 +47,8 @@ public:
 
         numPinsAtHyperedgeStart = 0;
         maxHyperedgeCapacity = 0;
+        sourceOccurences = 0;
+        targetOccurences = 0;
 
         if (clearNodes) nodes.push_back({InHeIndex(0), whfc::NodeWeight(0)});
         hyperedges.push_back({PinIndex(0), Flow(0), Flow(0)});
@@ -51,10 +64,13 @@ public:
     void addPin(const Node u) {
         assert(u < numNodes());
         pins.push_back(u);
-        __sync_fetch_and_add(&nodes[u+1].first_out.value(), 1);
-        // REVIEW NOTE this should give high contention on the two terminals
-        // A different approach could be to accumulate the number of occurences locally (distribute the pin array)
-        // which are merged in a second parallel step (distributing nodes)
+        if (u != source && u != target) {
+            __sync_fetch_and_add(&nodes[u+1].first_out.value(), 1);
+        } else if (u == source) {
+            sourceOccurences++;
+        } else {
+            targetOccurences++;
+        }
     }
 
     void addNode(const whfc::NodeWeight w) {
@@ -95,7 +111,14 @@ public:
 
 private:
     void removeLastPin() {
-        __sync_fetch_and_sub(&nodes[pins.back() + 1].first_out.value(), 1);
+        if (pins.back() != source && pins.back() != target) {
+            __sync_fetch_and_sub(&nodes[pins.back() + 1].first_out.value(), 1);
+        } else if (pins.back() == source) {
+            sourceOccurences--;
+        } else {
+            targetOccurences--;
+        }
+
         pins.pop_back();
     }
 };

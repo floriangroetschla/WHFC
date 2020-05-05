@@ -290,7 +290,7 @@ namespace whfc_rb {
         template<typename Builder, typename PartitionImpl>
         void addHyperedges(Builder& builder, CSRHypergraph& hg, const PartitionImpl &partition, PartitionBase::PartitionID part0, PartitionBase::PartitionID part1, whfc::TimeReporter& timer) {
             std::vector<whfc::FlowHypergraph::NodeData>& nodes = builder.getNodes();
-            mockBuilder_thread_specific = tbb::enumerable_thread_specific<MockBuilder>(std::ref(nodes));
+            mockBuilder_thread_specific = tbb::enumerable_thread_specific<MockBuilder>(std::ref(nodes), result.source, result.target);
 
             visitedHyperedge.reset();
 
