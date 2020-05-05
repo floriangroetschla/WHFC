@@ -24,8 +24,7 @@ namespace whfc_rb {
                 localToGlobalID(maxNumNodes + 2),
                 mt(seed), config(config),
                 mockBuilder_thread_specific(std::ref(fhgb.getNodes()), whfc::invalidNode, whfc::invalidNode),
-                thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<whfc::Node>>()),
-                nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<whfc::Node>>()) {}
+                queue_thread_specific(maxNumNodes) {}
 
         struct ExtractorInfo {
             whfc::Node source;
@@ -145,17 +144,16 @@ namespace whfc_rb {
         tbb::enumerable_thread_specific<whfc::Flow> baseCut_thread_specific;
         tbb::enumerable_thread_specific<whfc::Flow> cutAtStake_thread_specific;
 
-        std::unique_ptr<tbb::enumerable_thread_specific<std::vector<whfc::Node>>> thisLayer_thread_specific;
-        std::unique_ptr<tbb::enumerable_thread_specific<std::vector<whfc::Node>>> nextLayer_thread_specific;
+        tbb::enumerable_thread_specific<LayeredQueue<whfc::Node>> queue_thread_specific;
 
         // returns last value of w
-        inline NodeWeight tryToVisitNode(const NodeID u, CSRHypergraph &hg, std::atomic<whfc::NodeWeight> &w, std::vector<whfc::Node>& vectorToPush,
+        inline NodeWeight tryToVisitNode(const NodeID u, CSRHypergraph &hg, std::atomic<whfc::NodeWeight> &w, LayeredQueue<whfc::Node>& queue,
                 const whfc::NodeWeight& maxWeight) {
             NodeWeight lastSeenValue = 0;
             if (visitedNode.set(u)) {
                 lastSeenValue = w.fetch_add(hg.nodeWeight(u));
                 if (lastSeenValue + hg.nodeWeight(u) <= maxWeight) {
-                    vectorToPush.push_back(static_cast<whfc::Node>(u));
+                    queue.push(static_cast<whfc::Node>(u));
                 } else {
                     w.fetch_sub(hg.nodeWeight(u), std::memory_order_relaxed);
                     visitedNode.reset(u);   // REVIEW NOTE is this a good idea? this means other threads will try to add u again --> more contention on w
@@ -166,14 +164,14 @@ namespace whfc_rb {
         }
 
         template<class Builder>
-        bool writeNodeLayerToBuilder(Builder& builder, tbb::enumerable_thread_specific<std::vector<whfc::Node>>& layer,
+        bool writeQueuesToBuilder(Builder& builder, tbb::enumerable_thread_specific<LayeredQueue<whfc::Node>>& queues,
                 CSRHypergraph& hg, whfc::DistanceFromCut& distanceFromCut, whfc::HopDistance d) {
             std::atomic<size_t> node_counter = builder.numNodes();
             size_t num_nodes = builder.numNodes();
             std::vector<whfc::FlowHypergraph::NodeData>& nodes = builder.getNodes();
 
-            for (std::vector<whfc::Node>& localLayer : layer) {
-                num_nodes += localLayer.size();
+            for (LayeredQueue<whfc::Node>& queue : queues) {
+                num_nodes += queue.allElements().size();
             }
 
             bool has_nodes = num_nodes > builder.numNodes();
@@ -181,15 +179,15 @@ namespace whfc_rb {
             // Write node data into builder
             nodes.resize(num_nodes + 1); // maybe use reserve
 
-            tbb::parallel_for_each(layer, [&](const std::vector<whfc::Node>& vector) {
-                size_t begin_index = node_counter.fetch_add(vector.size());
-                tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& indices) {
+            tbb::parallel_for_each(queues, [&](LayeredQueue<whfc::Node>& queue) {
+                size_t begin_index = node_counter.fetch_add(queue.allElements().size());
+                tbb::parallel_for(tbb::blocked_range<size_t>(0, queue.allElements().size()), [&](const tbb::blocked_range<size_t>& indices) {
                     for (size_t i = indices.begin(); i < indices.end(); ++i) {
                         const whfc::Node localID(begin_index + i);
                         assert(localID < num_nodes);
-                        nodes[localID].weight = whfc::NodeWeight(hg.nodeWeight(vector[i]));
-                        globalToLocalID[vector[i]] = localID;
-                        localToGlobalID[localID] = vector[i];
+                        nodes[localID].weight = whfc::NodeWeight(hg.nodeWeight(queue.elementAt(i)));
+                        globalToLocalID[queue.elementAt(i)] = localID;
+                        localToGlobalID[localID] = queue.elementAt(i);
                         distanceFromCut[localID] = d;
                     }
                 });
@@ -207,22 +205,21 @@ namespace whfc_rb {
             std::atomic<whfc::NodeWeight> w = 0;
             whfc::HopDistance d = delta;
 
-            thisLayer_thread_specific->clear();
-            nextLayer_thread_specific->clear();
+            queue_thread_specific.clear();
 
-            bool nodes_left = false;
+            bool nodes_left = true;
 
             // Collect boundary vertices
             timer.start("Collect_boundary_vertices", "BFS");
             tbb::blocked_range<size_t> range(0, cut_hes.size(), 1000);
             tbb::parallel_for(range, [&](const tbb::blocked_range<size_t>& sub_range) {
                 NodeWeight lastSeenValue = 0;
-                auto& thisLayer = thisLayer_thread_specific->local();
+                LayeredQueue<whfc::Node>& queue = queue_thread_specific.local();
                 for (size_t i = sub_range.begin(); i < sub_range.end(); ++i) {
                     const HyperedgeID e = cut_hes[i];
                     for (NodeID v : hg.pinsOf(e)) {
                         if (partition[v] == partID && lastSeenValue + hg.nodeWeight(v) <= maxWeight) {
-                            lastSeenValue = tryToVisitNode(v, hg, w, thisLayer, maxWeight);
+                            lastSeenValue = tryToVisitNode(v, hg, w, queue, maxWeight);
                         }
                     }
                     if (lastSeenValue == maxWeight) break;
@@ -230,29 +227,28 @@ namespace whfc_rb {
             });
             timer.stop("Collect_boundary_vertices");
 
-            // Write nodes to the builder, this also ensures globalToLocal-mapping is set correctly
-            timer.start("Write_boundary_to_builder", "BFS");
-            nodes_left = writeNodeLayerToBuilder(builder, *thisLayer_thread_specific, hg, distanceFromCut, d);
             d += delta;
-            timer.stop("Write_boundary_to_builder");
 
+            for (LayeredQueue<whfc::Node>& queue : queue_thread_specific) {
+                queue.finishNextLayer();
+            }
 
             while (nodes_left) {
                 timer.start("Scan_hyperedges_and_add_nodes", "BFS");
                 // scan hyperedges and add nodes to the next layer
-                tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<whfc::Node>& vector) {
-                    tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size(), 1000), [&](const tbb::blocked_range<size_t>& indices) {
-                        auto& nextLayer = nextLayer_thread_specific->local();
+                tbb::parallel_for_each(queue_thread_specific, [&](LayeredQueue<whfc::Node>& queue) {
+                    tbb::parallel_for(tbb::blocked_range<size_t>(queue.currentLayerStart(), queue.currentLayerEnd()), [&](const tbb::blocked_range<size_t>& indices) {
+                        LayeredQueue<whfc::Node>& local_queue = queue_thread_specific.local();
                         NodeWeight lastSeenValue = 0;
 
                         for (size_t i = indices.begin(); i < indices.end(); ++i) {
-                            const NodeID u = vector[i];
+                            const NodeID u = queue.elementAt(i);
 
                             for (HyperedgeID e : hg.hyperedgesOf(u)) {
                                 if (partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1 && visitedHyperedge.set(e)) {
                                     for (NodeID v : hg.pinsOf(e)) {
                                         if (partition[v] == partID && lastSeenValue + hg.nodeWeight(v) <= maxWeight) {
-                                            lastSeenValue = tryToVisitNode(v, hg, w, nextLayer, maxWeight);
+                                            lastSeenValue = tryToVisitNode(v, hg, w, local_queue, maxWeight);
                                         }
                                     }
                                 }
@@ -263,16 +259,14 @@ namespace whfc_rb {
                 });
                 timer.stop("Scan_hyperedges_and_add_nodes");
 
-                // This ensures a correct globalToLocal-mapping for the next step
-                timer.start("Write_layer_to_builder", "BFS");
-                nodes_left = writeNodeLayerToBuilder(builder, *nextLayer_thread_specific, hg, distanceFromCut, d);
-                timer.stop("Write_layer_to_builder");
+                nodes_left = false;
 
-
-                std::swap(thisLayer_thread_specific, nextLayer_thread_specific);
-
-                for (auto& vector : *nextLayer_thread_specific) {
-                    vector.clear();
+                for (LayeredQueue<whfc::Node>& queue : queue_thread_specific) {
+                    queue.clearCurrentLayer();
+                    queue.finishNextLayer();
+                    if (queue.currentLayer().size() > 0) {
+                        nodes_left = true;
+                    }
                 }
 
                 d += delta;
@@ -280,6 +274,10 @@ namespace whfc_rb {
             }
 
             distanceFromCut[terminal] = d;
+
+            timer.start("writeQueuesToBuilder", "BFS");
+            writeQueuesToBuilder(builder, queue_thread_specific, hg, distanceFromCut, d);
+            timer.stop("writeQueuesToBuilder");
 
             return w.load();
         }

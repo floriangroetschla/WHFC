@@ -33,6 +33,8 @@ public:
 	inline const_range<std::vector<T>> allElements() { return range(0, qend); }
 	inline size_type queueEnd() const { return qend; }
 	inline T popBack() { assert(qend > 0); return queue[--qend]; }
+	inline size_type currentLayerStart() { return qfront; }
+	inline size_type currentLayerEnd() { return layerend; }
 
 	inline decltype(auto) currentLayerIndices() { return boost::irange<size_type>(qfront, layerend); }
 	inline void truncateQueue(size_type new_end) {
