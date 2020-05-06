@@ -62,9 +62,9 @@ namespace whfc {
 
         TimeReporter& timer;
 		
-		Dinic(FlowHypergraph& hg, TimeReporter& timer) : DinicBase(hg), timer(timer),
-		    thisLayer(new std::vector<Node>(hg.maxNumNodes, Node::Invalid())),
-		    nextLayer(new std::vector<Node>(hg.maxNumNodes, Node::Invalid()))
+		Dinic(FlowHypergraph& hg, TimeReporter& timer, size_t numThreads) : DinicBase(hg), timer(timer),
+		    thisLayer(new std::vector<Node>(hg.maxNumNodes + max_write_buffer_size * numThreads, Node::Invalid())),
+		    nextLayer(new std::vector<Node>(hg.maxNumNodes + max_write_buffer_size * numThreads, Node::Invalid()))
 		{
 			reset();
 		}
@@ -166,6 +166,7 @@ namespace whfc {
                 whfc::NodeWeight& weight_of_visited_nodes = sourceReachableWeight_thread_specific.local();
 
                 for (InHe& in_he : hes) {
+                    assert(in_he.e != invalidHyperedge);
                     const Hyperedge e = in_he.e;
 
                     if (!h.areAllPinsSourceReachable__unsafe__(e)) {
@@ -214,6 +215,7 @@ namespace whfc {
             };
 
             tbb::blocked_range<std::vector<InHe>::iterator> range(hg.beginHyperedges(u), hg.endHyperedges(u));
+            assert(hg.beginHyperedges(u) <= hg.endHyperedges(u));
             if (hg.hyperedgesOf(u).size() > 5000) {
                 tbb::parallel_for(range, [=](const tbb::blocked_range<std::vector<InHe>::iterator>& hes) {
                     processIncidences(u, hes);

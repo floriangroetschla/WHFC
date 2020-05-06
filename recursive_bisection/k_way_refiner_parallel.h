@@ -213,8 +213,8 @@ namespace whfc_rb {
             size_t bucket = bucketPQ.firstNonEmptyBucket();
             while (bucket < bucketPQ.numBuckets()) {
                 std::vector<WorkElement> bucket_elements = bucketPQ.getBucket(bucket);
-                size_t current_size = bucket_elements.size();
-                for (size_t i = 0; i < current_size; ++i) {
+                int current_size = bucket_elements.size();
+                for (int i = 0; i < current_size; ++i) {
                     const WorkElement element = bucket_elements[i];
                     if (!partScheduled[element.part0] && !partScheduled[element.part1]) {
                         tasks.push_back(element);
@@ -257,8 +257,8 @@ namespace whfc_rb {
                 size_t bucket = bucketPQ.firstNonEmptyBucket();
                 while (bucket < bucketPQ.numBuckets()) {
                     std::vector<WorkElement> bucket_elements = bucketPQ.getBucket(bucket);
-                    size_t current_size = bucket_elements.size();
-                    for (size_t i = 0; i < current_size; ++i) {
+                    int current_size = bucket_elements.size();
+                    for (int i = 0; i < current_size; ++i) {
                         const WorkElement element = bucket_elements[i];
                         if (!partScheduled[element.part0] && !partScheduled[element.part1] && isEligible(element.part0, element.part1)) {
                             feeder.add({element});

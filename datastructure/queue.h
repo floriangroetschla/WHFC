@@ -22,6 +22,7 @@ public:
 	inline T pop() { return queue[qfront++]; }
 	inline T previousLayerPop() { return queue[layerfront++]; }
 	inline void finishNextLayer() { layerend = qend; }
+	inline void clearCurrentLayer() { qfront = layerend; }
 	inline void push(const T x) { assert(qend < queue.size()); queue[qend++] = x; }
 	inline bool previousLayerEmpty() const { return layerfront == layerend; }
 	inline T capacity() const { return static_cast<T>(queue.size()); }
@@ -32,6 +33,8 @@ public:
 	inline const_range<std::vector<T>> allElements() { return range(0, qend); }
 	inline size_type queueEnd() const { return qend; }
 	inline T popBack() { assert(qend > 0); return queue[--qend]; }
+	inline size_type currentLayerStart() { return qfront; }
+	inline size_type currentLayerEnd() { return layerend; }
 
 	inline decltype(auto) currentLayerIndices() { return boost::irange<size_type>(qfront, layerend); }
 	inline void truncateQueue(size_type new_end) {
