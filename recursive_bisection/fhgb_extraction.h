@@ -101,7 +101,7 @@ namespace whfc_rb {
                 w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, timer, fhgb);
 
                 timer.start("writeQueuesToBuilder", "BFS");
-                writeQueuesToBuilder(fhgb, queue_thread_specific, hg, distanceFromCut, 0);
+                writeQueuesToBuilder(fhgb, queue_thread_specific, hg, distanceFromCut);
                 timer.stop("writeQueuesToBuilder");
 
                 addHyperedges(fhgb, hg, partition, part0, part1, timer);
@@ -135,6 +135,11 @@ namespace whfc_rb {
         NodeID local2global(const whfc::Node x) const { return localToGlobalID[x]; }
 
     private:
+        struct NodeWithDistance {
+            whfc::Node node;
+            whfc::HopDistance d;
+        };
+
         ldc::AtomicTimestampSet<> visitedNode;
         ldc::AtomicTimestampSet<> visitedHyperedge;
         std::vector<whfc::Node> globalToLocalID;
@@ -148,16 +153,16 @@ namespace whfc_rb {
         tbb::enumerable_thread_specific<whfc::Flow> baseCut_thread_specific;
         tbb::enumerable_thread_specific<whfc::Flow> cutAtStake_thread_specific;
 
-        tbb::enumerable_thread_specific<LayeredQueue<whfc::Node>> queue_thread_specific;
+        tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>> queue_thread_specific;
 
         // returns last value of w
-        inline NodeWeight tryToVisitNode(const NodeID u, CSRHypergraph &hg, std::atomic<whfc::NodeWeight> &w, LayeredQueue<whfc::Node>& queue,
-                const whfc::NodeWeight& maxWeight) {
+        inline NodeWeight tryToVisitNode(const NodeID u, CSRHypergraph &hg, std::atomic<whfc::NodeWeight> &w, LayeredQueue<NodeWithDistance>& queue,
+                const whfc::NodeWeight& maxWeight, whfc::HopDistance d) {
             NodeWeight lastSeenValue = 0;
             if (visitedNode.set(u)) {
                 lastSeenValue = w.fetch_add(hg.nodeWeight(u));
                 if (lastSeenValue + hg.nodeWeight(u) <= maxWeight) {
-                    queue.push(static_cast<whfc::Node>(u));
+                    queue.push({static_cast<whfc::Node>(u), d});
                 } else {
                     w.fetch_sub(hg.nodeWeight(u), std::memory_order_relaxed);
                     visitedNode.reset(u);   // REVIEW NOTE is this a good idea? this means other threads will try to add u again --> more contention on w
@@ -168,13 +173,13 @@ namespace whfc_rb {
         }
 
         template<class Builder>
-        bool writeQueuesToBuilder(Builder& builder, tbb::enumerable_thread_specific<LayeredQueue<whfc::Node>>& queues,
-                CSRHypergraph& hg, whfc::DistanceFromCut& distanceFromCut, whfc::HopDistance d) {
+        bool writeQueuesToBuilder(Builder& builder, tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>>& queues,
+                CSRHypergraph& hg, whfc::DistanceFromCut& distanceFromCut) {
             std::atomic<size_t> node_counter = builder.numNodes();
             size_t num_nodes = builder.numNodes();
             std::vector<whfc::FlowHypergraph::NodeData>& nodes = builder.getNodes();
 
-            for (LayeredQueue<whfc::Node>& queue : queues) {
+            for (LayeredQueue<NodeWithDistance>& queue : queues) {
                 num_nodes += queue.allElements().size();
             }
 
@@ -183,16 +188,17 @@ namespace whfc_rb {
             // Write node data into builder
             nodes.resize(num_nodes + 1); // maybe use reserve
 
-            tbb::parallel_for_each(queues, [&](LayeredQueue<whfc::Node>& queue) {
+            tbb::parallel_for_each(queues, [&](LayeredQueue<NodeWithDistance>& queue) {
                 size_t begin_index = node_counter.fetch_add(queue.allElements().size());
                 tbb::parallel_for(tbb::blocked_range<size_t>(0, queue.allElements().size()), [&](const tbb::blocked_range<size_t>& indices) {
                     for (size_t i = indices.begin(); i < indices.end(); ++i) {
                         const whfc::Node localID(begin_index + i);
+                        const NodeWithDistance globalNode = queue.elementAt(i);
                         assert(localID < num_nodes);
-                        nodes[localID].weight = whfc::NodeWeight(hg.nodeWeight(queue.elementAt(i)));
-                        globalToLocalID[queue.elementAt(i)] = localID;
-                        localToGlobalID[localID] = queue.elementAt(i);
-                        distanceFromCut[localID] = d;
+                        nodes[localID].weight = whfc::NodeWeight(hg.nodeWeight(globalNode.node));
+                        globalToLocalID[globalNode.node] = localID;
+                        localToGlobalID[localID] = globalNode.node;
+                        distanceFromCut[localID] = globalNode.d;
                     }
                 });
             });
@@ -215,12 +221,12 @@ namespace whfc_rb {
             tbb::blocked_range<size_t> range(0, cut_hes.size(), 1000);
             tbb::parallel_for(range, [&](const tbb::blocked_range<size_t>& sub_range) {
                 NodeWeight lastSeenValue = 0;
-                LayeredQueue<whfc::Node>& queue = queue_thread_specific.local();
+                LayeredQueue<NodeWithDistance>& queue = queue_thread_specific.local();
                 for (size_t i = sub_range.begin(); i < sub_range.end(); ++i) {
                     const HyperedgeID e = cut_hes[i];
                     for (NodeID v : hg.pinsOf(e)) {
                         if (partition[v] == partID && lastSeenValue + hg.nodeWeight(v) <= maxWeight) {
-                            lastSeenValue = tryToVisitNode(v, hg, w, queue, maxWeight);
+                            lastSeenValue = tryToVisitNode(v, hg, w, queue, maxWeight, d);
                         }
                     }
                     if (lastSeenValue == maxWeight) break;
@@ -232,7 +238,7 @@ namespace whfc_rb {
 
             bool nodes_left = false;
 
-            for (LayeredQueue<whfc::Node>& queue : queue_thread_specific) {
+            for (LayeredQueue<NodeWithDistance>& queue : queue_thread_specific) {
                 queue.finishNextLayer();
                 if (!queue.currentLayerEmpty()) {
                     nodes_left = true;
@@ -242,19 +248,19 @@ namespace whfc_rb {
             while (nodes_left) {
                 timer.start("Scan_hyperedges_and_add_nodes", "BFS");
                 // scan hyperedges and add nodes to the next layer
-                tbb::parallel_for_each(queue_thread_specific, [&](LayeredQueue<whfc::Node>& queue) {
+                tbb::parallel_for_each(queue_thread_specific, [&](LayeredQueue<NodeWithDistance>& queue) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(queue.currentLayerStart(), queue.currentLayerEnd()), [&](const tbb::blocked_range<size_t>& indices) {
-                        LayeredQueue<whfc::Node>& local_queue = queue_thread_specific.local();
+                        LayeredQueue<NodeWithDistance>& local_queue = queue_thread_specific.local();
                         NodeWeight lastSeenValue = 0;
 
                         for (size_t i = indices.begin(); i < indices.end(); ++i) {
-                            const NodeID u = queue.elementAt(i);
+                            const NodeID u = queue.elementAt(i).node;
 
                             for (HyperedgeID e : hg.hyperedgesOf(u)) {
                                 if (partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1 && visitedHyperedge.set(e)) {
                                     for (NodeID v : hg.pinsOf(e)) {
                                         if (partition[v] == partID && lastSeenValue + hg.nodeWeight(v) <= maxWeight) {
-                                            lastSeenValue = tryToVisitNode(v, hg, w, local_queue, maxWeight);
+                                            lastSeenValue = tryToVisitNode(v, hg, w, local_queue, maxWeight, d);
                                         }
                                     }
                                 }
@@ -267,7 +273,7 @@ namespace whfc_rb {
 
                 nodes_left = false;
 
-                for (LayeredQueue<whfc::Node>& queue : queue_thread_specific) {
+                for (LayeredQueue<NodeWithDistance>& queue : queue_thread_specific) {
                     queue.clearCurrentLayer();
                     queue.finishNextLayer();
                     if (queue.currentLayer().size() > 0) {
@@ -290,7 +296,7 @@ namespace whfc_rb {
             visitedHyperedge.reset();
 
             timer.start("Add_hyperedges", "BFS");
-            tbb::parallel_for_each(queue_thread_specific, [&](LayeredQueue<whfc::Node>& queue) {
+            tbb::parallel_for_each(queue_thread_specific, [&](LayeredQueue<NodeWithDistance>& queue) {
                 tbb::parallel_for(tbb::blocked_range<size_t>(0, queue.allElements().size()), [&](const tbb::blocked_range<size_t>& indices) {
                     auto &local_builder = mockBuilder_thread_specific.local();
                     local_builder.setSource(result.source);
@@ -299,7 +305,7 @@ namespace whfc_rb {
                     whfc::Flow &cutAtStake = cutAtStake_thread_specific.local();
 
                     for (size_t i = indices.begin(); i < indices.end(); ++i) {
-                        const NodeID u = queue.elementAt(i);
+                        const NodeID u = queue.elementAt(i).node;
 
                         // skip terminals
                         if (u == invalid_node) {
@@ -392,7 +398,7 @@ namespace whfc_rb {
             for (MockBuilder& mockBuilder : mockBuilder_thread_specific) {
                 mockBuilder.clear();
             }
-            for (LayeredQueue<whfc::Node>& queue : queue_thread_specific) {
+            for (LayeredQueue<NodeWithDistance>& queue : queue_thread_specific) {
                 queue.clear();
             }
         }
