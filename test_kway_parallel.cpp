@@ -20,8 +20,8 @@ void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &time
 
 int main(int argc, const char *argv[]) {
 
-    if (argc != 9) {
-        throw std::runtime_error("Usage ./KWayRefinementParallel HypergraphFile epsilon k seed preset numThreads useThreadPinning(0 or 1) distancePiercing(0 or 1)");
+    if (argc != 10) {
+        throw std::runtime_error("Usage ./KWayRefinementParallel HypergraphFile epsilon k seed preset numThreads useThreadPinning(0 or 1) distancePiercing(0 or 1) maxNumIterations");
     }
     whfc_rb::CSRHypergraph hg = whfc::HMetisIO::readCSRHypergraph(argv[1]);
     double epsilon = std::stod(argv[2]);
@@ -31,10 +31,8 @@ int main(int argc, const char *argv[]) {
     uint numThreads = std::stoi(argv[6]);
     bool useThreadPinning = std::stoi(argv[7]);
     bool distancePiercing = std::stoi(argv[8]);
+    int maxNumIterations = std::stoi(argv[9]);
     std::mt19937 mt(seed);
-
-    //uint maxIterations = 20 * numParts * numParts;std::numeric_limits<uint>::max();
-    uint maxIterations = std::numeric_limits<uint>::max();
 
     tbb::task_scheduler_init init(numThreads);
     whfc_rb::pinning_observer pinner;
@@ -60,13 +58,13 @@ int main(int argc, const char *argv[]) {
 
     timer.start("Refinement", "Total");
     whfc_rb::KWayRefinerParallel refiner(partition, timer, mt, config);
-    uint iterations = refiner.refine(epsilon, maxIterations);
+    uint iterations = refiner.refine(epsilon, maxNumIterations);
     timer.stop("Refinement");
     timer.stop("Total");
 
     printStatistics(partition, timer);
     std::cout << "numThreads: " << numThreads << std::endl;
-    std::cout << "maxIterations: " << maxIterations << std::endl;
+    std::cout << "maxIterations: " << maxNumIterations << std::endl;
     std::cout << "iterations_done: " << iterations << std::endl;
 }
 
