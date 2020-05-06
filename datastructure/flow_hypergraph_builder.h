@@ -193,15 +193,18 @@ namespace whfc {
 			}
 
 			incident_hyperedges.resize(numPins());
-			for (Hyperedge e : hyperedgeIDs()) {
-			    assert(beginIndexPins(e) < endIndexPins(e));
-				for (auto pin_it = beginIndexPins(e); pin_it != endIndexPins(e); pin_it++) {
-					Pin& p = pins[pin_it];
-					InHeIndex ind_he = nodes[p.pin].first_out++;	//destroy first_out temporarily and reset later
-					incident_hyperedges[ind_he] = { e, Flow(0), pin_it };
-					p.he_inc_iter = ind_he;					//set iterator for incident hyperedge -> its position in incident_hyperedges of the node
-				}
-			}
+			tbb::parallel_for(tbb::blocked_range<size_t>(0, numHyperedges()), [&](const tbb::blocked_range<size_t>& range) {
+			    for (size_t i = range.begin(); i < range.end(); ++i) {
+			        const Hyperedge e = static_cast<Hyperedge>(i);
+                    assert(beginIndexPins(e) < endIndexPins(e));
+                    for (auto pin_it = beginIndexPins(e); pin_it != endIndexPins(e); pin_it++) {
+                        Pin& p = pins[pin_it];
+                        InHeIndex ind_he = static_cast<InHeIndex>(__sync_fetch_and_add(&nodes[p.pin].first_out.value(), 1));	//destroy first_out temporarily and reset later
+                        incident_hyperedges[ind_he] = { e, Flow(0), pin_it };
+                        p.he_inc_iter = ind_he;					//set iterator for incident hyperedge -> its position in incident_hyperedges of the node
+                    }
+			    }
+			});
 			
 			for (Node u(numNodes()-1); u > 0; u--)
 				nodes[u].first_out = nodes[u-1].first_out;	//reset temporarily destroyed first_out

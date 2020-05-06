@@ -180,7 +180,7 @@ namespace whfc_rb {
             std::vector<whfc::FlowHypergraph::NodeData>& nodes = builder.getNodes();
 
             for (LayeredQueue<NodeWithDistance>& queue : queues) {
-                num_nodes += queue.allElements().size();
+                num_nodes += queue.queueEnd();
             }
 
             bool has_nodes = num_nodes > builder.numNodes();
@@ -189,8 +189,8 @@ namespace whfc_rb {
             nodes.resize(num_nodes + 1); // maybe use reserve
 
             tbb::parallel_for_each(queues, [&](LayeredQueue<NodeWithDistance>& queue) {
-                size_t begin_index = node_counter.fetch_add(queue.allElements().size());
-                tbb::parallel_for(tbb::blocked_range<size_t>(0, queue.allElements().size()), [&](const tbb::blocked_range<size_t>& indices) {
+                size_t begin_index = node_counter.fetch_add(queue.queueEnd());
+                tbb::parallel_for(tbb::blocked_range<size_t>(0, queue.queueEnd()), [&](const tbb::blocked_range<size_t>& indices) {
                     for (size_t i = indices.begin(); i < indices.end(); ++i) {
                         const whfc::Node localID(begin_index + i);
                         const NodeWithDistance globalNode = queue.elementAt(i);
@@ -297,7 +297,7 @@ namespace whfc_rb {
 
             timer.start("Add_hyperedges", "BFS");
             tbb::parallel_for_each(queue_thread_specific, [&](LayeredQueue<NodeWithDistance>& queue) {
-                tbb::parallel_for(tbb::blocked_range<size_t>(0, queue.allElements().size()), [&](const tbb::blocked_range<size_t>& indices) {
+                tbb::parallel_for(tbb::blocked_range<size_t>(0, queue.queueEnd()), [&](const tbb::blocked_range<size_t>& indices) {
                     auto &local_builder = mockBuilder_thread_specific.local();
                     local_builder.setSource(result.source);
                     local_builder.setTarget(result.target);
