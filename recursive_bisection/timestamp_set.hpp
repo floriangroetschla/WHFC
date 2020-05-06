@@ -99,6 +99,40 @@ private:
     std::atomic<TimestampT> generation;
 };
 
+    template<typename TimestampT = uint16_t>
+    class AtomicTimestampSetUsingBuiltins {
+    public:
+        AtomicTimestampSetUsingBuiltins(size_t n) : timestamps(n), generation(0) {}
+
+        bool set(size_t i) {
+            return __atomic_exchange_n(&timestamps[i], generation, __ATOMIC_ACQ_REL) != generation;
+        }
+
+        bool isSet(size_t i) const {
+            return __atomic_load_n(&timestamps[i], __ATOMIC_ACQUIRE) == generation;
+        }
+
+        bool isSetUnsafe(size_t i) const {
+            return timestamps[i] == generation;
+        }
+
+        void reset(size_t i) {
+            __atomic_store_n(&timestamps[i], generation - 1, __ATOMIC_RELEASE);
+        }
+
+        void reset() {
+            if (generation == std::numeric_limits<TimestampT>::max()) {
+                timestamps = std::vector<TimestampT>(timestamps.size());
+                generation = 0;
+            }
+            generation++;
+        }
+
+    private:
+        std::vector<TimestampT> timestamps;
+        TimestampT generation;
+    };
+
 template<typename TimestampT = uint32_t>
 class AtomicTimestampCounter {
 public:
@@ -135,6 +169,7 @@ private:
     std::atomic<TimestampT> generation_start;
     std::atomic<TimestampT> generation_current;
 };
+
 
 
 }
