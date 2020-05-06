@@ -91,8 +91,6 @@ namespace whfc_rb {
                 timer.stop("Merging");
                  */
             } else {
-                queue_thread_specific.clear();
-
                 localToGlobalID[0] = invalid_node;
                 fhgb.addNode(whfc::NodeWeight(0));
                 w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, fhgb);
@@ -393,6 +391,9 @@ namespace whfc_rb {
             result = {whfc::Node(0), whfc::Node(0), 0, 0};
             for (MockBuilder& mockBuilder : mockBuilder_thread_specific) {
                 mockBuilder.clear();
+            }
+            for (LayeredQueue<whfc::Node>& queue : queue_thread_specific) {
+                queue.clear();
             }
         }
     };
