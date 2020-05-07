@@ -29,16 +29,17 @@ namespace whfc_rb {
             partActive.assign(partActive.size(), 1);
             partActiveNextRound.assign(partActive.size(), 0);
             iterationCounter = 0;
+            std::atomic<size_t> iterations_done = 0;
 
             // TODO maybe also make a row restriction. or terminate if there aren't enough initial tasks. 
-            while (std::any_of(partActive.begin(), partActive.end(), [](auto& x) { return x > 0; }) && iterationCounter < maxIterations) {
+            while (std::any_of(partActive.begin(), partActive.end(), [&](auto& x) { return x > 0; }) && iterationCounter < maxIterations) {
                 std::vector<WorkElement> tasks = initialBlockPairs();
                 //std::cout << "Round " << round << " initial tasks: " << tasks.size() << std::endl;
                 tbb::parallel_do(tasks,[&](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder) {
                     assert(partScheduled[element.part0]);
                     assert(partScheduled[element.part1]);
 
-                    if (iterationCounter < maxIterations) {
+                    if (iterationCounter.fetch_add(1) < maxIterations) {
                         WHFCRefinerTwoWay& refiner = refiners_thread_specific.local();
                         whfc::TimeReporter& timer = timers_thread_specific.local();
                         timer.start("WHFCRefinerTwoWay");
@@ -70,7 +71,7 @@ namespace whfc_rb {
                         }
 
                         timer.stop("addNewTasks");
-                        iterationCounter++;
+                        iterations_done++;
                     }
                 });
                 //std::cout << "WHFC refiner calls: " << iterationCounter << std::endl;
@@ -85,7 +86,7 @@ namespace whfc_rb {
                 timer.merge(local_timer, "Refinement", "total");
             }
 
-            return iterationCounter.load();
+            return iterations_done.load();
         }
 
         template<typename Element>
