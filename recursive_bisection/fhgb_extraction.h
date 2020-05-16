@@ -24,7 +24,7 @@ namespace whfc_rb {
                 localToGlobalID(maxNumNodes + 2),
                 mt(seed), config(config),
                 mockBuilder_thread_specific(std::ref(fhgb.getNodes()), whfc::invalidNode, whfc::invalidNode),
-                queue_thread_specific(maxNumNodes) {}
+                queue_thread_specific_1(maxNumNodes), queue_thread_specific_2(maxNumNodes) {}
 
         struct ExtractorInfo {
             whfc::Node source;
@@ -57,54 +57,47 @@ namespace whfc_rb {
 
             whfc::NodeWeight w0, w1;
 
-            if constexpr (doBothBFSInParallel) {
-                /*
-                timer.start("Parallel_BFS", "BFS");
+            localToGlobalID[0] = invalid_node;
+            fhgb.addNode(whfc::NodeWeight(0));
+            result.target = whfc::Node(1);
+            fhgb.addNode(whfc::NodeWeight(0));
+            localToGlobalID[result.target] = invalid_node;
 
-                tbb::parallel_invoke([&]() {
-                    fhgb.addNode(whfc::NodeWeight(0));
-                    layered_queue.push(invalid_node);
-                    layered_queue.reinitialize();
-                    w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, fhgb, layered_queue);
-                }, [&]() {
-                    whfc::DistanceFromCut temp_dist(hg.numNodes());
-                    mock_builder.addNode(whfc::NodeWeight(0));
-                    second_queue.push(invalid_node);
-                    second_queue.reinitialize();
-                    w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, whfc::Node(0), delta, temp_dist, timer, mock_builder, second_queue);
-                });
+            timer.start("Scan_hyperedges_and_add_nodes", "BFS");
+            tbb::parallel_invoke([&]() {
+                w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, queue_thread_specific_1);
+            }, [&]() {
+                w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, timer, queue_thread_specific_2);
+            });
+            timer.stop("Scan_hyperedges_and_add_nodes");
 
-                timer.stop("Parallel_BFS");
+            timer.start("writeQueuesToBuilder", "BFS");
+            writeQueuesToBuilder(fhgb, queue_thread_specific_1, hg, distanceFromCut);
+            writeQueuesToBuilder(fhgb, queue_thread_specific_2, hg, distanceFromCut);
+            timer.stop("writeQueuesToBuilder");
 
-                timer.start("Merging", "BFS");
-                size_t num_nodes_first_search = fhgb.numNodes();
-                result.target = whfc::Node(fhgb.numNodes());
+            visitedHyperedge.reset();
 
-                fhgb.addMockBuilder(mock_builder, true);
+            timer.start("Add_hyperedges", "BFS");
+            tbb::parallel_invoke([&]() {
+                addHyperedges(hg, partition, part0, part1, timer, queue_thread_specific_1);
+            }, [&]() {
+                addHyperedges(hg, partition, part0, part1, timer, queue_thread_specific_2);
+            });
+            timer.stop("Add_hyperedges");
 
-                for (NodeID u : second_queue.allElements()) {
-                    layered_queue.push(u);
-                    if (u != whfc::Node::InvalidValue) {
-                        globalToLocalID[u] = globalToLocalID[u] + whfc::Node(num_nodes_first_search);
-                    }
-                }
-                timer.stop("Merging");
-                 */
-            } else {
-                localToGlobalID[0] = invalid_node;
-                fhgb.addNode(whfc::NodeWeight(0));
-                w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, fhgb);
+            timer.start("addMockBuildersParallel", "BFS");
+            fhgb.addMockBuildersParallel(mockBuilder_thread_specific);
+            timer.stop("addMockBuildersParallel");
 
-                result.target = whfc::Node(1);
-                fhgb.addNode(whfc::NodeWeight(0));
-                localToGlobalID[result.target] = invalid_node;
-                w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, timer, fhgb);
+            for (whfc::Flow& baseCut : baseCut_thread_specific) {
+                result.baseCut += baseCut;
+                baseCut = 0;
+            }
 
-                timer.start("writeQueuesToBuilder", "BFS");
-                writeQueuesToBuilder(fhgb, queue_thread_specific, hg, distanceFromCut);
-                timer.stop("writeQueuesToBuilder");
-
-                addHyperedges(fhgb, hg, partition, part0, part1, timer);
+            for (whfc::Flow& cutAtStake : cutAtStake_thread_specific) {
+                result.cutAtStake += cutAtStake;
+                cutAtStake = 0;
             }
 
 
@@ -153,7 +146,8 @@ namespace whfc_rb {
         tbb::enumerable_thread_specific<whfc::Flow> baseCut_thread_specific;
         tbb::enumerable_thread_specific<whfc::Flow> cutAtStake_thread_specific;
 
-        tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>> queue_thread_specific;
+        tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>> queue_thread_specific_1;
+        tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>> queue_thread_specific_2;
 
         // returns last value of w
         inline NodeWeight tryToVisitNode(const NodeID u, CSRHypergraph &hg, std::atomic<whfc::NodeWeight> &w, LayeredQueue<NodeWithDistance>& queue,
@@ -207,17 +201,18 @@ namespace whfc_rb {
             return has_nodes;
         }
 
-        template<class PartitionImpl, typename CutEdgeRange, typename Builder>
+        template<class PartitionImpl, typename CutEdgeRange>
         whfc::NodeWeight BreadthFirstSearch(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
                                             PartitionBase::PartitionID partID, PartitionBase::PartitionID otherPartID,
                                             NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta,
-                                            whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer, Builder& builder) {
+                                            whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer,
+                                            tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>>& queue_thread_specific) {
             std::atomic<whfc::NodeWeight> w = 0;
             whfc::HopDistance d = delta;
 
 
             // Collect boundary vertices
-            timer.start("Collect_boundary_vertices", "BFS");
+            //timer.start("Collect_boundary_vertices", "BFS");
             tbb::blocked_range<size_t> range(0, cut_hes.size(), 1000);
             tbb::parallel_for(range, [&](const tbb::blocked_range<size_t>& sub_range) {
                 NodeWeight lastSeenValue = 0;
@@ -232,7 +227,7 @@ namespace whfc_rb {
                     if (lastSeenValue == maxWeight) break;
                 }
             });
-            timer.stop("Collect_boundary_vertices");
+            //timer.stop("Collect_boundary_vertices");
 
             d += delta;
 
@@ -246,7 +241,7 @@ namespace whfc_rb {
             }
 
             while (nodes_left) {
-                timer.start("Scan_hyperedges_and_add_nodes", "BFS");
+                //timer.start("Scan_hyperedges_and_add_nodes", "BFS");
                 // scan hyperedges and add nodes to the next layer
                 tbb::parallel_for_each(queue_thread_specific, [&](LayeredQueue<NodeWithDistance>& queue) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(queue.currentLayerStart(), queue.currentLayerEnd()), [&](const tbb::blocked_range<size_t>& indices) {
@@ -269,7 +264,7 @@ namespace whfc_rb {
                         }
                     });
                 });
-                timer.stop("Scan_hyperedges_and_add_nodes");
+                //timer.stop("Scan_hyperedges_and_add_nodes");
 
                 nodes_left = false;
 
@@ -291,11 +286,11 @@ namespace whfc_rb {
             return w.load();
         }
 
-        template<typename Builder, typename PartitionImpl>
-        void addHyperedges(Builder& builder, CSRHypergraph& hg, const PartitionImpl &partition, PartitionBase::PartitionID part0, PartitionBase::PartitionID part1, whfc::TimeReporter& timer) {
-            visitedHyperedge.reset();
+        template<typename PartitionImpl>
+        void addHyperedges(CSRHypergraph& hg, const PartitionImpl &partition, PartitionBase::PartitionID part0,
+                PartitionBase::PartitionID part1, whfc::TimeReporter& timer, tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>>& queue_thread_specific) {
 
-            timer.start("Add_hyperedges", "BFS");
+            //timer.start("Add_hyperedges", "BFS");
             tbb::parallel_for_each(queue_thread_specific, [&](LayeredQueue<NodeWithDistance>& queue) {
                 tbb::parallel_for(tbb::blocked_range<size_t>(0, queue.queueEnd()), [&](const tbb::blocked_range<size_t>& indices) {
                     auto &local_builder = mockBuilder_thread_specific.local();
@@ -372,21 +367,7 @@ namespace whfc_rb {
                     }
                 });
             });
-            timer.stop("Add_hyperedges");
-
-            timer.start("addMockBuildersParallel", "BFS");
-            builder.addMockBuildersParallel(mockBuilder_thread_specific);
-            timer.stop("addMockBuildersParallel");
-
-            for (whfc::Flow& baseCut : baseCut_thread_specific) {
-                result.baseCut += baseCut;
-                baseCut = 0;
-            }
-
-            for (whfc::Flow& cutAtStake : cutAtStake_thread_specific) {
-                result.cutAtStake += cutAtStake;
-                cutAtStake = 0;
-            }
+            //timer.stop("Add_hyperedges");
         }
 
         void initialize(uint numNodes, uint numHyperedges) {
@@ -398,7 +379,11 @@ namespace whfc_rb {
             for (MockBuilder& mockBuilder : mockBuilder_thread_specific) {
                 mockBuilder.clear();
             }
-            for (LayeredQueue<NodeWithDistance>& queue : queue_thread_specific) {
+
+            for (LayeredQueue<NodeWithDistance>& queue : queue_thread_specific_1) {
+                queue.clear();
+            }
+            for (LayeredQueue<NodeWithDistance>& queue : queue_thread_specific_2) {
                 queue.clear();
             }
         }
