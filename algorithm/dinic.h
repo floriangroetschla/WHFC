@@ -235,14 +235,12 @@ namespace whfc {
 
             while (nodes_left) {
                 timer.start("searchFromNodes", "buildLayeredNetwork");
-                tbb::parallel_for(thisLayer_thread_specific->range(), [&](const tbb::blocked_range<tls_enumerable_thread_specific<std::vector<Node>>::iterator>& range) {
-                    for (auto& vector : range)  {
-                        tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
-                            for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
-                                searchFromNode(vector[i], cs);
-                            }
-                        });
-                    }
+                tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
+                    tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
+                        for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
+                            searchFromNode(vector[i], cs);
+                        }
+                    });
                 });
                 timer.stop("searchFromNodes");
 
