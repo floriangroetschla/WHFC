@@ -153,15 +153,9 @@ namespace whfc_rb {
         inline NodeWeight tryToVisitNode(const NodeID u, CSRHypergraph &hg, std::atomic<whfc::NodeWeight> &w, LayeredQueue<NodeWithDistance>& queue,
                 const whfc::NodeWeight& maxWeight, whfc::HopDistance d) {
             NodeWeight lastSeenValue = 0;
-            if (visitedNode.set(u)) {
+            if (w < maxWeight && visitedNode.set(u)) {
                 lastSeenValue = w.fetch_add(hg.nodeWeight(u));
-                if (lastSeenValue + hg.nodeWeight(u) <= maxWeight) {
-                    queue.push({static_cast<whfc::Node>(u), d});
-                } else {
-                    w.fetch_sub(hg.nodeWeight(u), std::memory_order_relaxed);
-                    visitedNode.reset(u);   // REVIEW NOTE is this a good idea? this means other threads will try to add u again --> more contention on w
-                                            // --> necessary when adding pins
-                }
+                queue.push({static_cast<whfc::Node>(u), d});
             }
             return lastSeenValue;
         }
@@ -224,7 +218,7 @@ namespace whfc_rb {
                             lastSeenValue = tryToVisitNode(v, hg, w, queue, maxWeight, d);
                         }
                     }
-                    if (lastSeenValue == maxWeight) break;
+                    if (lastSeenValue >= maxWeight) break;
                 }
             });
             //timer.stop("Collect_boundary_vertices");
@@ -259,7 +253,7 @@ namespace whfc_rb {
                                         }
                                     }
                                 }
-                                if (lastSeenValue == maxWeight) break;
+                                if (lastSeenValue >= maxWeight) break;
                             }
                         }
                     });
