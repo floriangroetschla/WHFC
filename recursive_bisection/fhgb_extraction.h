@@ -95,14 +95,8 @@ namespace whfc_rb {
                 hyperedges_local.clear();
             }
 
-            
-
             timer.start("Add_hyperedges", "BFS");
-            tbb::parallel_invoke([&]() {
-                addHyperedges(hg, partition, part0, part1, timer, queue_thread_specific_1);
-            }, [&]() {
-                addHyperedges(hg, partition, part0, part1, timer, queue_thread_specific_2);
-            });
+            addHyperedges(hg, partition, part0, part1, timer, hyperedges);
             timer.stop("Add_hyperedges");
 
             timer.start("addMockBuildersParallel", "BFS");
@@ -263,7 +257,7 @@ namespace whfc_rb {
                     if (connectToSource) num_pins++;
                     if (connectToTarget) num_pins++;
                     hyperedges.push_back({e, num_pins});
-                    if (lastSeenValue1 >= maxWeight1 && lastSeenValue2 >= maxWeight2) break;
+                    //if (lastSeenValue1 >= maxWeight1 && lastSeenValue2 >= maxWeight2) break;
                 }
             });
 
@@ -300,6 +294,7 @@ namespace whfc_rb {
                         for (size_t i = indices.begin(); i < indices.end(); ++i) {
                             const NodeID u = queue.elementAt(i).node;
 
+                            //if (lastSeenValue >= maxWeight) break;
                             for (HyperedgeID e : hg.hyperedgesOf(u)) {
                                 if (partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1 && visitedHyperedge.set(e)) {
                                     size_t num_pins = 0;
@@ -316,7 +311,6 @@ namespace whfc_rb {
                                     if (connectToTerminal) num_pins++;
                                     hyperedges.push_back({e, num_pins});
                                 }
-                                if (lastSeenValue >= maxWeight) break;
                             }
                         }
                     });
@@ -341,86 +335,69 @@ namespace whfc_rb {
 
         template<typename PartitionImpl>
         void addHyperedges(CSRHypergraph& hg, const PartitionImpl &partition, PartitionBase::PartitionID part0,
-                PartitionBase::PartitionID part1, whfc::TimeReporter& timer, tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>>& queue_thread_specific) {
+                PartitionBase::PartitionID part1, whfc::TimeReporter& timer, std::vector<HyperedgeWithSize>& hyperedges) {
 
-            //timer.start("Add_hyperedges", "BFS");
-            tbb::parallel_for_each(queue_thread_specific, [&](LayeredQueue<NodeWithDistance>& queue) {
-                tbb::parallel_for(tbb::blocked_range<size_t>(0, queue.queueEnd()), [&](const tbb::blocked_range<size_t>& indices) {
-                    auto &local_builder = mockBuilder_thread_specific.local();
-                    local_builder.setSource(result.source);
-                    local_builder.setTarget(result.target);
-                    whfc::Flow &baseCut = baseCut_thread_specific.local();
-                    whfc::Flow &cutAtStake = cutAtStake_thread_specific.local();
+            tbb::parallel_for(tbb::blocked_range<size_t>(0, hyperedges.size()), [&](const tbb::blocked_range<size_t>& indices) {
+                auto &local_builder = mockBuilder_thread_specific.local();
+                local_builder.setSource(result.source);
+                local_builder.setTarget(result.target);
+                whfc::Flow &baseCut = baseCut_thread_specific.local();
+                whfc::Flow &cutAtStake = cutAtStake_thread_specific.local();
 
-                    for (size_t i = indices.begin(); i < indices.end(); ++i) {
-                        const NodeID u = queue.elementAt(i).node;
+                for (size_t i = indices.begin(); i < indices.end(); ++i) {
+                    const HyperedgeWithSize edge = hyperedges[i];
+                    const HyperedgeID e = edge.e;
+                    bool connectToSource = false;
+                    bool connectToTarget = false;
+                    if (partition.pinsInPart(part0, e) > 0 && partition.pinsInPart(part1, e) > 0) {
+                        // Cut hyperedge
+                        cutAtStake += hg.hyperedgeWeight(e);
+                        local_builder.startHyperedge(hg.hyperedgeWeight(e));
 
-                        // skip terminals
-                        if (u == invalid_node) {
-                            continue;
-                        }
-
-                        const PartitionBase::PartitionID partID = partition[u];
-                        const PartitionBase::PartitionID otherPartID = partID == part0 ? part1 : part0;
-                        const whfc::Node terminal = partID == part0 ? result.source : result.target;
-
-                        for (HyperedgeID e : hg.hyperedgesOf(u)) {
-                            if (visitedHyperedge.set(e)) {
-                                bool connectToSource = false;
-                                bool connectToTarget = false;
-                                if (partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1) {
-                                    local_builder.startHyperedge(hg.hyperedgeWeight(e));
-                                    for (NodeID v : hg.pinsOf(e)) {
-                                        if (partition[v] == partID) {
-                                            if (visitedNode.isSet(v)) {
-                                                local_builder.addPin(globalToLocalID[v]);
-                                            } else {
-                                                if (terminal == result.source) {
-                                                    connectToSource = true;
-                                                } else {
-                                                    connectToTarget = true;
-                                                }
-                                            }
-                                        }
-                                    }
-                                } else if (partition.pinsInPart(part0, e) > 0 && partition.pinsInPart(part1, e) > 0) {
-                                    // This is a cut hyperedge
-
-                                    cutAtStake += hg.hyperedgeWeight(e);
-                                    local_builder.startHyperedge(hg.hyperedgeWeight(e));
-
-                                    for (NodeID v : hg.pinsOf(e)) {
-                                        if (visitedNode.isSet(v)) {
-                                            assert(globalToLocalID[v] < local_builder.numNodes());
-                                            local_builder.addPin(globalToLocalID[v]);
-                                        } else {
-                                            connectToSource |= (partition[v] == part0);
-                                            connectToTarget |= (partition[v] == part1);
-                                            if (connectToSource && connectToTarget) {
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-
+                        for (NodeID v : hg.pinsOf(e)) {
+                            if (visitedNode.isSet(v)) {
+                                assert(globalToLocalID[v] < local_builder.numNodes());
+                                local_builder.addPin(globalToLocalID[v]);
+                            } else {
+                                connectToSource |= (partition[v] == part0);
+                                connectToTarget |= (partition[v] == part1);
                                 if (connectToSource && connectToTarget) {
-                                    local_builder.removeCurrentHyperedge();
-                                    baseCut += hg.hyperedgeWeight(e);
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        const PartitionBase::PartitionID partID = partition.pinsInPart(part0, e) > 0 ? part0 : part1;
+                        const whfc::Node terminal = partID == part0 ? result.source : result.target;
+                        local_builder.startHyperedge(hg.hyperedgeWeight(e));
+                        for (NodeID v : hg.pinsOf(e)) {
+                            if (partition[v] == partID) {
+                                if (visitedNode.isSet(v)) {
+                                    local_builder.addPin(globalToLocalID[v]);
                                 } else {
-                                    if (connectToSource) {
-                                        local_builder.addPin(result.source);
-                                    }
-                                    if (connectToTarget) {
-                                        local_builder.addPin(result.target);
+                                    if (terminal == result.source) {
+                                        connectToSource = true;
+                                    } else {
+                                        connectToTarget = true;
                                     }
                                 }
                             }
-
                         }
                     }
-                });
+
+                    if (connectToSource && connectToTarget) {
+                        local_builder.removeCurrentHyperedge();
+                        baseCut += hg.hyperedgeWeight(e);
+                    } else {
+                        if (connectToSource) {
+                            local_builder.addPin(result.source);
+                        }
+                        if (connectToTarget) {
+                            local_builder.addPin(result.target);
+                        }
+                    }
+                }
             });
-            //timer.stop("Add_hyperedges");
         }
 
         void initialize(uint numNodes, uint numHyperedges) {
