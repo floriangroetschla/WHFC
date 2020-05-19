@@ -286,7 +286,7 @@ namespace whfc {
         const size_t maxNumNodes;
         const size_t maxNumHyperedges;
 
-	protected:
+	public:
 		std::vector<NodeData> nodes;
 		std::vector<HyperedgeData> hyperedges;
 		std::vector<Pin> pins;

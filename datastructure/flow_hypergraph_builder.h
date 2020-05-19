@@ -221,7 +221,9 @@ namespace whfc {
 			pins_sending_flow.shrink_to_fit();
 			pins_receiving_flow.shrink_to_fit();
 		}
-		
+
+        size_t numPinsAtHyperedgeStart = 0;
+
 	private:
 		
 		void removeLastPin() {
@@ -244,6 +246,5 @@ namespace whfc {
 		}
 		
 		bool finalized = false;
-		size_t numPinsAtHyperedgeStart = 0;
 	};
 }

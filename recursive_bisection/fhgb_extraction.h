@@ -95,8 +95,12 @@ namespace whfc_rb {
                 hyperedges_local.clear();
             }
 
+            std::vector<size_t> prefix_sum(hyperedges.size() + 1);
+
+            computePrefixSum(hyperedges, prefix_sum);
+
             timer.start("Add_hyperedges", "BFS");
-            addHyperedges(hg, partition, part0, part1, timer, hyperedges);
+            addHyperedges(hg, partition, part0, part1, timer, hyperedges, prefix_sum);
             timer.stop("Add_hyperedges");
 
             timer.start("addMockBuildersParallel", "BFS");
@@ -171,6 +175,21 @@ namespace whfc_rb {
 
         std::vector<std::mutex> tryVisitNodeLock;
 
+        void computePrefixSum(const std::vector<HyperedgeWithSize>& vector, std::vector<size_t>& result) {
+            tbb::parallel_scan(tbb::blocked_range<size_t>(0, vector.size()), 0,
+                [&](const tbb::blocked_range<size_t>& r, size_t sum, bool is_final_scan) -> size_t {
+                size_t temp = sum;
+                for (size_t i = r.begin(); i < r.end(); ++i) {
+                    temp = temp + vector[i].pin_count;
+                    if(is_final_scan)
+                        result[i + 1] = temp;
+                }
+                return temp;
+            }, [] (size_t left, size_t right) {
+                return left + right;
+            });
+        }
+
 
         template<class Builder>
         bool writeQueuesToBuilder(Builder& builder, tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>>& queues,
@@ -234,8 +253,11 @@ namespace whfc_rb {
                 LayeredQueue<NodeWithDistance>& queue1 = queue_thread_specific_1.local();
                 LayeredQueue<NodeWithDistance>& queue2 = queue_thread_specific_2.local();
                 std::vector<HyperedgeWithSize>& hyperedges = hyperedges_thread_specific.local();
+                whfc::Flow &baseCut = baseCut_thread_specific.local();
+                whfc::Flow &cutAtStake = cutAtStake_thread_specific.local();
                 for (size_t i = sub_range.begin(); i < sub_range.end(); ++i) {
                     const HyperedgeID e = cut_hes[i];
+                    cutAtStake += hg.hyperedgeWeight(e);
                     size_t num_pins = 0;
                     bool connectToSource = false;
                     bool connectToTarget = false;
@@ -254,9 +276,12 @@ namespace whfc_rb {
                             }
                         }
                     }
-                    if (connectToSource) num_pins++;
-                    if (connectToTarget) num_pins++;
-                    hyperedges.push_back({e, num_pins});
+                    if (!(connectToSource && connectToTarget)) {
+                        if (connectToSource || connectToTarget) num_pins++;
+                        hyperedges.push_back({e, num_pins});
+                    } else {
+                        baseCut += hg.hyperedgeWeight(e);
+                    }
                     //if (lastSeenValue1 >= maxWeight1 && lastSeenValue2 >= maxWeight2) break;
                 }
             });
@@ -333,47 +358,55 @@ namespace whfc_rb {
             distanceFromCut[terminal] = d;
         }
 
+        using PinIndexRange = mutable_index_range<whfc::PinIndex>;
+
         template<typename PartitionImpl>
         void addHyperedges(CSRHypergraph& hg, const PartitionImpl &partition, PartitionBase::PartitionID part0,
-                PartitionBase::PartitionID part1, whfc::TimeReporter& timer, std::vector<HyperedgeWithSize>& hyperedges) {
+                PartitionBase::PartitionID part1, whfc::TimeReporter& timer, std::vector<HyperedgeWithSize>& hyperedges,
+                const std::vector<size_t>& prefix_sum) {
+
+            fhgb.hyperedges.resize(hyperedges.size() + 1);
+            fhgb.pins_sending_flow.resize(hyperedges.size());
+            fhgb.pins_receiving_flow.resize(hyperedges.size());
+            fhgb.pins.resize(prefix_sum[prefix_sum.size() - 1]);
+
+            fhgb.hyperedges.back().first_out = whfc::PinIndex(prefix_sum[prefix_sum.size() - 1]);
+            fhgb.numPinsAtHyperedgeStart = prefix_sum[prefix_sum.size() - 1];
 
             tbb::parallel_for(tbb::blocked_range<size_t>(0, hyperedges.size()), [&](const tbb::blocked_range<size_t>& indices) {
-                auto &local_builder = mockBuilder_thread_specific.local();
-                local_builder.setSource(result.source);
-                local_builder.setTarget(result.target);
-                whfc::Flow &baseCut = baseCut_thread_specific.local();
-                whfc::Flow &cutAtStake = cutAtStake_thread_specific.local();
+
 
                 for (size_t i = indices.begin(); i < indices.end(); ++i) {
                     const HyperedgeWithSize edge = hyperedges[i];
                     const HyperedgeID e = edge.e;
                     bool connectToSource = false;
                     bool connectToTarget = false;
+                    size_t nextPinPosition = prefix_sum[i];
+
+                    fhgb.pins_sending_flow[i] = PinIndexRange(whfc::PinIndex(prefix_sum[i]), whfc::PinIndex(prefix_sum[i]));
+                    fhgb.hyperedges[i] = {whfc::PinIndex(prefix_sum[i]), whfc::Flow(0), whfc::Flow(hg.hyperedgeWeight(e))};
+                    fhgb.pins_receiving_flow[i] = PinIndexRange(whfc::PinIndex(prefix_sum[i+1]), whfc::PinIndex(prefix_sum[i+1]));
+
                     if (partition.pinsInPart(part0, e) > 0 && partition.pinsInPart(part1, e) > 0) {
                         // Cut hyperedge
-                        cutAtStake += hg.hyperedgeWeight(e);
-                        local_builder.startHyperedge(hg.hyperedgeWeight(e));
-
                         for (NodeID v : hg.pinsOf(e)) {
                             if (visitedNode.isSet(v)) {
-                                assert(globalToLocalID[v] < local_builder.numNodes());
-                                local_builder.addPin(globalToLocalID[v]);
+                                fhgb.pins[nextPinPosition++] = {globalToLocalID[v], whfc::InHeIndex::Invalid()};
+                                __sync_fetch_and_add(&fhgb.nodes[globalToLocalID[v]+1].first_out.value(), 1);
                             } else {
                                 connectToSource |= (partition[v] == part0);
                                 connectToTarget |= (partition[v] == part1);
-                                if (connectToSource && connectToTarget) {
-                                    break;
-                                }
+                                assert(!(connectToSource && connectToTarget));
                             }
                         }
                     } else {
                         const PartitionBase::PartitionID partID = partition.pinsInPart(part0, e) > 0 ? part0 : part1;
                         const whfc::Node terminal = partID == part0 ? result.source : result.target;
-                        local_builder.startHyperedge(hg.hyperedgeWeight(e));
                         for (NodeID v : hg.pinsOf(e)) {
                             if (partition[v] == partID) {
                                 if (visitedNode.isSet(v)) {
-                                    local_builder.addPin(globalToLocalID[v]);
+                                    fhgb.pins[nextPinPosition++] = {globalToLocalID[v], whfc::InHeIndex::Invalid()};
+                                    __sync_fetch_and_add(&fhgb.nodes[globalToLocalID[v]+1].first_out.value(), 1);
                                 } else {
                                     if (terminal == result.source) {
                                         connectToSource = true;
@@ -385,16 +418,13 @@ namespace whfc_rb {
                         }
                     }
 
-                    if (connectToSource && connectToTarget) {
-                        local_builder.removeCurrentHyperedge();
-                        baseCut += hg.hyperedgeWeight(e);
-                    } else {
-                        if (connectToSource) {
-                            local_builder.addPin(result.source);
-                        }
-                        if (connectToTarget) {
-                            local_builder.addPin(result.target);
-                        }
+                    if (connectToSource) {
+                        fhgb.pins[nextPinPosition++] = {result.source, whfc::InHeIndex::Invalid()};
+                        __sync_fetch_and_add(&fhgb.nodes[result.source+1].first_out.value(), 1);
+                    }
+                    if (connectToTarget) {
+                        fhgb.pins[nextPinPosition++] = {result.target, whfc::InHeIndex::Invalid()};
+                        __sync_fetch_and_add(&fhgb.nodes[result.target+1].first_out.value(), 1);
                     }
                 }
             });
