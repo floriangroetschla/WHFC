@@ -38,6 +38,8 @@ namespace whfc_rb {
         run(PartitionImpl &partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
             NodeWeight maxW0, NodeWeight maxW1, whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer) {
 
+            tryVisitNodeLock = std::vector<std::mutex>(partition.getGraph().numNodes()); //TODO: this has to be replaced
+
             timer.start("Init", "Extraction");
             CSRHypergraph &hg = partition.getGraph();
             initialize(hg.numNodes(), hg.numHyperedges());
@@ -55,19 +57,22 @@ namespace whfc_rb {
 
             timer.start("BFS", "Extraction");
 
-            whfc::NodeWeight w0, w1;
-
             localToGlobalID[0] = invalid_node;
             fhgb.addNode(whfc::NodeWeight(0));
             result.target = whfc::Node(1);
             fhgb.addNode(whfc::NodeWeight(0));
             localToGlobalID[result.target] = invalid_node;
 
+            std::atomic<NodeWeight> w0 = 0;
+            std::atomic<NodeWeight> w1 = 0;
+            // This fills the first layers for the bfs
+            processCutHyperedges(hg, cut_hes, partition, part0, part1, maxW0, maxW1, delta, w0, w1);
+
             timer.start("Scan_hyperedges_and_add_nodes", "BFS");
             tbb::parallel_invoke([&]() {
-                w0 = BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, queue_thread_specific_1);
+                BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, queue_thread_specific_1, w0);
             }, [&]() {
-                w1 = BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, timer, queue_thread_specific_2);
+                BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, timer, queue_thread_specific_2, w1);
             });
             timer.stop("Scan_hyperedges_and_add_nodes");
 
@@ -170,6 +175,8 @@ namespace whfc_rb {
 
         tbb::enumerable_thread_specific<std::vector<HyperedgeWithSize>> hyperedges_thread_specific;
 
+        std::vector<std::mutex> tryVisitNodeLock;
+
 
         template<class Builder>
         bool writeQueuesToBuilder(Builder& builder, tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>>& queues,
@@ -206,57 +213,70 @@ namespace whfc_rb {
             return has_nodes;
         }
 
-        template<typename PartitionImpl>
-        inline void processHyperedge(const CSRHypergraph& hg, const whfc_rb::HyperedgeID& e,  PartitionImpl& partition, PartitionBase::PartitionID partID,
-                std::atomic<whfc::NodeWeight> &w, NodeWeight& lastSeenValue, NodeWeight maxWeight, whfc::HopDistance d, LayeredQueue<NodeWithDistance>& queue,
-                std::vector<HyperedgeWithSize>& hyperedges) {
-            size_t num_pins = 0;
-            for (NodeID u : hg.pinsOf(e)) {
-                if (partition[u] == partID) {
-                    lastSeenValue = w.load(std::memory_order_relaxed);
-                    if (lastSeenValue + hg.nodeWeight(u) <= maxWeight) {
-                        if (visitedNode.set(u)) {
-                            w += hg.nodeWeight(u);
-                            queue.push({static_cast<whfc::Node>(u), d});
-                        }
-                        num_pins++;
-                    }
+        inline bool visitNode(const CSRHypergraph& hg, const NodeID u,
+                std::atomic<whfc::NodeWeight>& w, NodeWeight& lastSeenValue, const NodeWeight maxWeight, const whfc::HopDistance d,
+                LayeredQueue<NodeWithDistance>& queue) {
+            std::lock_guard<std::mutex> guard(tryVisitNodeLock[u]);
+            lastSeenValue = w.load(std::memory_order_relaxed);
+            if (lastSeenValue + hg.nodeWeight(u) <= maxWeight) {
+                if (visitedNode.set(u)) {
+                    w += hg.nodeWeight(u);
+                    queue.push({static_cast<whfc::Node>(u), d});
                 }
+                return true;
             }
-            hyperedges.push_back({e, num_pins});
+            return visitedNode.isSet(u);
         }
 
         template<class PartitionImpl, typename CutEdgeRange>
-        whfc::NodeWeight BreadthFirstSearch(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
-                                            PartitionBase::PartitionID partID, PartitionBase::PartitionID otherPartID,
-                                            NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta,
-                                            whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer,
-                                            tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>>& queue_thread_specific) {
-            std::atomic<whfc::NodeWeight> w = 0;
-            whfc::HopDistance d = delta;
-
-
-            // Collect boundary vertices
-            //timer.start("Collect_boundary_vertices", "BFS");
-            tbb::blocked_range<size_t> range(0, cut_hes.size(), 1000);
+        void processCutHyperedges(CSRHypergraph& hg, CutEdgeRange &cut_hes, const PartitionImpl& partition,
+                PartitionBase::PartitionID partID, PartitionBase::PartitionID otherPartID,
+                NodeWeight maxWeight1, NodeWeight maxWeight2, whfc::HopDistance delta, std::atomic<NodeWeight>& w1,
+                std::atomic<NodeWeight>& w2) {
+            tbb::blocked_range<size_t> range(0, cut_hes.size());
             tbb::parallel_for(range, [&](const tbb::blocked_range<size_t>& sub_range) {
-                NodeWeight lastSeenValue = 0;
-                LayeredQueue<NodeWithDistance>& queue = queue_thread_specific.local();
+                NodeWeight lastSeenValue1 = 0;
+                NodeWeight lastSeenValue2 = 0;
+                LayeredQueue<NodeWithDistance>& queue1 = queue_thread_specific_1.local();
+                LayeredQueue<NodeWithDistance>& queue2 = queue_thread_specific_2.local();
                 std::vector<HyperedgeWithSize>& hyperedges = hyperedges_thread_specific.local();
                 for (size_t i = sub_range.begin(); i < sub_range.end(); ++i) {
                     const HyperedgeID e = cut_hes[i];
-                    for (NodeID v : hg.pinsOf(e)) {
-                        if (partition[v] == partID) {
-                            lastSeenValue = w.load(std::memory_order_relaxed);
-                            if (lastSeenValue + hg.nodeWeight(v) <= maxWeight) {
-                                processHyperedge(hg, e, partition, partID, w, lastSeenValue, maxWeight, d, queue, hyperedges);
+                    size_t num_pins = 0;
+                    bool connectToSource = false;
+                    bool connectToTarget = false;
+                    for (NodeID u : hg.pinsOf(e)) {
+                        if (partition[u] == partID) {
+                            if (visitNode(hg, u, w1, lastSeenValue1, maxWeight1, delta, queue1)) {
+                                num_pins++;
+                            } else {
+                                connectToSource |= true;
+                            }
+                        } else if (partition[u] == otherPartID) {
+                            if (visitNode(hg, u, w2, lastSeenValue2, maxWeight2, -delta, queue2)) {
+                                num_pins++;
+                            } else {
+                                connectToTarget |= true;
                             }
                         }
                     }
-                    if (lastSeenValue >= maxWeight) break;
+                    if (connectToSource) num_pins++;
+                    if (connectToTarget) num_pins++;
+                    hyperedges.push_back({e, num_pins});
+                    if (lastSeenValue1 >= maxWeight1 && lastSeenValue2 >= maxWeight2) break;
                 }
             });
-            //timer.stop("Collect_boundary_vertices");
+
+        }
+
+        template<class PartitionImpl, typename CutEdgeRange>
+        void BreadthFirstSearch(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
+                                            PartitionBase::PartitionID partID, PartitionBase::PartitionID otherPartID,
+                                            NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta,
+                                            whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer,
+                                            tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>>& queue_thread_specific,
+                                            std::atomic<NodeWeight>& w) {
+            whfc::HopDistance d = delta;
 
             d += delta;
 
@@ -283,7 +303,11 @@ namespace whfc_rb {
 
                             for (HyperedgeID e : hg.hyperedgesOf(u)) {
                                 if (partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1 && visitedHyperedge.set(e)) {
-                                    processHyperedge(hg, e, partition, partID, w, lastSeenValue, maxWeight, d, local_queue, hyperedges);
+                                    for (NodeID v : hg.pinsOf(e)) {
+                                        if (partition[v] == partID) {
+                                            visitNode(hg, v, w, lastSeenValue, maxWeight, d, local_queue);
+                                        }
+                                    }
                                 }
                                 if (lastSeenValue >= maxWeight) break;
                             }
@@ -307,9 +331,6 @@ namespace whfc_rb {
             }
 
             distanceFromCut[terminal] = d;
-
-
-            return w.load();
         }
 
         template<typename PartitionImpl>
