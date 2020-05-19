@@ -250,13 +250,13 @@ namespace whfc_rb {
                             if (visitNode(hg, u, w1, lastSeenValue1, maxWeight1, delta, queue1)) {
                                 num_pins++;
                             } else {
-                                connectToSource |= true;
+                                connectToSource = true;
                             }
                         } else if (partition[u] == otherPartID) {
                             if (visitNode(hg, u, w2, lastSeenValue2, maxWeight2, -delta, queue2)) {
                                 num_pins++;
                             } else {
-                                connectToTarget |= true;
+                                connectToTarget = true;
                             }
                         }
                     }
@@ -290,7 +290,6 @@ namespace whfc_rb {
             }
 
             while (nodes_left) {
-                //timer.start("Scan_hyperedges_and_add_nodes", "BFS");
                 // scan hyperedges and add nodes to the next layer
                 tbb::parallel_for_each(queue_thread_specific, [&](LayeredQueue<NodeWithDistance>& queue) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(queue.currentLayerStart(), queue.currentLayerEnd()), [&](const tbb::blocked_range<size_t>& indices) {
@@ -303,18 +302,25 @@ namespace whfc_rb {
 
                             for (HyperedgeID e : hg.hyperedgesOf(u)) {
                                 if (partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1 && visitedHyperedge.set(e)) {
+                                    size_t num_pins = 0;
+                                    bool connectToTerminal = false;
                                     for (NodeID v : hg.pinsOf(e)) {
                                         if (partition[v] == partID) {
-                                            visitNode(hg, v, w, lastSeenValue, maxWeight, d, local_queue);
+                                            if (visitNode(hg, v, w, lastSeenValue, maxWeight, d, local_queue)) {
+                                                num_pins++;
+                                            } else {
+                                                connectToTerminal = true;
+                                            }
                                         }
                                     }
+                                    if (connectToTerminal) num_pins++;
+                                    hyperedges.push_back({e, num_pins});
                                 }
                                 if (lastSeenValue >= maxWeight) break;
                             }
                         }
                     });
                 });
-                //timer.stop("Scan_hyperedges_and_add_nodes");
 
                 nodes_left = false;
 
