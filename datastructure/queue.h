@@ -12,7 +12,8 @@ private:
 public:
 	using size_type = queue_size_type;
 	size_type qfront;
-	explicit LayeredQueue(const size_type num_elements) : queue(), qfront(0) { layer_bounds.push_back(0); }
+	explicit LayeredQueue() : qfront(0) { layer_bounds.push_back(0); }
+	explicit LayeredQueue(const size_type num_elements) : qfront(0) { queue.reserve(num_elements); layer_bounds.push_back(0); }
 	explicit LayeredQueue(const size_t num_elements) : LayeredQueue(static_cast<size_type>(num_elements)) { }
 	//Note. Use reinitialize() if you want to keep entries in the underlying vector intact, and ensure these won't be pushed again
 	inline void reinitialize(size_type x) { qfront = x; queue.clear(); layer_bounds.clear(); layer_bounds.push_back(x); }
@@ -31,11 +32,17 @@ public:
 	template<typename Func> inline void forAllEverContainedElements(Func f) { for (size_type i = 0; i < queue.size(); i++) { f(queue[i]); } }
 	inline const_range<std::vector<T>> range(size_type __begin, size_type __end) { return { queue.begin() + __begin, queue.cbegin() + __end }; }
 	inline const_range<std::vector<T>> currentLayer() { return range(qfront, layer_bounds.back()); }
+	inline const_range<std::vector<T>> layer(size_t i) { assert(i < numLayers()); return range(layer_bounds[i], layer_bounds[i+1]); }
 	inline const_range<std::vector<T>> allElements() { return range(0, queue.size()); }
 	inline size_type queueEnd() const { return queue.size(); }
 	inline T popBack() { return queue.pop_back(); }
 	inline size_type currentLayerStart() { return qfront; }
 	inline size_type currentLayerEnd() { return layer_bounds.back(); }
+	inline size_t numLayers() { return layer_bounds.size() - 1; }
+	inline size_t layerStart(size_t i) { assert(i < numLayers()); return layer_bounds[i]; }
+	inline size_t layerEnd(size_t i) { assert(i < numLayers()); return layer_bounds[i+1]; }
+	inline size_t layerSize(size_t i) { assert(i < numLayers()); return layer_bounds[i+1] - layer_bounds[i]; }
+	inline void removeLastLayerBound() { assert(numLayers() != 0); layer_bounds.pop_back(); }
 
 	inline decltype(auto) currentLayerIndices() { return boost::irange<size_type>(qfront, layer_bounds.back()); }
 	/*

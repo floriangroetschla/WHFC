@@ -56,31 +56,32 @@ namespace whfc_rb {
 
             timer.start("BFS", "Extraction");
 
-            localToGlobalID[0] = invalid_node;
-            fhgb.addNode(whfc::NodeWeight(0));
-            result.target = whfc::Node(1);
-            fhgb.addNode(whfc::NodeWeight(0));
-            localToGlobalID[result.target] = invalid_node;
-
             std::atomic<NodeWeight> w0 = 0;
             std::atomic<NodeWeight> w1 = 0;
 
             timer.start("Process_cut_hyperedges", "BFS");
             // This fills the first layers for the bfs
-            processCutHyperedges(hg, cut_hes, partition, part0, part1, maxW0, maxW1, delta, w0, w1);
+            processCutHyperedges(hg, cut_hes, partition, part0, part1, maxW0, maxW1, w0, w1);
             timer.stop("Process_cut_hyperedges");
 
             timer.start("Scan_hyperedges_and_add_nodes", "BFS");
             tbb::parallel_invoke([&]() {
-                BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, queue_thread_specific_1, w0);
+                BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, queue_thread_specific_1, w0);
             }, [&]() {
-                BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, queue_thread_specific_2, w1);
+                BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, queue_thread_specific_2, w1);
             });
+
             timer.stop("Scan_hyperedges_and_add_nodes");
 
             timer.start("writeQueuesToBuilder", "BFS");
-            writeQueuesToBuilder(fhgb, queue_thread_specific_1, hg, distanceFromCut);
-            writeQueuesToBuilder(fhgb, queue_thread_specific_2, hg, distanceFromCut);
+            writeQueuesToBuilder(fhgb, queue_thread_specific_1, hg, distanceFromCut, -delta);
+            result.source = whfc::Node(fhgb.numNodes());
+            localToGlobalID[result.source] = invalid_node;
+            fhgb.addNode(whfc::NodeWeight(0));
+            writeQueuesToBuilder(fhgb, queue_thread_specific_2, hg, distanceFromCut, delta);
+            result.target = whfc::Node(fhgb.numNodes());
+            localToGlobalID[result.target] = invalid_node;
+            fhgb.addNode(whfc::NodeWeight(0));
             timer.stop("writeQueuesToBuilder");
 
             visitedHyperedge.reset();
@@ -148,11 +149,6 @@ namespace whfc_rb {
         NodeID local2global(const whfc::Node x) const { return localToGlobalID[x]; }
 
     private:
-        struct NodeWithDistance {
-            whfc::Node node;
-            whfc::HopDistance d;
-        };
-
         struct HyperedgeWithSize {
             HyperedgeID e;
             size_t pin_count;
@@ -169,8 +165,8 @@ namespace whfc_rb {
         tbb::enumerable_thread_specific<whfc::Flow> baseCut_thread_specific;
         tbb::enumerable_thread_specific<whfc::Flow> cutAtStake_thread_specific;
 
-        tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>> queue_thread_specific_1;
-        tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>> queue_thread_specific_2;
+        tbb::enumerable_thread_specific<LayeredQueue<whfc::Node>> queue_thread_specific_1;
+        tbb::enumerable_thread_specific<LayeredQueue<whfc::Node>> queue_thread_specific_2;
 
         tbb::enumerable_thread_specific<std::vector<HyperedgeWithSize>> hyperedges_thread_specific;
 
@@ -193,51 +189,64 @@ namespace whfc_rb {
             });
         }
 
-
         template<class Builder>
-        bool writeQueuesToBuilder(Builder& builder, tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>>& queues,
-                CSRHypergraph& hg, whfc::DistanceFromCut& distanceFromCut) {
-            std::atomic<size_t> node_counter = builder.numNodes();
-            size_t num_nodes = builder.numNodes();
-            std::vector<whfc::FlowHypergraph::NodeData>& nodes = builder.getNodes();
+        void writeQueuesToBuilder(Builder& builder, tbb::enumerable_thread_specific<LayeredQueue<whfc::Node>>& queues,
+                CSRHypergraph& hg, whfc::DistanceFromCut& distanceFromCut, whfc::HopDistance delta) {
+            struct WorkElement {
+                LayeredQueue<whfc::Node>& queue;
+                size_t layer;
+                size_t indexStart;
+            };
 
-            for (LayeredQueue<NodeWithDistance>& queue : queues) {
-                num_nodes += queue.queueEnd();
+            std::vector<whfc::FlowHypergraph::NodeData>& nodes = builder.getNodes();
+            const size_t numLayers = queues.begin()->numLayers();
+            std::vector<size_t> layer_start_index(numLayers + 1, 0);
+            layer_start_index[0] = builder.numNodes();
+            std::vector<WorkElement> work_elements;
+
+            for (LayeredQueue<whfc::Node>& queue : queues) {
+                for (size_t i = 0; i < numLayers; ++i) {
+                    layer_start_index[i+1] += queue.layerSize(i);
+                }
             }
 
-            bool has_nodes = num_nodes > builder.numNodes();
+            for (size_t i = 0; i < numLayers; ++i) {
+                layer_start_index[i+1] += layer_start_index[i];
+            }
+
+            for (LayeredQueue<whfc::Node>& queue : queues) {
+                for (size_t i = 0; i < numLayers; ++i) {
+                    work_elements.push_back({queue, i, layer_start_index[i]});
+                    layer_start_index[i] += queue.layerSize(i);
+                }
+            }
 
             // Write node data into builder
-            nodes.resize(num_nodes + 1); // maybe use reserve
+            nodes.resize(layer_start_index.back() + 1);
 
-            tbb::parallel_for_each(queues, [&](LayeredQueue<NodeWithDistance>& queue) {
-                size_t begin_index = node_counter.fetch_add(queue.queueEnd());
-                tbb::parallel_for(tbb::blocked_range<size_t>(0, queue.queueEnd()), [&](const tbb::blocked_range<size_t>& indices) {
+            tbb::parallel_for_each(work_elements, [&](WorkElement& workElement) {
+                const size_t layerStart = workElement.queue.layerStart(workElement.layer);
+                tbb::parallel_for(tbb::blocked_range<size_t>(0, workElement.queue.layerSize(workElement.layer)), [&](const tbb::blocked_range<size_t>& indices) {
                     for (size_t i = indices.begin(); i < indices.end(); ++i) {
-                        const whfc::Node localID(begin_index + i);
-                        const NodeWithDistance globalNode = queue.elementAt(i);
-                        assert(localID < num_nodes);
-                        nodes[localID].weight = whfc::NodeWeight(hg.nodeWeight(globalNode.node));
-                        globalToLocalID[globalNode.node] = localID;
-                        localToGlobalID[localID] = globalNode.node;
-                        distanceFromCut[localID] = globalNode.d;
+                        const whfc::Node localID(workElement.indexStart + i);
+                        const whfc::Node globalNode = workElement.queue.elementAt(layerStart + i);
+                        nodes[localID].weight = whfc::NodeWeight(hg.nodeWeight(globalNode));
+                        globalToLocalID[globalNode] = localID;
+                        localToGlobalID[localID] = globalNode;
+                        distanceFromCut[localID] = (workElement.layer + 1) * delta;
                     }
                 });
             });
-            assert(num_nodes == node_counter.load());
-
-            return has_nodes;
         }
 
         inline bool visitNode(const CSRHypergraph& hg, const NodeID u,
-                std::atomic<whfc::NodeWeight>& w, NodeWeight& lastSeenValue, const NodeWeight maxWeight, const whfc::HopDistance d,
-                LayeredQueue<NodeWithDistance>& queue) {
+                std::atomic<whfc::NodeWeight>& w, NodeWeight& lastSeenValue, const NodeWeight maxWeight, LayeredQueue<whfc::Node>& queue) {
             std::lock_guard<std::mutex> guard(tryVisitNodeLock[u]);
             lastSeenValue = w.load(std::memory_order_relaxed);
             if (lastSeenValue + hg.nodeWeight(u) <= maxWeight) {
                 if (visitedNode.set(u)) {
                     w += hg.nodeWeight(u);
-                    queue.push({static_cast<whfc::Node>(u), d});
+                    queue.push(static_cast<whfc::Node>(u));
                 }
                 return true;
             }
@@ -247,14 +256,14 @@ namespace whfc_rb {
         template<class PartitionImpl, typename CutEdgeRange>
         void processCutHyperedges(CSRHypergraph& hg, CutEdgeRange &cut_hes, const PartitionImpl& partition,
                 PartitionBase::PartitionID partID, PartitionBase::PartitionID otherPartID,
-                NodeWeight maxWeight1, NodeWeight maxWeight2, whfc::HopDistance delta, std::atomic<NodeWeight>& w1,
+                NodeWeight maxWeight1, NodeWeight maxWeight2, std::atomic<NodeWeight>& w1,
                 std::atomic<NodeWeight>& w2) {
             tbb::blocked_range<size_t> range(0, cut_hes.size());
             tbb::parallel_for(range, [&](const tbb::blocked_range<size_t>& sub_range) {
                 NodeWeight lastSeenValue1 = 0;
                 NodeWeight lastSeenValue2 = 0;
-                LayeredQueue<NodeWithDistance>& queue1 = queue_thread_specific_1.local();
-                LayeredQueue<NodeWithDistance>& queue2 = queue_thread_specific_2.local();
+                LayeredQueue<whfc::Node>& queue1 = queue_thread_specific_1.local();
+                LayeredQueue<whfc::Node>& queue2 = queue_thread_specific_2.local();
                 std::vector<HyperedgeWithSize>& hyperedges = hyperedges_thread_specific.local();
                 whfc::Flow &baseCut = baseCut_thread_specific.local();
                 whfc::Flow &cutAtStake = cutAtStake_thread_specific.local();
@@ -266,13 +275,13 @@ namespace whfc_rb {
                     bool connectToTarget = false;
                     for (NodeID u : hg.pinsOf(e)) {
                         if (partition[u] == partID) {
-                            if (visitNode(hg, u, w1, lastSeenValue1, maxWeight1, delta, queue1)) {
+                            if (visitNode(hg, u, w1, lastSeenValue1, maxWeight1, queue1)) {
                                 num_pins++;
                             } else {
                                 connectToSource = true;
                             }
                         } else if (partition[u] == otherPartID) {
-                            if (visitNode(hg, u, w2, lastSeenValue2, maxWeight2, -delta, queue2)) {
+                            if (visitNode(hg, u, w2, lastSeenValue2, maxWeight2, queue2)) {
                                 num_pins++;
                             } else {
                                 connectToTarget = true;
@@ -294,17 +303,12 @@ namespace whfc_rb {
         template<class PartitionImpl, typename CutEdgeRange>
         void BreadthFirstSearch(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
                                             PartitionBase::PartitionID partID, PartitionBase::PartitionID otherPartID,
-                                            NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta,
-                                            whfc::DistanceFromCut& distanceFromCut,
-                                            tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>>& queue_thread_specific,
+                                            NodeWeight maxWeight,
+                                            tbb::enumerable_thread_specific<LayeredQueue<whfc::Node>>& queue_thread_specific,
                                             std::atomic<NodeWeight>& w) {
-            whfc::HopDistance d = delta;
-
-            d += delta;
-
             bool nodes_left = false;
 
-            for (LayeredQueue<NodeWithDistance>& queue : queue_thread_specific) {
+            for (LayeredQueue<whfc::Node>& queue : queue_thread_specific) {
                 queue.finishNextLayer();
                 if (!queue.currentLayerEmpty()) {
                     nodes_left = true;
@@ -313,14 +317,14 @@ namespace whfc_rb {
 
             while (nodes_left) {
                 // scan hyperedges and add nodes to the next layer
-                tbb::parallel_for_each(queue_thread_specific, [&](LayeredQueue<NodeWithDistance>& queue) {
+                tbb::parallel_for_each(queue_thread_specific, [&](LayeredQueue<whfc::Node>& queue) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(queue.currentLayerStart(), queue.currentLayerEnd()), [&](const tbb::blocked_range<size_t>& indices) {
-                        LayeredQueue<NodeWithDistance>& local_queue = queue_thread_specific.local();
+                        LayeredQueue<whfc::Node>& local_queue = queue_thread_specific.local();
                         std::vector<HyperedgeWithSize>& hyperedges = hyperedges_thread_specific.local();
                         NodeWeight lastSeenValue = 0;
 
                         for (size_t i = indices.begin(); i < indices.end(); ++i) {
-                            const NodeID u = queue.elementAt(i).node;
+                            const NodeID u = queue.elementAt(i);
 
                             //if (lastSeenValue >= maxWeight) break;
                             for (HyperedgeID e : hg.hyperedgesOf(u)) {
@@ -329,7 +333,7 @@ namespace whfc_rb {
                                     bool connectToTerminal = false;
                                     for (NodeID v : hg.pinsOf(e)) {
                                         if (partition[v] == partID) {
-                                            if (visitNode(hg, v, w, lastSeenValue, maxWeight, d, local_queue)) {
+                                            if (visitNode(hg, v, w, lastSeenValue, maxWeight, local_queue)) {
                                                 num_pins++;
                                             } else {
                                                 connectToTerminal = true;
@@ -346,19 +350,18 @@ namespace whfc_rb {
 
                 nodes_left = false;
 
-                for (LayeredQueue<NodeWithDistance>& queue : queue_thread_specific) {
+                for (LayeredQueue<whfc::Node>& queue : queue_thread_specific) {
                     queue.clearCurrentLayer();
                     queue.finishNextLayer();
                     if (queue.currentLayer().size() > 0) {
                         nodes_left = true;
                     }
                 }
-
-                d += delta;
-
             }
 
-            distanceFromCut[terminal] = d;
+            for (LayeredQueue<whfc::Node>& queue : queue_thread_specific) {
+                queue.removeLastLayerBound();
+            }
         }
 
         using PinIndexRange = mutable_index_range<whfc::PinIndex>;
@@ -449,10 +452,10 @@ namespace whfc_rb {
             visitedHyperedge.reset();
             result = {whfc::Node(0), whfc::Node(0), 0, 0};
 
-            for (LayeredQueue<NodeWithDistance>& queue : queue_thread_specific_1) {
+            for (LayeredQueue<whfc::Node>& queue : queue_thread_specific_1) {
                 queue.clear();
             }
-            for (LayeredQueue<NodeWithDistance>& queue : queue_thread_specific_2) {
+            for (LayeredQueue<whfc::Node>& queue : queue_thread_specific_2) {
                 queue.clear();
             }
         }
