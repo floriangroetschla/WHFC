@@ -364,6 +364,8 @@ namespace whfc_rb {
         void addHyperedges(CSRHypergraph& hg, const PartitionImpl &partition, PartitionBase::PartitionID part0,
                 PartitionBase::PartitionID part1, whfc::TimeReporter& timer, std::vector<HyperedgeWithSize>& hyperedges,
                 const std::vector<size_t>& prefix_sum) {
+            tbb::enumerable_thread_specific<size_t> sourceOccurrences(0);
+            tbb::enumerable_thread_specific<size_t> targetOccurrences(0);
 
             fhgb.hyperedges.resize(hyperedges.size() + 1);
             fhgb.pins_sending_flow.resize(hyperedges.size());
@@ -374,14 +376,15 @@ namespace whfc_rb {
             fhgb.numPinsAtHyperedgeStart = prefix_sum[prefix_sum.size() - 1];
 
             tbb::parallel_for(tbb::blocked_range<size_t>(0, hyperedges.size()), [&](const tbb::blocked_range<size_t>& indices) {
-
-
                 for (size_t i = indices.begin(); i < indices.end(); ++i) {
                     const HyperedgeWithSize edge = hyperedges[i];
                     const HyperedgeID e = edge.e;
                     bool connectToSource = false;
                     bool connectToTarget = false;
                     size_t nextPinPosition = prefix_sum[i];
+
+                    size_t& sourceOcc = sourceOccurrences.local();
+                    size_t& targetOcc = targetOccurrences.local();
 
                     fhgb.pins_sending_flow[i] = PinIndexRange(whfc::PinIndex(prefix_sum[i]), whfc::PinIndex(prefix_sum[i]));
                     fhgb.hyperedges[i] = {whfc::PinIndex(prefix_sum[i]), whfc::Flow(0), whfc::Flow(hg.hyperedgeWeight(e))};
@@ -392,7 +395,7 @@ namespace whfc_rb {
                         for (NodeID v : hg.pinsOf(e)) {
                             if (visitedNode.isSet(v)) {
                                 fhgb.pins[nextPinPosition++] = {globalToLocalID[v], whfc::InHeIndex::Invalid()};
-                                __sync_fetch_and_add(&fhgb.nodes[globalToLocalID[v]+1].first_out.value(), 1);
+                                __atomic_fetch_add(&fhgb.nodes[globalToLocalID[v]+1].first_out.value(), 1, __ATOMIC_RELAXED);
                             } else {
                                 connectToSource |= (partition[v] == part0);
                                 connectToTarget |= (partition[v] == part1);
@@ -406,7 +409,7 @@ namespace whfc_rb {
                             if (partition[v] == partID) {
                                 if (visitedNode.isSet(v)) {
                                     fhgb.pins[nextPinPosition++] = {globalToLocalID[v], whfc::InHeIndex::Invalid()};
-                                    __sync_fetch_and_add(&fhgb.nodes[globalToLocalID[v]+1].first_out.value(), 1);
+                                    __atomic_fetch_add(&fhgb.nodes[globalToLocalID[v]+1].first_out.value(), 1, __ATOMIC_RELAXED);
                                 } else {
                                     if (terminal == result.source) {
                                         connectToSource = true;
@@ -420,14 +423,20 @@ namespace whfc_rb {
 
                     if (connectToSource) {
                         fhgb.pins[nextPinPosition++] = {result.source, whfc::InHeIndex::Invalid()};
-                        __sync_fetch_and_add(&fhgb.nodes[result.source+1].first_out.value(), 1);
+                        sourceOcc++;
                     }
                     if (connectToTarget) {
                         fhgb.pins[nextPinPosition++] = {result.target, whfc::InHeIndex::Invalid()};
-                        __sync_fetch_and_add(&fhgb.nodes[result.target+1].first_out.value(), 1);
+                        targetOcc++;
                     }
                 }
             });
+            for (size_t sourceOcc : sourceOccurrences) {
+                fhgb.nodes[result.source+1].first_out += sourceOcc;
+            }
+            for (size_t targetOcc : targetOccurrences) {
+                fhgb.nodes[result.target+1].first_out += targetOcc;
+            }
         }
 
         void initialize(uint numNodes, uint numHyperedges) {
