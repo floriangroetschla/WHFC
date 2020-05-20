@@ -83,7 +83,6 @@ namespace whfc_rb {
 
             visitedHyperedge.reset();
 
-            std::vector<HyperedgeWithSize> hyperedges;
             size_t total_num_hyperedges = 0;
             for (std::vector<HyperedgeWithSize>& hyperedges_local : hyperedges_thread_specific) {
                 total_num_hyperedges += hyperedges_local.size();
@@ -95,17 +94,15 @@ namespace whfc_rb {
                 hyperedges_local.clear();
             }
 
-            std::vector<size_t> prefix_sum(hyperedges.size() + 1);
+            tbb::parallel_sort(hyperedges.begin(), hyperedges.end(), [](const HyperedgeWithSize& e0, const HyperedgeWithSize& e1) {
+                return e0.e < e1.e;
+            });
 
-            computePrefixSum(hyperedges, prefix_sum);
+            computePrefixSum(hyperedges);
 
             timer.start("Add_hyperedges", "BFS");
-            addHyperedges(hg, partition, part0, part1, timer, hyperedges, prefix_sum);
+            addHyperedges(hg, partition, part0, part1, timer, hyperedges);
             timer.stop("Add_hyperedges");
-
-            timer.start("addMockBuildersParallel", "BFS");
-            fhgb.addMockBuildersParallel(mockBuilder_thread_specific);
-            timer.stop("addMockBuildersParallel");
 
             for (whfc::Flow& baseCut : baseCut_thread_specific) {
                 result.baseCut += baseCut;
@@ -117,9 +114,7 @@ namespace whfc_rb {
                 cutAtStake = 0;
             }
 
-
             timer.stop("BFS");
-
 
             fhgb.nodeWeight(result.source) = partition.partWeight(part0) - w0;
             fhgb.nodeWeight(result.target) = partition.partWeight(part1) - w1;
@@ -173,16 +168,18 @@ namespace whfc_rb {
 
         tbb::enumerable_thread_specific<std::vector<HyperedgeWithSize>> hyperedges_thread_specific;
 
+        std::vector<HyperedgeWithSize> hyperedges;
+
         std::vector<std::mutex> tryVisitNodeLock;
 
-        void computePrefixSum(const std::vector<HyperedgeWithSize>& vector, std::vector<size_t>& result) {
+        void computePrefixSum(std::vector<HyperedgeWithSize>& vector) {
             tbb::parallel_scan(tbb::blocked_range<size_t>(0, vector.size()), 0,
                 [&](const tbb::blocked_range<size_t>& r, size_t sum, bool is_final_scan) -> size_t {
                 size_t temp = sum;
                 for (size_t i = r.begin(); i < r.end(); ++i) {
                     temp = temp + vector[i].pin_count;
                     if(is_final_scan)
-                        result[i + 1] = temp;
+                        vector[i].pin_count = temp;
                 }
                 return temp;
             }, [] (size_t left, size_t right) {
@@ -362,18 +359,17 @@ namespace whfc_rb {
 
         template<typename PartitionImpl>
         void addHyperedges(CSRHypergraph& hg, const PartitionImpl &partition, PartitionBase::PartitionID part0,
-                PartitionBase::PartitionID part1, whfc::TimeReporter& timer, std::vector<HyperedgeWithSize>& hyperedges,
-                const std::vector<size_t>& prefix_sum) {
+                PartitionBase::PartitionID part1, whfc::TimeReporter& timer, std::vector<HyperedgeWithSize>& hyperedges) {
             tbb::enumerable_thread_specific<size_t> sourceOccurrences(0);
             tbb::enumerable_thread_specific<size_t> targetOccurrences(0);
 
             fhgb.hyperedges.resize(hyperedges.size() + 1);
             fhgb.pins_sending_flow.resize(hyperedges.size());
             fhgb.pins_receiving_flow.resize(hyperedges.size());
-            fhgb.pins.resize(prefix_sum[prefix_sum.size() - 1]);
+            fhgb.pins.resize(hyperedges[hyperedges.size() - 1].pin_count);
 
-            fhgb.hyperedges.back().first_out = whfc::PinIndex(prefix_sum[prefix_sum.size() - 1]);
-            fhgb.numPinsAtHyperedgeStart = prefix_sum[prefix_sum.size() - 1];
+            fhgb.hyperedges.back().first_out = whfc::PinIndex(hyperedges[hyperedges.size() - 1].pin_count);
+            fhgb.numPinsAtHyperedgeStart = hyperedges[hyperedges.size() - 1].pin_count;
 
             tbb::parallel_for(tbb::blocked_range<size_t>(0, hyperedges.size()), [&](const tbb::blocked_range<size_t>& indices) {
                 for (size_t i = indices.begin(); i < indices.end(); ++i) {
@@ -381,14 +377,14 @@ namespace whfc_rb {
                     const HyperedgeID e = edge.e;
                     bool connectToSource = false;
                     bool connectToTarget = false;
-                    size_t nextPinPosition = prefix_sum[i];
+                    size_t nextPinPosition = i == 0 ? 0 : hyperedges[i-1].pin_count;
 
                     size_t& sourceOcc = sourceOccurrences.local();
                     size_t& targetOcc = targetOccurrences.local();
 
-                    fhgb.pins_sending_flow[i] = PinIndexRange(whfc::PinIndex(prefix_sum[i]), whfc::PinIndex(prefix_sum[i]));
-                    fhgb.hyperedges[i] = {whfc::PinIndex(prefix_sum[i]), whfc::Flow(0), whfc::Flow(hg.hyperedgeWeight(e))};
-                    fhgb.pins_receiving_flow[i] = PinIndexRange(whfc::PinIndex(prefix_sum[i+1]), whfc::PinIndex(prefix_sum[i+1]));
+                    fhgb.pins_sending_flow[i] = PinIndexRange(whfc::PinIndex(nextPinPosition), whfc::PinIndex(nextPinPosition));
+                    fhgb.hyperedges[i] = {whfc::PinIndex(nextPinPosition), whfc::Flow(0), whfc::Flow(hg.hyperedgeWeight(e))};
+                    fhgb.pins_receiving_flow[i] = PinIndexRange(whfc::PinIndex(hyperedges[i].pin_count), whfc::PinIndex(hyperedges[i].pin_count));
 
                     if (partition.pinsInPart(part0, e) > 0 && partition.pinsInPart(part1, e) > 0) {
                         // Cut hyperedge
@@ -429,6 +425,7 @@ namespace whfc_rb {
                         fhgb.pins[nextPinPosition++] = {result.target, whfc::InHeIndex::Invalid()};
                         targetOcc++;
                     }
+                    assert(nextPinPosition == hyperedges[i].pin_count);
                 }
             });
             for (size_t sourceOcc : sourceOccurrences) {
@@ -442,6 +439,7 @@ namespace whfc_rb {
         void initialize(uint numNodes, uint numHyperedges) {
             fhgb.clear();
             mock_builder.clear();
+            hyperedges.clear();
             visitedNode.reset();
             visitedHyperedge.reset();
             result = {whfc::Node(0), whfc::Node(0), 0, 0};
