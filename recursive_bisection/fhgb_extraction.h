@@ -315,6 +315,8 @@ namespace whfc_rb {
                 }
             }
 
+            size_t numLayers = 1;
+
             while (nodes_left) {
                 // scan hyperedges and add nodes to the next layer
                 tbb::parallel_for_each(queue_thread_specific, [&](LayeredQueue<whfc::Node>& queue) {
@@ -322,6 +324,13 @@ namespace whfc_rb {
                         LayeredQueue<whfc::Node>& local_queue = queue_thread_specific.local();
                         std::vector<HyperedgeWithSize>& hyperedges = hyperedges_thread_specific.local();
                         NodeWeight lastSeenValue = 0;
+
+                        if (local_queue.numLayers() == 0) {
+                            // This is a new queue that joined later
+                            for (size_t i = 0; i < numLayers; ++i) {
+                                local_queue.finishNextLayer();
+                            }
+                        }
 
                         for (size_t i = indices.begin(); i < indices.end(); ++i) {
                             const NodeID u = queue.elementAt(i);
@@ -357,6 +366,7 @@ namespace whfc_rb {
                         nodes_left = true;
                     }
                 }
+                numLayers++;
             }
 
             for (LayeredQueue<whfc::Node>& queue : queue_thread_specific) {
