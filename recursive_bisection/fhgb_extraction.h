@@ -23,7 +23,6 @@ namespace whfc_rb {
                 globalToLocalID(maxNumNodes),
                 localToGlobalID(maxNumNodes + 2),
                 mt(seed), config(config),
-                mockBuilder_thread_specific(std::ref(fhgb.getNodes()), whfc::invalidNode, whfc::invalidNode),
                 queue_thread_specific_1(maxNumNodes), queue_thread_specific_2(maxNumNodes) {}
 
         struct ExtractorInfo {
@@ -65,14 +64,17 @@ namespace whfc_rb {
 
             std::atomic<NodeWeight> w0 = 0;
             std::atomic<NodeWeight> w1 = 0;
+
+            timer.start("Process_cut_hyperedges", "BFS");
             // This fills the first layers for the bfs
             processCutHyperedges(hg, cut_hes, partition, part0, part1, maxW0, maxW1, delta, w0, w1);
+            timer.stop("Process_cut_hyperedges");
 
             timer.start("Scan_hyperedges_and_add_nodes", "BFS");
             tbb::parallel_invoke([&]() {
-                BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, timer, queue_thread_specific_1, w0);
+                BreadthFirstSearch(hg, cut_hes, partition, part0, part1, maxW0, result.source, -delta, distanceFromCut, queue_thread_specific_1, w0);
             }, [&]() {
-                BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, timer, queue_thread_specific_2, w1);
+                BreadthFirstSearch(hg, cut_hes, partition, part1, part0, maxW1, result.target, delta, distanceFromCut, queue_thread_specific_2, w1);
             });
             timer.stop("Scan_hyperedges_and_add_nodes");
 
@@ -83,6 +85,7 @@ namespace whfc_rb {
 
             visitedHyperedge.reset();
 
+            timer.start("Copy_hyperedges", "BFS");
             size_t total_num_hyperedges = 0;
             for (std::vector<HyperedgeWithSize>& hyperedges_local : hyperedges_thread_specific) {
                 total_num_hyperedges += hyperedges_local.size();
@@ -93,15 +96,20 @@ namespace whfc_rb {
                 hyperedges.insert(hyperedges.end(), hyperedges_local.begin(), hyperedges_local.end());
                 hyperedges_local.clear();
             }
+            timer.stop("Copy_hyperedges");
 
+            timer.start("Sort_hyperedges", "BFS");
             tbb::parallel_sort(hyperedges.begin(), hyperedges.end(), [](const HyperedgeWithSize& e0, const HyperedgeWithSize& e1) {
                 return e0.e < e1.e;
             });
+            timer.stop("Sort_hyperedges");
 
+            timer.start("Compute_prefix_sum", "BFS");
             computePrefixSum(hyperedges);
+            timer.stop("Compute_prefix_sum");
 
             timer.start("Add_hyperedges", "BFS");
-            addHyperedges(hg, partition, part0, part1, timer, hyperedges);
+            addHyperedges(hg, partition, part0, part1, hyperedges);
             timer.stop("Add_hyperedges");
 
             for (whfc::Flow& baseCut : baseCut_thread_specific) {
@@ -158,8 +166,6 @@ namespace whfc_rb {
         std::mt19937 mt;
         const PartitionConfig& config;
 
-        MockBuilder mock_builder;
-        tbb::enumerable_thread_specific<MockBuilder> mockBuilder_thread_specific;
         tbb::enumerable_thread_specific<whfc::Flow> baseCut_thread_specific;
         tbb::enumerable_thread_specific<whfc::Flow> cutAtStake_thread_specific;
 
@@ -289,7 +295,7 @@ namespace whfc_rb {
         void BreadthFirstSearch(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
                                             PartitionBase::PartitionID partID, PartitionBase::PartitionID otherPartID,
                                             NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta,
-                                            whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer,
+                                            whfc::DistanceFromCut& distanceFromCut,
                                             tbb::enumerable_thread_specific<LayeredQueue<NodeWithDistance>>& queue_thread_specific,
                                             std::atomic<NodeWeight>& w) {
             whfc::HopDistance d = delta;
@@ -359,7 +365,7 @@ namespace whfc_rb {
 
         template<typename PartitionImpl>
         void addHyperedges(CSRHypergraph& hg, const PartitionImpl &partition, PartitionBase::PartitionID part0,
-                PartitionBase::PartitionID part1, whfc::TimeReporter& timer, std::vector<HyperedgeWithSize>& hyperedges) {
+                PartitionBase::PartitionID part1, std::vector<HyperedgeWithSize>& hyperedges) {
             tbb::enumerable_thread_specific<size_t> sourceOccurrences(0);
             tbb::enumerable_thread_specific<size_t> targetOccurrences(0);
 
@@ -438,14 +444,10 @@ namespace whfc_rb {
 
         void initialize(uint numNodes, uint numHyperedges) {
             fhgb.clear();
-            mock_builder.clear();
             hyperedges.clear();
             visitedNode.reset();
             visitedHyperedge.reset();
             result = {whfc::Node(0), whfc::Node(0), 0, 0};
-            for (MockBuilder& mockBuilder : mockBuilder_thread_specific) {
-                mockBuilder.clear();
-            }
 
             for (LayeredQueue<NodeWithDistance>& queue : queue_thread_specific_1) {
                 queue.clear();
