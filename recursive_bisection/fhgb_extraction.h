@@ -26,7 +26,9 @@ namespace whfc_rb {
                 globalToLocalID(maxNumNodes),
                 localToGlobalID(maxNumNodes + 2),
                 mt(seed), config(config),
-                queue_thread_specific_1(maxNumNodes), queue_thread_specific_2(maxNumNodes) {}
+                queue_thread_specific_1(maxNumNodes), queue_thread_specific_2(maxNumNodes),
+                tryVisitNodeLock(maxNumNodes) //TODO: this has to be replaced
+                {}
 
         struct ExtractorInfo {
             whfc::Node source;
@@ -39,8 +41,6 @@ namespace whfc_rb {
         ExtractorInfo
         run(PartitionImpl &partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
             NodeWeight maxW0, NodeWeight maxW1, whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer) {
-
-            tryVisitNodeLock = std::vector<std::mutex>(partition.getGraph().numNodes()); //TODO: this has to be replaced
 
             timer.start("Init", "Extraction");
             CSRHypergraph &hg = partition.getGraph();
@@ -202,6 +202,7 @@ namespace whfc_rb {
             };
 
             std::vector<whfc::FlowHypergraph::NodeData>& nodes = builder.getNodes();
+            if (queues.empty()) return;
             const size_t numLayers = queues.begin()->numLayers();
             std::vector<size_t> layer_start_index(numLayers + 1, 0);
             layer_start_index[0] = builder.numNodes();
@@ -385,6 +386,7 @@ namespace whfc_rb {
             tbb::enumerable_thread_specific<size_t> sourceOccurrences(0);
             tbb::enumerable_thread_specific<size_t> targetOccurrences(0);
 
+            if (hyperedges.size() == 0) return;
             fhgb.hyperedges.resize(hyperedges.size() + 1);
             fhgb.pins_sending_flow.resize(hyperedges.size());
             fhgb.pins_receiving_flow.resize(hyperedges.size());
