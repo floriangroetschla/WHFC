@@ -3,12 +3,14 @@
 #include <vector>
 #include "../util/range.h"
 #include <boost/range/irange.hpp>
+#include <tbb/scalable_allocator.h>
 
 template<typename T, typename queue_size_type=uint32_t>
 class LayeredQueue {
 private:
-	std::vector<T> queue;
-	std::vector<size_t> layer_bounds;
+    using vec = std::vector<T, tbb::scalable_allocator<T>>;
+	vec queue;
+	std::vector<queue_size_type> layer_bounds;
 public:
 	using size_type = queue_size_type;
 	size_type qfront;
@@ -28,20 +30,20 @@ public:
 	inline void push(const T x) { queue.push_back(x); }
 	//inline bool previousLayerEmpty() const { return layerfront == layerend; }
 	inline T capacity() const { return static_cast<T>(queue.size()); }
-	inline std::vector<T>& data() { return queue; }
+	inline vec& data() { return queue; }
 	template<typename Func> inline void forAllEverContainedElements(Func f) { for (size_type i = 0; i < queue.size(); i++) { f(queue[i]); } }
-	inline const_range<std::vector<T>> range(size_type __begin, size_type __end) { return { queue.begin() + __begin, queue.cbegin() + __end }; }
-	inline const_range<std::vector<T>> currentLayer() { return range(qfront, layer_bounds.back()); }
-	inline const_range<std::vector<T>> layer(size_t i) { assert(i < numLayers()); return range(layer_bounds[i], layer_bounds[i+1]); }
-	inline const_range<std::vector<T>> allElements() { return range(0, queue.size()); }
+	inline const_range<vec> range(size_type __begin, size_type __end) { return { queue.begin() + __begin, queue.cbegin() + __end }; }
+	inline const_range<vec> currentLayer() { return range(qfront, layer_bounds.back()); }
+	inline const_range<vec> layer(size_type i) { assert(i < numLayers()); return range(layer_bounds[i], layer_bounds[i+1]); }
+	inline const_range<vec> allElements() { return range(0, queue.size()); }
 	inline size_type queueEnd() const { return queue.size(); }
 	inline T popBack() { return queue.pop_back(); }
 	inline size_type currentLayerStart() { return qfront; }
 	inline size_type currentLayerEnd() { return layer_bounds.back(); }
-	inline size_t numLayers() { return layer_bounds.size() - 1; }
-	inline size_t layerStart(size_t i) { assert(i < numLayers()); return layer_bounds[i]; }
-	inline size_t layerEnd(size_t i) { assert(i < numLayers()); return layer_bounds[i+1]; }
-	inline size_t layerSize(size_t i) { assert(i < numLayers()); return layer_bounds[i+1] - layer_bounds[i]; }
+	inline size_type numLayers() { return layer_bounds.size() - 1; }
+	inline size_type layerStart(size_type i) { assert(i < numLayers()); return layer_bounds[i]; }
+	inline size_type layerEnd(size_type i) { assert(i < numLayers()); return layer_bounds[i+1]; }
+	inline size_type layerSize(size_type i) { assert(i < numLayers()); return layer_bounds[i+1] - layer_bounds[i]; }
 	inline void removeLastLayerBound() { assert(numLayers() != 0); layer_bounds.pop_back(); }
 
 	inline decltype(auto) currentLayerIndices() { return boost::irange<size_type>(qfront, layer_bounds.back()); }
@@ -60,7 +62,7 @@ public:
 		return pop();
 	}
 
-	std::vector<T> extract() { return std::move(queue); }
+    vec extract() { return std::move(queue); }
 
 	template<typename URBG>
 	void shuffleQueue(URBG &&urbg, size_type a, size_type b) {

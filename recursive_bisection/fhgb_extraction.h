@@ -7,11 +7,14 @@
 #include "../datastructure/node_border.h"
 #include "config.h"
 #include "partition_threadsafe.h"
-#include "mock_builder.h"
+#include <tbb/scalable_allocator.h>
 
 namespace whfc_rb {
     class FlowHypergraphBuilderExtractor {
     public:
+        template<typename T>
+        using vec = std::vector<T, tbb::scalable_allocator<T>>;
+
         static constexpr NodeID invalid_node = std::numeric_limits<NodeID>::max();
         whfc::FlowHypergraphBuilder fhgb;
 
@@ -88,12 +91,12 @@ namespace whfc_rb {
 
             timer.start("Copy_hyperedges", "BFS");
             size_t total_num_hyperedges = 0;
-            for (std::vector<HyperedgeWithSize>& hyperedges_local : hyperedges_thread_specific) {
+            for (vec<HyperedgeWithSize>& hyperedges_local : hyperedges_thread_specific) {
                 total_num_hyperedges += hyperedges_local.size();
             }
 
             hyperedges.reserve(total_num_hyperedges);
-            for (std::vector<HyperedgeWithSize>& hyperedges_local : hyperedges_thread_specific) {
+            for (vec<HyperedgeWithSize>& hyperedges_local : hyperedges_thread_specific) {
                 hyperedges.insert(hyperedges.end(), hyperedges_local.begin(), hyperedges_local.end());
                 hyperedges_local.clear();
             }
@@ -157,7 +160,7 @@ namespace whfc_rb {
         ldc::AtomicTimestampSet<> visitedNode;
         ldc::AtomicTimestampSet<> visitedHyperedge;
         std::vector<whfc::Node> globalToLocalID;
-        std::vector<NodeID> localToGlobalID;
+        std::vector<NodeID, tbb::cache_aligned_allocator<NodeID>> localToGlobalID;
         ExtractorInfo result;
         std::mt19937 mt;
         const PartitionConfig& config;
@@ -168,13 +171,13 @@ namespace whfc_rb {
         tbb::enumerable_thread_specific<LayeredQueue<whfc::Node>> queue_thread_specific_1;
         tbb::enumerable_thread_specific<LayeredQueue<whfc::Node>> queue_thread_specific_2;
 
-        tbb::enumerable_thread_specific<std::vector<HyperedgeWithSize>> hyperedges_thread_specific;
+        tbb::enumerable_thread_specific<vec<HyperedgeWithSize>> hyperedges_thread_specific;
 
-        std::vector<HyperedgeWithSize> hyperedges;
+        vec<HyperedgeWithSize> hyperedges;
 
         std::vector<std::mutex> tryVisitNodeLock;
 
-        void computePrefixSum(std::vector<HyperedgeWithSize>& vector) {
+        void computePrefixSum(vec<HyperedgeWithSize>& vector) {
             tbb::parallel_scan(tbb::blocked_range<size_t>(0, vector.size()), 0,
                 [&](const tbb::blocked_range<size_t>& r, size_t sum, bool is_final_scan) -> size_t {
                 size_t temp = sum;
@@ -216,7 +219,7 @@ namespace whfc_rb {
 
             for (LayeredQueue<whfc::Node>& queue : queues) {
                 for (size_t i = 0; i < numLayers; ++i) {
-                    work_elements.push_back({queue, i, layer_start_index[i]});
+                    if (layer_start_index[i+1] - layer_start_index[i] > 0) work_elements.push_back({queue, i, layer_start_index[i]});
                     layer_start_index[i] += queue.layerSize(i);
                 }
             }
@@ -264,7 +267,7 @@ namespace whfc_rb {
                 NodeWeight lastSeenValue2 = 0;
                 LayeredQueue<whfc::Node>& queue1 = queue_thread_specific_1.local();
                 LayeredQueue<whfc::Node>& queue2 = queue_thread_specific_2.local();
-                std::vector<HyperedgeWithSize>& hyperedges = hyperedges_thread_specific.local();
+                vec<HyperedgeWithSize>& hyperedges = hyperedges_thread_specific.local();
                 whfc::Flow &baseCut = baseCut_thread_specific.local();
                 whfc::Flow &cutAtStake = cutAtStake_thread_specific.local();
                 for (size_t i = sub_range.begin(); i < sub_range.end(); ++i) {
@@ -322,7 +325,7 @@ namespace whfc_rb {
                 tbb::parallel_for_each(queue_thread_specific, [&](LayeredQueue<whfc::Node>& queue) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(queue.currentLayerStart(), queue.currentLayerEnd()), [&](const tbb::blocked_range<size_t>& indices) {
                         LayeredQueue<whfc::Node>& local_queue = queue_thread_specific.local();
-                        std::vector<HyperedgeWithSize>& hyperedges = hyperedges_thread_specific.local();
+                        vec<HyperedgeWithSize>& hyperedges = hyperedges_thread_specific.local();
                         NodeWeight lastSeenValue = 0;
 
                         if (local_queue.numLayers() == 0) {
@@ -378,7 +381,7 @@ namespace whfc_rb {
 
         template<typename PartitionImpl>
         void addHyperedges(CSRHypergraph& hg, const PartitionImpl &partition, PartitionBase::PartitionID part0,
-                PartitionBase::PartitionID part1, std::vector<HyperedgeWithSize>& hyperedges) {
+                PartitionBase::PartitionID part1, vec<HyperedgeWithSize>& hyperedges) {
             tbb::enumerable_thread_specific<size_t> sourceOccurrences(0);
             tbb::enumerable_thread_specific<size_t> targetOccurrences(0);
 
