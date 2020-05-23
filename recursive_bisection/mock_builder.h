@@ -70,15 +70,7 @@ public:
     }
 
     void addPin(const Node u) {
-        assert(u < numNodes());
         pins.push_back(u);
-        if (u != source && u != target) {
-            __sync_fetch_and_add(&nodes[u+1].first_out.value(), 1);
-        } else if (u == source) {
-            sourceOccurences++;
-        } else {
-            targetOccurences++;
-        }
     }
 
     void addNode(const whfc::NodeWeight w) {
@@ -119,14 +111,6 @@ public:
 
 private:
     void removeLastPin() {
-        if (pins.back() != source && pins.back() != target) {
-            __sync_fetch_and_sub(&nodes[pins.back() + 1].first_out.value(), 1);
-        } else if (pins.back() == source) {
-            sourceOccurences--;
-        } else {
-            targetOccurences--;
-        }
-
         pins.pop_back();
     }
 };

@@ -81,7 +81,7 @@ namespace whfc {
 				removeLastPin();
 		}
 
-		void addMockBuildersParallel(tbb::enumerable_thread_specific<MockBuilder>& mockBuilder_thread_specific) {
+		void addMockBuildersParallel(tbb::enumerable_thread_specific<MockBuilder>& mockBuilder_thread_specific, std::vector<whfc::Node>& globalToLocalID, whfc::Node source, whfc::Node target) {
 		    struct WorkElement {
 		        MockBuilder& builder;
 		        size_t hyperedgeStartIndex;
@@ -99,7 +99,6 @@ namespace whfc {
 		    // resize datastructures
 		    for (MockBuilder& builder : mockBuilder_thread_specific) {
                 builder.finishHyperedge();
-                builder.addTerminalOccurences();
                 workElements.push_back({builder, numberOfHyperedges, numberOfPins});
 		        numberOfHyperedges += builder.numHyperedges();
 		        numberOfPins += builder.numPins();
@@ -110,14 +109,26 @@ namespace whfc {
 		    pins_receiving_flow.resize(numberOfHyperedges);
 		    pins.resize(numberOfPins);
 
+            tbb::enumerable_thread_specific<size_t> sourceOccurrences(0);
+            tbb::enumerable_thread_specific<size_t> targetOccurrences(0);
+
 		    tbb::parallel_for_each(workElements, [&](WorkElement& workElement) {
                 size_t pinCounter = workElement.pinStartIndex;
                 size_t pinOffset = pinCounter;
 
                 MockBuilder& builder = workElement.builder;
+                size_t& sourceOcc = sourceOccurrences.local();
+                size_t& targetOcc = targetOccurrences.local();
 
                 for (size_t i = 0; i < builder.pins.size(); ++i) {
-                    pins[pinCounter++] = {builder.pins[i], InHeIndex::Invalid()};
+                    pins[pinCounter++] = {globalToLocalID[builder.pins[i]], InHeIndex::Invalid()};
+                    if (builder.pins[i] == source) {
+                        sourceOcc++;
+                    } else if (builder.pins[i] == target) {
+                        targetOcc++;
+                    } else {
+                        __atomic_fetch_add(&nodes[globalToLocalID[builder.pins[i]]+1].first_out.value(), 1, __ATOMIC_RELAXED);
+                    }
                 }
 
                 for (size_t i = 0; i < builder.numHyperedges(); ++i) {
@@ -130,6 +141,13 @@ namespace whfc {
 		    });
 		    hyperedges.back().first_out = PinIndex(numPins());
             numPinsAtHyperedgeStart = numPins();
+
+            for (size_t sourceOcc : sourceOccurrences) {
+                nodes[globalToLocalID[source]+1].first_out += sourceOcc;
+            }
+            for (size_t targetOcc : targetOccurrences) {
+                nodes[globalToLocalID[target]+1].first_out += targetOcc;
+            }
 		}
 
 		void addMockBuilder(MockBuilder& builder, bool add_nodes) {
