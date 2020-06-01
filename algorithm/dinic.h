@@ -294,87 +294,139 @@ namespace whfc {
             return found_target;
 		}
 
+		void printTakenEdgeLocks() {
+            std::cout << "== Edge locks ==" << std::endl;
+            for (uint i = 0; i < edge_locks.size(); ++i) {
+                if (!edge_locks[i].try_lock()) {
+                    std::cout << i << std::endl;
+                } else {
+                    edge_locks[i].unlock();
+                }
+            }
+        }
+
+		std::vector<std::mutex> node_locks;
+        std::vector<std::mutex> edge_locks;
 		
 		Flow augmentFlowInLayeredNetwork(CutterState<Type>& cs) {
 			alignDirection(cs);
 			auto& n = cs.n;
 			auto& h = cs.h;
 			Flow f = 0;
-			
+
+			tls_enumerable_thread_specific<FixedCapacityStack<StackFrame>> stacks_thread_specific(hg.maxNumNodes);
+			node_locks = std::vector<std::mutex>(hg.maxNumNodes);
+			edge_locks = std::vector<std::mutex>(hg.maxNumHyperedges);
+
 			for (auto& sp : cs.sourcePiercingNodes) {
 				assert(stack.empty());
-				stack.push({ sp.node, InHeIndex::Invalid() });
-				
-				while (!stack.empty()) {
-					const Node u = stack.top().u;
-					Node v = invalidNode;
-					InHeIndex inc_v_it = InHeIndex::Invalid();
-					DistanceT req_dist = n.distance[u] + 1;
-					assert(!n.isDistanceStale(u));
-					assert(stack.size() + n.sourceBaseDistance() == req_dist);
-					InHeIndex& he_it = current_hyperedge[u];
-					for ( ; he_it < hg.endIndexHyperedges(u); he_it++) {
-						InHe& inc_u = hg.getInHe(he_it);
-						const Hyperedge e = inc_u.e;
-						const Flow residual = hg.residualCapacity(e) + hg.absoluteFlowReceived(inc_u);
-						assert((residual > 0) == (!hg.isSaturated(e) || hg.absoluteFlowReceived(inc_u) > 0));
-						const bool scanAll = req_dist == h.outDistance[e] && residual > 0;
-						const bool scanFlowSending = req_dist == h.inDistance[e];
-						
-						if (scanFlowSending) {
-							for (const PinIndex firstInvalid = hg.pinsSendingFlowIndices(e).end(); current_flow_sending_pin[e] < firstInvalid; current_flow_sending_pin[e]++) {
-								const Pin& pv = hg.getPin(current_flow_sending_pin[e]);
-								if (residual + hg.absoluteFlowSent(pv) > 0 && (n.isTarget(pv.pin) || n.distance[pv.pin] == req_dist)) {
-									v = pv.pin;
-									inc_v_it = pv.he_inc_iter;
-									break;
-								}
-							}
-						}
-						
-						if (scanAll && v == invalidNode) {
-							for (const PinIndex firstInvalid = hg.pinsNotSendingFlowIndices(e).end(); current_pin[e] < firstInvalid; current_pin[e]++) {
-								const Pin& pv = hg.getPin(current_pin[e]);
-								if (n.isTarget(pv.pin) || n.distance[pv.pin] == req_dist) {
-									v = pv.pin;
-									inc_v_it = pv.he_inc_iter;
-									break;
-								}
-							}
-						}
-						
-						if (v != invalidNode)
-							break;		//don't advance hyperedge iterator
-					}
-					
-					if (v == invalidNode) {
-						assert(current_hyperedge[u] == hg.endIndexHyperedges(u));
-						stack.pop();
-						// Note: the iteration of u's predecessor on the stack still points to u. setting the distance to unreachable prevents the search from pushing u again.
-						// It is fine to destroy the reachability datastructures, since we know that this function increases the flow.
-						// An alternative method would be to advance the iteration manually, which would be hacky.
-						n.distance[u] = ReachableNodes::unreachableDistance;
-					}
-					else {
-						if (n.isTarget(v))
-							f += augmentFromTarget(inc_v_it);
-						else
-							stack.push( { v, inc_v_it } );
-					}
-					
-				}
-			}
+
+                tbb::blocked_range<uint32_t> range(current_hyperedge[sp.node], hg.endIndexHyperedges(sp.node));
+                tbb::parallel_for(range, [&](tbb::blocked_range<uint32_t> sp_inc_values) {
+                    FixedCapacityStack<StackFrame>& stack = stacks_thread_specific.local();
+                    InHeIndex start_sp_it(sp_inc_values.begin());
+                    InHeIndex end_sp_it(sp_inc_values.end());
+
+                    stack.push({ sp.node, InHeIndex::Invalid() });
+
+                    while (!stack.empty()) {
+                        const Node u = stack.top().u;
+                        Node v = invalidNode;
+                        InHeIndex inc_v_it = InHeIndex::Invalid();
+                        DistanceT req_dist = n.distance[u] + 1;
+                        assert(!n.isDistanceStale(u));
+                        assert(stack.size() + n.sourceBaseDistance() == req_dist);
+                        InHeIndex& he_it = (u == sp.node) ? start_sp_it : current_hyperedge[u];
+                        InHeIndex end_it = (u == sp.node) ? end_sp_it : hg.endIndexHyperedges(u);
+                        for ( ; he_it < end_it; he_it++) {
+                            InHe& inc_u = hg.getInHe(he_it);
+                            const Hyperedge e = inc_u.e;
+                            if (h.inDistance[e] == req_dist || h.outDistance[e] == req_dist) {
+                                //edge_locks[e].lock();
+                            }
+                            const Flow residual = hg.residualCapacity(e) + hg.absoluteFlowReceived(inc_u);
+                            assert((residual > 0) == (!hg.isSaturated(e) || hg.absoluteFlowReceived(inc_u) > 0));
+                            const bool scanAll = req_dist == h.outDistance[e] && residual > 0;
+                            const bool scanFlowSending = req_dist == h.inDistance[e];
+
+                            if (scanFlowSending) {
+                                for (const PinIndex firstInvalid = hg.pinsSendingFlowIndices(e).end(); current_flow_sending_pin[e] < firstInvalid; current_flow_sending_pin[e]++) {
+                                    const Pin& pv = hg.getPin(current_flow_sending_pin[e]);
+                                    if (residual + hg.absoluteFlowSent(pv) > 0 && (n.isTarget(pv.pin) || n.distance[pv.pin] == req_dist)) {
+                                        v = pv.pin;
+                                        inc_v_it = pv.he_inc_iter;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (scanAll && v == invalidNode) {
+                                for (const PinIndex firstInvalid = hg.pinsNotSendingFlowIndices(e).end(); current_pin[e] < firstInvalid; current_pin[e]++) {
+                                    const Pin& pv = hg.getPin(current_pin[e]);
+                                    if (n.isTarget(pv.pin) || n.distance[pv.pin] == req_dist) {
+                                        v = pv.pin;
+                                        inc_v_it = pv.he_inc_iter;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (v != invalidNode)
+                                break;		//don't advance hyperedge iterator
+
+                            if (h.inDistance[e] == req_dist || h.outDistance[e] == req_dist) edge_locks[e].unlock();
+                        }
+
+                        if (v == invalidNode) {
+                            assert(current_hyperedge[u] == hg.endIndexHyperedges(u) || u == sp.node);
+                            if (u != sp.node) edge_locks[hg.getInHe(stack.top().parent_he_it).e].unlock();
+                            stack.pop();
+                            // Note: the iteration of u's predecessor on the stack still points to u. setting the distance to unreachable prevents the search from pushing u again.
+                            // It is fine to destroy the reachability datastructures, since we know that this function increases the flow.
+                            // An alternative method would be to advance the iteration manually, which would be hacky.
+                            if (u != sp.node) {
+                                n.distance[u] = ReachableNodes::unreachableDistance;
+                                node_locks[u].unlock();
+                            }
+                        }
+                        else {
+                            if (n.isTarget(v))
+                                f += augmentFromTarget(stack, inc_v_it, start_sp_it);
+                            else {
+                                stack.push( { v, inc_v_it } );
+                                node_locks[v].lock();
+                            }
+                        }
+
+                    }
+
+                });
+
+            }
 			assert(f > 0);
 			return f;
 		}
 		
 		
 		
-		Flow augmentFromTarget(InHeIndex inc_target_it) {
+		Flow augmentFromTarget(FixedCapacityStack<StackFrame>& stack, InHeIndex inc_target_it, InHeIndex first_incidence) {
 			Flow bottleneckCapacity = maxFlow;
 			int64_t lowest_bottleneck = std::numeric_limits<int64_t>::max();
 			InHeIndex inc_v_it = inc_target_it;
-			for (int64_t stack_pointer = stack.size() - 1; stack_pointer >= 0; --stack_pointer) {
+
+			Hyperedge e = hg.getInHe(inc_target_it).e;
+			for (int64_t stack_pointer = stack.size() - 1; stack_pointer > 1; --stack_pointer) {
+			    for (int64_t stack_pointer_comp = stack_pointer; stack_pointer_comp > 0; --stack_pointer_comp) {
+			        if (e == hg.getInHe(stack.at(stack_pointer_comp).parent_he_it).e) {
+			            // This should not happen?
+			            std::cout << stack_pointer << ", " << stack_pointer_comp << std::endl;
+                    }
+			    }
+
+			    e = hg.getInHe(stack.at(stack_pointer).parent_he_it).e;
+			}
+
+			for (int64_t stack_pointer = stack.size() - 1; stack_pointer > 0; --stack_pointer) {
 				const StackFrame& t = stack.at(stack_pointer);
 				const Flow residual = hg.residualCapacity(hg.getInHe(current_hyperedge[t.u]), hg.getInHe(inc_v_it));
 				if (residual <= bottleneckCapacity) {
@@ -383,13 +435,29 @@ namespace whfc {
 				}
 				inc_v_it = t.parent_he_it;
 			}
+
+            const Flow residual = hg.residualCapacity(hg.getInHe(first_incidence), hg.getInHe(inc_v_it));
+            if (residual <= bottleneckCapacity) {
+                bottleneckCapacity = residual;
+                lowest_bottleneck = 0;
+            }
+
 			assert(bottleneckCapacity > 0);
 			inc_v_it = inc_target_it;
-			for (int64_t stack_pointer = stack.size() - 1; stack_pointer >= 0; --stack_pointer) {
+			for (int64_t stack_pointer = stack.size() - 1; stack_pointer > 0; --stack_pointer) {
 				const StackFrame& t = stack.at(stack_pointer);
 				hg.routeFlow(hg.getInHe(current_hyperedge[t.u]), hg.getInHe(inc_v_it), bottleneckCapacity);
 				inc_v_it = t.parent_he_it;
 			}
+
+            hg.routeFlow(hg.getInHe(first_incidence), hg.getInHe(inc_v_it), bottleneckCapacity);
+
+            edge_locks[hg.getInHe(inc_target_it).e].unlock();
+			for (size_t i = stack.size() - 1; i > lowest_bottleneck; --i) {
+			    node_locks[stack.at(i).u].unlock();
+			    edge_locks[hg.getInHe(stack.at(i).parent_he_it).e].unlock();
+			}
+
 			stack.popDownTo(lowest_bottleneck);
 			return bottleneckCapacity;
 		}
