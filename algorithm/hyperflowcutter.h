@@ -7,11 +7,11 @@
 
 namespace whfc {
 
-	template<class FlowAlgorithm>
+	template<class FlowAlgorithm, class Hypergraph>
 	class HyperFlowCutter {
 	public:
 		TimeReporter timer;
-		FlowHypergraph& hg;
+		Hypergraph& hg;
 		CutterState<FlowAlgorithm> cs;
 		FlowAlgorithm flow_algo;
 		Flow upperFlowBound;
@@ -21,7 +21,7 @@ namespace whfc {
 
 		static constexpr bool log = false;
 		
-		HyperFlowCutter(FlowHypergraph& hg, int seed, whfc_rb::PartitionConfig config) :
+		HyperFlowCutter(Hypergraph& hg, int seed, whfc_rb::PartitionConfig config) :
 				timer("HyperFlowCutter"),
 				hg(hg),
 				cs(hg, timer),

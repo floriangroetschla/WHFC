@@ -18,7 +18,7 @@ public:
 	using ReachableHyperedges = typename FlowAlgorithm::ReachableHyperedges;
 
 	
-	static void grow(CutterState<FlowAlgorithm>& cs, ScanList& nodes_to_scan, const bool reach_and_settle = false) {
+	static void grow(CutterState<FlowAlgorithm>& cs, ScanList& nodes_to_scan, const bool reach_and_settle = true) {
 		unused(reach_and_settle);
 		
 		ReachableNodes& n = cs.n;

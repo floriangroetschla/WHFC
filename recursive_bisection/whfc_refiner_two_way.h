@@ -7,6 +7,7 @@
 #include <random>
 #include "two_way_refiner_interface.h"
 #include "config.h"
+#include "../algorithm/push_relabel.h"
 
 namespace whfc_rb {
     class WHFCRefinerTwoWay : public TwoWayRefinerInterface {
@@ -30,7 +31,7 @@ namespace whfc_rb {
                                               partition.partWeight(part1) / maxBlockWeight1);
 
             timer.start("Extraction", "WHFCRefinerTwoWay");
-            FlowHypergraphBuilderExtractor::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1, hfc.cs.borderNodes.distance, timer);
+            FlowHypergraphBuilderExtractor<whfc::LawlerFlowHypergraph>::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1, hfc.cs.borderNodes.distance, timer);
             timer.stop("Extraction");
 
             // call WHFC to improve the bisection
@@ -79,15 +80,15 @@ namespace whfc_rb {
         }
 
     private:
-        FlowHypergraphBuilderExtractor extractor;
-        whfc::HyperFlowCutter<whfc::Dinic> hfc;
+        FlowHypergraphBuilderExtractor<whfc::LawlerFlowHypergraph> extractor;
+        whfc::HyperFlowCutter<whfc::PushRelabel, whfc::LawlerFlowHypergraph> hfc;
         whfc::TimeReporter timer;
         const PartitionConfig& config;
 
         size_t instance_counter = 0;
 
         template<class PartitionImpl>
-        void reassign(PartitionImpl &partition, FlowHypergraphBuilderExtractor::ExtractorInfo &info, PartitionID part0,
+        void reassign(PartitionImpl &partition, FlowHypergraphBuilderExtractor<whfc::LawlerFlowHypergraph>::ExtractorInfo &info, PartitionID part0,
                       PartitionID part1) {
             for (whfc::Node localID : extractor.localNodeIDs()) {
                 assert(localID < extractor.fhgb.numNodes());
@@ -99,7 +100,7 @@ namespace whfc_rb {
             }
         }
 
-        void writeSnapshot(FlowHypergraphBuilderExtractor::ExtractorInfo &extractor_info) {
+        void writeSnapshot(FlowHypergraphBuilderExtractor<whfc::LawlerFlowHypergraph>::ExtractorInfo &extractor_info) {
             whfc::WHFC_IO::WHFCInformation i = {
                     {hfc.cs.maxBlockWeight(0), hfc.cs.maxBlockWeight(1)},
                     extractor_info.cutAtStake - extractor_info.baseCut,

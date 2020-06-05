@@ -10,13 +10,14 @@
 #include <tbb/scalable_allocator.h>
 
 namespace whfc_rb {
+    template<class Hypergraph>
     class FlowHypergraphBuilderExtractor {
     public:
         template<typename T>
         using vec = std::vector<T, tbb::scalable_allocator<T>>;
 
         static constexpr NodeID invalid_node = std::numeric_limits<NodeID>::max();
-        whfc::FlowHypergraphBuilder fhgb;
+        Hypergraph fhgb;
 
         static constexpr bool doBothBFSInParallel = false;
 
