@@ -37,6 +37,8 @@ namespace whfc {
 
         TimeReporter& timer;
 
+        Node piercingNode;
+
         std::vector<std::atomic<bool>> inQueue;
 
         PushRelabel(LawlerFlowHypergraph& hg, TimeReporter& timer, size_t numThreads) : timer(timer), hg(hg), inQueue(hg.numLawlerNodes())
@@ -103,7 +105,8 @@ namespace whfc {
             for (Pin& pin : hg.pinsOf(e)) {
                 InHe& inc = hg.getInHe(pin.he_inc_iter);
                 Node v = pin.pin;
-                if (!n.isSourceReachable(v) || n.isSource(v)) {
+                std::cout << "n.isSourceReachable(" << v << ") = " << n.isSourceReachable(v) << ", n.isSource(" << v << ") = " << n.isSource(v) << std::endl;
+                if (!n.isSourceReachable(v) || (v == piercingNode)) {
                     Flow residual = std::min({hg.excess(u), hg.capacity(e) - hg.flow(e) + hg.absoluteFlowSent(inc), hg.capacity(e) + hg.flowSent(inc)});
                     if (residual > 0) {
                         if (hg.label(u) == hg.label(v) + 1) {
@@ -124,6 +127,9 @@ namespace whfc {
         }
 
         Flow exhaustFlow(CutterState<Type>& cs) {
+            assert(cs.sourcePiercingNodes.size() == 1);
+            std::cout << "Exhaust flow" << std::endl;
+            hg.printHypergraph(std::cout);
             auto& n = cs.n;
             auto& h = cs.h;
 
@@ -131,18 +137,26 @@ namespace whfc {
             queue.clear();
 
             for (auto& sp : cs.sourcePiercingNodes) {
+                std::cout << "piercing node: " << sp.node << std::endl;
+                std::cout << "n.isSourceReachable(" << sp.node << ") = " << n.isSourceReachable(sp.node) << ", n.isSource(" << sp.node << ") = " << n.isSource(sp.node) << std::endl;
                 hg.label(sp.node) = hg.numLawlerNodes();
                 for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(sp.node)) {
                     InHe& inc_u = hg.getInHe(inc_iter);
                     const Hyperedge e = inc_u.e;
                     if (!h.areAllPinsSourceReachable(e)) {
-                        hg.pushToEdge(sp.node, inc_u, hg.capacity(inc_u.e));
-                        if (!inQueue[hg.edge_node(e)].exchange(true)) { queue.push(hg.edge_node(e)); }
+                        Flow residual = hg.capacity(e) - hg.flowSent(inc_u);
+                        if (residual > 0) {
+                            hg.pushToEdge(sp.node, inc_u, residual);
+                            if (!inQueue[hg.edge_node(e)].exchange(true)) { queue.push(hg.edge_node(e)); }
+                        }
                     }
+                    piercingNode = sp.node;
                 }
             }
 
             while (!queue.empty()) {
+                hg.printHypergraph(std::cout);
+                hg.printExcessAndLabel();
                 const Node u = queue.pop();
                 if (hg.isNode(u)) {
                     // This is a node in the original graph
@@ -162,6 +176,9 @@ namespace whfc {
                     }
                 }
             }
+
+            hg.printHypergraph(std::cout);
+            hg.printExcessAndLabel();
 
 
             Flow f = 0;
