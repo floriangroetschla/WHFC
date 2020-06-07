@@ -64,7 +64,7 @@ namespace whfc {
             Flow prevFlow = in_he.flow;
 
             if (flowSent(in_he) < 0) {
-                const Flow flow_pushed_back = std::max(flowSent(in_he), flowSent(-f));
+                const Flow flow_pushed_back = std::max(flowSent(in_he), -f);
                 flow(in_he.e) += flow_pushed_back;
             }
 

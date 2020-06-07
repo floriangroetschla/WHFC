@@ -70,7 +70,7 @@ namespace whfc {
             auto& n = cs.n;
             auto& h = cs.h;
 
-            size_t minLevel = hg.numLawlerNodes();
+            size_t minLevel = hg.numLawlerNodes() * 2;
             for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(u)) {
                 InHe& inc_u = hg.getInHe(inc_iter);
                 const Hyperedge e = inc_u.e;
@@ -107,6 +107,11 @@ namespace whfc {
                 Node v = pin.pin;
                 std::cout << "n.isSourceReachable(" << v << ") = " << n.isSourceReachable(v) << ", n.isSource(" << v << ") = " << n.isSource(v) << std::endl;
                 if (!n.isSourceReachable(v) || (v == piercingNode)) {
+                    std::cout << "hg.excess(u) = " << hg.excess(u) << std::endl;
+                    std::cout << "hg.capacity(e) = " << hg.capacity(e) << std::endl;
+                    std::cout << "hg.flow(e) = " << hg.flow(e) << std::endl;
+                    std::cout << "hg.absoluteFlowSent(inc) = " << hg.absoluteFlowSent(inc) << std::endl;
+                    std::cout << "hg.flowSent(inc) = " << hg.flowSent(inc) << std::endl;
                     Flow residual = std::min({hg.excess(u), hg.capacity(e) - hg.flow(e) + hg.absoluteFlowSent(inc), hg.capacity(e) + hg.flowSent(inc)});
                     if (residual > 0) {
                         if (hg.label(u) == hg.label(v) + 1) {
@@ -127,6 +132,7 @@ namespace whfc {
         }
 
         Flow exhaustFlow(CutterState<Type>& cs) {
+            std::cout << "=== EXHAUST FLOW ===" << std::endl;
             assert(cs.sourcePiercingNodes.size() == 1);
             std::cout << "Exhaust flow" << std::endl;
             hg.printHypergraph(std::cout);
@@ -229,8 +235,6 @@ namespace whfc {
 
                             auto visit = [&](const Pin& pv) {
                                 const Node v = pv.pin;
-                                assert(!n.isTargetReachable(v));
-                                assert(!cs.isIsolated(v) || n.distance[v] == n.s.base);
                                 found_target |= n.isTarget(v);
                                 if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)) {
                                     n.reach(v);
