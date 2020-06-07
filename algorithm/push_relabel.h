@@ -179,7 +179,7 @@ namespace whfc {
 
             hg.printHypergraph(std::cout);
             hg.printExcessAndLabel();
-
+            resetSourcePiercingNodeDistances(cs);
 
             Flow f = 0;
 
@@ -195,8 +195,10 @@ namespace whfc {
             ReachableNodes& n = cs.n;
             ReachableHyperedges& h = cs.h;
             queue.clear();
-            for (auto& s : cs.sourcePiercingNodes)
+            for (auto& s : cs.sourcePiercingNodes) {
+                n.setPiercingNodeDistance(s.node, false);
                 queue.push(s.node);
+            }
 
             n.hop(); h.hop();
 
@@ -216,7 +218,7 @@ namespace whfc {
 
                         for (const Pin& pv : scanAllPins ? hg.pinsOf(e) : hg.pinsSendingFlowInto(e)) {
                             const Node v = pv.pin;
-                            if (!n.isSourceReachable(v)) {		//don't do VD label propagation
+                            if (!n.isSourceReachable(v) && !n.isTarget(v)) {
                                 n.reach(v);		//this has to be after the return if v is target, to avoid overwriting the targetSettled timestamp with sourceReachable
                                 queue.push(v);
                             }
