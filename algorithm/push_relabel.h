@@ -187,51 +187,76 @@ namespace whfc {
                 f -= hg.excess(sp.node);
             }
             cs.flowValue += f;
+
+            growReachable(cs);
             return f;
         }
 
-        Flow growReachable(CutterState<Type>& cs) {
+        void growReachable(CutterState<Type>& cs) {
             cs.clearForSearch();
-            ReachableNodes& n = cs.n;
-            ReachableHyperedges& h = cs.h;
+            auto& n = cs.n;
+            auto& h = cs.h;
             queue.clear();
-            for (auto& s : cs.sourcePiercingNodes) {
-                n.setPiercingNodeDistance(s.node, false);
-                queue.push(s.node);
-            }
+            bool found_target = false;
 
-            n.hop(); h.hop();
+            for (auto& sp : cs.sourcePiercingNodes) {
+                n.setPiercingNodeDistance(sp.node, false);
+                assert(n.isSourceReachable(sp.node));
+                queue.push(sp.node);
+            }
+            n.hop(); h.hop(); queue.finishNextLayer();
 
             while (!queue.empty()) {
-                const Node u = queue.pop();
-                for (InHeIndex inc_u_iter : hg.incidentHyperedgeIndices(u)) {
-                    const InHe& inc_u = hg.getInHe(inc_u_iter);
-                    const Hyperedge e = inc_u.e;
-                    if (!h.areAllPinsSourceReachable(e)) {
-                        const bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(inc_u) > 0;
-                        if (scanAllPins)
-                            h.reachAllPins(e);
-                        else if (h.areFlowSendingPinsSourceReachable(e))
-                            continue;
-                        else
-                            h.reachFlowSendingPins(e);
+                while (!queue.currentLayerEmpty()) {
+                    const Node u = queue.pop();
+                    for (InHe& inc_u : hg.hyperedgesOf(u)) {
+                        const Hyperedge e = inc_u.e;
+                        if (!h.areAllPinsSourceReachable__unsafe__(e)) {
+                            const bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(inc_u) > 0;
+                            if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e))
+                                continue;
 
-                        for (const Pin& pv : scanAllPins ? hg.pinsOf(e) : hg.pinsSendingFlowInto(e)) {
-                            const Node v = pv.pin;
-                            if (!n.isSourceReachable(v) && !n.isTarget(v)) {
-                                n.reach(v);		//this has to be after the return if v is target, to avoid overwriting the targetSettled timestamp with sourceReachable
-                                queue.push(v);
+                            if (scanAllPins) {
+                                h.reachAllPins(e);
+                                assert(n.distance[u] + 1 == h.outDistance[e]);
                             }
+
+                            const bool scanFlowSending = !h.areFlowSendingPinsSourceReachable__unsafe__(e);
+                            if (scanFlowSending) {
+                                h.reachFlowSendingPins(e);
+                                assert(n.distance[u] + 1 == h.inDistance[e]);
+                            }
+
+                            auto visit = [&](const Pin& pv) {
+                                const Node v = pv.pin;
+                                assert(!n.isTargetReachable(v));
+                                assert(!cs.isIsolated(v) || n.distance[v] == n.s.base);
+                                found_target |= n.isTarget(v);
+                                if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)) {
+                                    n.reach(v);
+                                    assert(n.distance[u] + 1 == n.distance[v]);
+                                    queue.push(v);
+                                }
+                            };
+
+                            if (scanFlowSending)
+                                for (const Pin& pv : hg.pinsSendingFlowInto(e))
+                                    visit(pv);
+
+                            if (scanAllPins)
+                                for (const Pin& pv : hg.pinsNotSendingFlowInto(e))
+                                    visit(pv);
                         }
                     }
                 }
+
+                n.hop(); h.hop(); queue.finishNextLayer();
             }
 
-            n.hop(); h.hop();
             n.lockInSourceDistance(); h.lockInSourceDistance();
             h.compareDistances(n);
+
             resetSourcePiercingNodeDistances(cs);
-            return 0;
         }
 
         void resetSourcePiercingNodeDistances(CutterState<Type>& cs, bool reset = true) {
