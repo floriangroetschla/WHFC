@@ -105,13 +105,7 @@ namespace whfc {
             for (Pin& pin : hg.pinsOf(e)) {
                 InHe& inc = hg.getInHe(pin.he_inc_iter);
                 Node v = pin.pin;
-                std::cout << "n.isSourceReachable(" << v << ") = " << n.isSourceReachable(v) << ", n.isSource(" << v << ") = " << n.isSource(v) << std::endl;
                 if (!n.isSourceReachable(v) || (v == piercingNode)) {
-                    std::cout << "hg.excess(u) = " << hg.excess(u) << std::endl;
-                    std::cout << "hg.capacity(e) = " << hg.capacity(e) << std::endl;
-                    std::cout << "hg.flow(e) = " << hg.flow(e) << std::endl;
-                    std::cout << "hg.absoluteFlowSent(inc) = " << hg.absoluteFlowSent(inc) << std::endl;
-                    std::cout << "hg.flowSent(inc) = " << hg.flowSent(inc) << std::endl;
                     Flow residual = std::min({hg.excess(u), hg.capacity(e) - hg.flow(e) + hg.absoluteFlowSent(inc), hg.capacity(e) + hg.flowSent(inc)});
                     if (residual > 0) {
                         if (hg.label(u) == hg.label(v) + 1) {
@@ -132,10 +126,7 @@ namespace whfc {
         }
 
         Flow exhaustFlow(CutterState<Type>& cs) {
-            std::cout << "=== EXHAUST FLOW ===" << std::endl;
             assert(cs.sourcePiercingNodes.size() == 1);
-            std::cout << "Exhaust flow" << std::endl;
-            hg.printHypergraph(std::cout);
             auto& n = cs.n;
             auto& h = cs.h;
 
@@ -143,8 +134,6 @@ namespace whfc {
             queue.clear();
 
             for (auto& sp : cs.sourcePiercingNodes) {
-                std::cout << "piercing node: " << sp.node << std::endl;
-                std::cout << "n.isSourceReachable(" << sp.node << ") = " << n.isSourceReachable(sp.node) << ", n.isSource(" << sp.node << ") = " << n.isSource(sp.node) << std::endl;
                 hg.label(sp.node) = hg.numLawlerNodes();
                 for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(sp.node)) {
                     InHe& inc_u = hg.getInHe(inc_iter);
@@ -161,8 +150,6 @@ namespace whfc {
             }
 
             while (!queue.empty()) {
-                hg.printHypergraph(std::cout);
-                hg.printExcessAndLabel();
                 const Node u = queue.pop();
                 if (hg.isNode(u)) {
                     // This is a node in the original graph
