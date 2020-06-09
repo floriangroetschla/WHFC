@@ -27,6 +27,10 @@ namespace whfc {
         LawlerFlowHypergraph& hg;
         LayeredQueue<Node> queue;
 
+        LayeredQueue<Node> nodes;
+        LayeredQueue<Node> e_in_nodes;
+        LayeredQueue<Node> e_out_nodes;
+
         int direction = 0;
 
         Flow upperFlowBound;
@@ -81,7 +85,7 @@ namespace whfc {
                     if (residual > 0) {
                         if (hg.label(u) == hg.label(e_out) + 1) {
                             hg.pushToEdgeOut(u, inc_u, residual);
-                            if (!inQueue[e_out].exchange(true)) { queue.push(e_out); }
+                            if (!inQueue[e_out].exchange(true)) { e_out_nodes.push(e_out); }
                         } else {
                             minLevel = std::min(minLevel, hg.label(e_out));
                         }
@@ -92,7 +96,7 @@ namespace whfc {
                     if (residual > 0) {
                         if (hg.label(u) == hg.label(e_in) + 1) {
                             hg.pushToEdgeIn(u, inc_u, residual);
-                            if (!inQueue[e_in].exchange(true)) { queue.push(e_in); }
+                            if (!inQueue[e_in].exchange(true)) { e_in_nodes.push(e_in); }
                         } else {
                             minLevel = std::min(minLevel, hg.label(e_in));
                         }
@@ -129,7 +133,7 @@ namespace whfc {
                     if (residual > 0) {
                         if (hg.label(e_in) == hg.label(v) + 1) {
                             hg.pushFromEdgeInToNode(v, inc, residual);
-                            if (!n.isTarget(v) && !n.isSource(v) && !inQueue[v].exchange(true)) { queue.push(v); }
+                            if (!n.isTarget(v) && !n.isSource(v) && !inQueue[v].exchange(true)) { nodes.push(v); }
                         } else {
                             minLevel = std::min(minLevel, hg.label(v));
                         }
@@ -143,7 +147,7 @@ namespace whfc {
             if (residual > 0) {
                 if (hg.label(e_in) == hg.label(e_out) + 1) {
                     hg.pushFromEdgeInToEdgeOut(e_in, e_out, residual);
-                    if (!inQueue[e_out].exchange(true)) { queue.push(e_out); }
+                    if (!inQueue[e_out].exchange(true)) { e_out_nodes.push(e_out); }
                 } else {
                     minLevel = std::min(minLevel, hg.label(e_out));
                 }
@@ -169,7 +173,7 @@ namespace whfc {
             if (residual > 0) {
                 if (hg.label(e_out) == hg.label(e_in) + 1) {
                     hg.pushFromEdgeOutToEdgeIn(e_out, e_in, residual);
-                    if (!inQueue[e_in].exchange(true)) { queue.push(e_in); }
+                    if (!inQueue[e_in].exchange(true)) { e_in_nodes.push(e_in); }
                 } else {
                     minLevel = std::min(minLevel, hg.label(e_in));
                 }
@@ -186,7 +190,7 @@ namespace whfc {
                     if (residual > 0) {
                         if (hg.label(e_out) == hg.label(v) + 1) {
                             hg.pushFromEdgeOutToNode(v, inc, residual);
-                            if (!n.isTarget(v) && !n.isSource(v) && !inQueue[v].exchange(true)) { queue.push(v); }
+                            if (!n.isTarget(v) && !n.isSource(v) && !inQueue[v].exchange(true)) { nodes.push(v); }
                         } else {
                             minLevel = std::min(minLevel, hg.label(v));
                         }
@@ -273,18 +277,24 @@ namespace whfc {
                         Flow residual = hg.capacity(e) - hg.flowSent(inc_u);
                         if (residual > 0) {
                             hg.pushToEdgeIn(sp.node, inc_u, residual);
-                            if (!inQueue[hg.edge_node_in(e)].exchange(true)) { queue.push(hg.edge_node_in(e)); }
+                            if (!inQueue[hg.edge_node_in(e)].exchange(true)) { e_in_nodes.push(hg.edge_node_in(e)); }
                         }
                     }
                     piercingNode = sp.node;
                 }
             }
 
-            while (!queue.empty()) {
-                hg.printHypergraph(std::cout);
-                hg.printExcessAndLabel();
+            while (!nodes.empty() || !e_in_nodes.empty() || !e_out_nodes.empty()) {
 
-                const Node u = queue.pop();
+                Node u;
+                if (!e_out_nodes.empty()) {
+                    u = e_out_nodes.pop();
+                } else if (!e_in_nodes.empty()){
+                    u = e_in_nodes.pop();
+                } else {
+                    u = nodes.pop();
+                }
+
                 if (hg.isNode(u)) {
                     dischargeNode(u, cs);
                 } else if (hg.is_edge_in(u)) {
@@ -294,8 +304,15 @@ namespace whfc {
                     dischargeEdgeNodeOut(u, cs);
                 }
 
+
                 if (hg.excess(u) > 0) {
-                    queue.push(u);
+                    if (hg.isNode(u)) {
+                        nodes.push(u);
+                    } else if (hg.is_edge_in(u)) {
+                        e_in_nodes.push(u);
+                    } else {
+                        e_out_nodes.push(u);
+                    }
                 } else {
                     inQueue[u] = false;
                 }
