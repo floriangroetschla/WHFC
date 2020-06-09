@@ -61,6 +61,7 @@ namespace whfc {
             //assert(vec_excess[u] >= f); not true if u is source
             assert(f <= capacity(in_he.e) - flowSent(in_he.flow));
             assert(flowReceived(in_he) <= 0);
+            assert(isNode(u));
 
             Flow prevFlow = in_he.flow;
 
@@ -79,11 +80,12 @@ namespace whfc {
             //assert(vec_excess[u] >= f); not true if u is source
             assert(f <= capacity(in_he.e) - flowSent(in_he.flow));
             assert(flowReceived(in_he) > 0);
+            assert(isNode(u));
 
             Flow prevFlow = in_he.flow;
 
-            vec_excess[u] += f;
-            vec_excess[edge_node_out(in_he.e)] -= f;
+            vec_excess[u] -= f;
+            vec_excess[edge_node_out(in_he.e)] += f;
             in_he.flow += flowSent(f);
 
             if (flowReceived(prevFlow) > 0 && flowSent(in_he.flow) >= 0)	//u previously received flow and now either has none, or sends flow.
@@ -95,6 +97,7 @@ namespace whfc {
         inline void pushFromEdgeInToNode(Node u, InHe& in_he, Flow f) {
             assert(f > 0);
             assert(flowSent(in_he) >= f);
+            assert(isNode(u));
 
             Flow prevFlow = in_he.flow;
 
@@ -111,6 +114,7 @@ namespace whfc {
         inline void pushFromEdgeOutToNode(Node u, InHe& in_he, Flow f) {
             assert(f > 0);
             assert(flowReceived(in_he) >= 0);
+            assert(isNode(u));
 
             Flow prevFlow = in_he.flow;
 
@@ -124,13 +128,40 @@ namespace whfc {
                 insertPinIntoFlowPins(in_he, true);
         }
 
+        inline void pushFromEdgeInToEdgeOut(Node e_in, Node e_out, Flow f) {
+            assert(f > 0);
+            assert(f <= excess(e_in));
+            assert(is_edge_out(e_out) && is_edge_in(e_in));
+
+            vec_excess[e_in] -= f;
+            vec_excess[e_out] += f;
+
+            flow(edgeFromLawlerNode(e_in)) += f;
+        }
+
+        inline void pushFromEdgeOutToEdgeIn(Node e_out, Node e_in, Flow f) {
+            assert(f > 0);
+            assert(f <= excess(e_out));
+            assert(f <= flow(edgeFromLawlerNode(e_in)));
+            assert(is_edge_out(e_out) && is_edge_in(e_in));
+
+            vec_excess[e_out] -= f;
+            vec_excess[e_in] += f;
+
+            flow(edgeFromLawlerNode(e_in)) -= f;
+        }
+
+        inline bool is_node(Node u) { return u < numNodes(); }
+        inline bool is_edge_in(Node u) { return u >= numNodes() && u < numNodes() + numHyperedges(); }
+        inline bool is_edge_out(Node u) { return u >= numNodes() + numHyperedges() && u < numLawlerNodes(); }
+
         inline Flow& excess_node(Node u) { assert(u < numNodes()); return vec_excess[u]; }
         inline Flow& excess_edge(Hyperedge e) { assert(e < numHyperedges()); return vec_excess[numNodes() + e]; }
 
         inline Node edge_node_in(Hyperedge e) { assert(e < numHyperedges()); return Node(numNodes() + e); }
-        inline Node edge_node_out(Hyperedge e) { assert(e < numHyperedges()); return Node(numNodes() + numHyperedges() +e); }
+        inline Node edge_node_out(Hyperedge e) { assert(e < numHyperedges()); return Node(numNodes() + numHyperedges() + e); }
 
-        inline Hyperedge edgeFromLawlerNode(Node u) { assert(u >= numNodes()); return Hyperedge(u - numNodes()); }
+        inline Hyperedge edgeFromLawlerNode(Node u) { assert(u >= numNodes()); return Hyperedge(u < numNodes() + numHyperedges() ? u - numNodes() : u - numNodes() - numHyperedges()); }
 
         inline size_t numLawlerNodes() const {
             return numNodes() + 2 * numHyperedges();
