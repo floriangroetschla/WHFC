@@ -60,38 +60,28 @@ namespace whfc {
             assert(f > 0);
             //assert(vec_excess[u] >= f); not true if u is source
             assert(f <= capacity(in_he.e) - flowSent(in_he.flow));
-            assert(flowReceived(in_he) <= 0);
+            //assert(flowReceived(in_he) <= 0);
             assert(isNode(u));
 
             Flow prevFlow = in_he.flow;
 
             vec_excess[u] -= f;
             vec_excess[edge_node_in(in_he.e)] += f;
-            in_he.flow += flowSent(f);
-
-            if (flowReceived(prevFlow) > 0 && flowSent(in_he.flow) >= 0)	//u previously received flow and now either has none, or sends flow.
-                removePinFromFlowPins(in_he, true);
-            if (flowSent(in_he.flow) > 0 && flowSent(prevFlow) <= 0) //u now sends flow and did not previously, thus must be inserted into pins_sending_flow
-                insertPinIntoFlowPins(in_he, false);
+            in_he.flow_in += flowSent(f);
         }
 
         inline void pushToEdgeOut(Node u, InHe& in_he, Flow f) {
             assert(f > 0);
             //assert(vec_excess[u] >= f); not true if u is source
             assert(f <= capacity(in_he.e) - flowSent(in_he.flow));
-            assert(flowReceived(in_he) > 0);
+            //assert(flowReceived(in_he) > 0);
             assert(isNode(u));
 
             Flow prevFlow = in_he.flow;
 
             vec_excess[u] -= f;
             vec_excess[edge_node_out(in_he.e)] += f;
-            in_he.flow += flowSent(f);
-
-            if (flowReceived(prevFlow) > 0 && flowSent(in_he.flow) >= 0)	//u previously received flow and now either has none, or sends flow.
-                removePinFromFlowPins(in_he, true);
-            if (flowSent(in_he.flow) > 0 && flowSent(prevFlow) <= 0) //u now sends flow and did not previously, thus must be inserted into pins_sending_flow
-                insertPinIntoFlowPins(in_he, false);
+            in_he.flow_out += flowSent(f);
         }
 
         inline void pushFromEdgeInToNode(Node u, InHe& in_he, Flow f) {
@@ -103,29 +93,19 @@ namespace whfc {
 
             vec_excess[u] += f;
             vec_excess[edge_node_in(in_he.e)] -= f;
-            in_he.flow -= flowSent(f);
-
-            if (flowSent(prevFlow) > 0 && flowReceived(in_he.flow) >= 0) //v previously sent flow and now either has none, or receives flow.
-                removePinFromFlowPins(in_he, false);
-            if (flowReceived(in_he.flow) > 0 && flowReceived(prevFlow) <= 0)  //v now receives flow and did not previously, thus must be inserted into pins_receiving_flow
-                insertPinIntoFlowPins(in_he, true);
+            in_he.flow_in -= flowSent(f);
         }
 
         inline void pushFromEdgeOutToNode(Node u, InHe& in_he, Flow f) {
             assert(f > 0);
-            assert(flowReceived(in_he) >= 0);
+            //assert(flowReceived(in_he) >= 0);
             assert(isNode(u));
 
             Flow prevFlow = in_he.flow;
 
             vec_excess[u] += f;
             vec_excess[edge_node_out(in_he.e)] -= f;
-            in_he.flow -= flowSent(f);
-
-            if (flowSent(prevFlow) > 0 && flowReceived(in_he.flow) >= 0) //v previously sent flow and now either has none, or receives flow.
-                removePinFromFlowPins(in_he, false);
-            if (flowReceived(in_he.flow) > 0 && flowReceived(prevFlow) <= 0)  //v now receives flow and did not previously, thus must be inserted into pins_receiving_flow
-                insertPinIntoFlowPins(in_he, true);
+            in_he.flow_out -= flowSent(f);
         }
 
         inline void pushFromEdgeInToEdgeOut(Node e_in, Node e_out, Flow f) {
@@ -163,6 +143,12 @@ namespace whfc {
 
         inline Hyperedge edgeFromLawlerNode(Node u) { assert(u >= numNodes()); return Hyperedge(u < numNodes() + numHyperedges() ? u - numNodes() : u - numNodes() - numHyperedges()); }
 
+        inline Flow flowSent(const InHe& inc_u) const { return inc_u.flow_in; }
+        inline Flow flowReceived(const InHe& inc_u) const { return inc_u.flow_out; }
+
+        inline Flow flowSent(const Flow f) const { return f * sends_multiplier; }
+
+
         inline size_t numLawlerNodes() const {
             return numNodes() + 2 * numHyperedges();
         }
@@ -196,6 +182,34 @@ namespace whfc {
                 std::cout << "(" << u.pin << "," << getInHe(u).flow << "," << excess(u.pin) << "," << label(u.pin) << ") ";
             }
             std::cout << "]" << "\n";
+        }
+
+        void printNodes(std::ostream& out) {
+            out << "---Nodes---\n";
+            for (const Node u : nodeIDs()) {
+                out << u << " deg = " << degree(u) << " w= " << nodeWeight(u) << " inc_hes = [";
+                for (const InHe e : hyperedgesOf(u))
+                    out << e.e << " ";
+                out << "]" << "\n";
+            }
+            out << std::flush;
+        }
+
+        void printHyperedges(std::ostream& out) {
+            out << "---Hyperedges---\n";
+            for (const Hyperedge e: hyperedgeIDs()) {
+                out << e << " pincount = " << pinCount(e) << " w= " << capacity(e) << " pins (pin,flow_in,flow_out) = [";
+                for (const Pin& u : pinsOf(e)) {
+                    out << "(" << u.pin << "," << getInHe(u).flow_in << "," << getInHe(u).flow_out << ") ";
+                }
+                out << "]" << "\n";
+            }
+            out << std::flush;
+        }
+
+        void printHypergraph(std::ostream& out) {
+            printNodes(out);
+            printHyperedges(out);
         }
 
     private:

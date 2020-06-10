@@ -28,8 +28,6 @@ namespace whfc {
         LayeredQueue<Node> queue;
 
         LayeredQueue<Node> nodes;
-        LayeredQueue<Node> e_in_nodes;
-        LayeredQueue<Node> e_out_nodes;
 
         int direction = 0;
 
@@ -85,7 +83,7 @@ namespace whfc {
                     if (residual > 0) {
                         if (hg.label(u) == hg.label(e_out) + 1) {
                             hg.pushToEdgeOut(u, inc_u, residual);
-                            if (!inQueue[e_out].exchange(true)) { e_out_nodes.push(e_out); }
+                            if (!inQueue[e_out].exchange(true)) { nodes.push(e_out); }
                         } else {
                             minLevel = std::min(minLevel, hg.label(e_out));
                         }
@@ -96,7 +94,7 @@ namespace whfc {
                     if (residual > 0) {
                         if (hg.label(u) == hg.label(e_in) + 1) {
                             hg.pushToEdgeIn(u, inc_u, residual);
-                            if (!inQueue[e_in].exchange(true)) { e_in_nodes.push(e_in); }
+                            if (!inQueue[e_in].exchange(true)) { nodes.push(e_in); }
                         } else {
                             minLevel = std::min(minLevel, hg.label(e_in));
                         }
@@ -129,7 +127,7 @@ namespace whfc {
                 InHe& inc = hg.getInHe(pin.he_inc_iter);
                 Node v = pin.pin;
                 if (!n.isSourceReachable(v) || (v == piercingNode)) {
-                    Flow residual = std::min(hg.absoluteFlowSent(inc), hg.excess(e_in));
+                    Flow residual = std::min(hg.flowSent(inc), hg.excess(e_in));
                     if (residual > 0) {
                         if (hg.label(e_in) == hg.label(v) + 1) {
                             hg.pushFromEdgeInToNode(v, inc, residual);
@@ -147,7 +145,7 @@ namespace whfc {
             if (residual > 0) {
                 if (hg.label(e_in) == hg.label(e_out) + 1) {
                     hg.pushFromEdgeInToEdgeOut(e_in, e_out, residual);
-                    if (!inQueue[e_out].exchange(true)) { e_out_nodes.push(e_out); }
+                    if (!inQueue[e_out].exchange(true)) { nodes.push(e_out); }
                 } else {
                     minLevel = std::min(minLevel, hg.label(e_out));
                 }
@@ -173,7 +171,7 @@ namespace whfc {
             if (residual > 0) {
                 if (hg.label(e_out) == hg.label(e_in) + 1) {
                     hg.pushFromEdgeOutToEdgeIn(e_out, e_in, residual);
-                    if (!inQueue[e_in].exchange(true)) { e_in_nodes.push(e_in); }
+                    if (!inQueue[e_in].exchange(true)) { nodes.push(e_in); }
                 } else {
                     minLevel = std::min(minLevel, hg.label(e_in));
                 }
@@ -206,60 +204,6 @@ namespace whfc {
             }
         }
 
-
-        /*
-        void dischargeEdge(const Node u, CutterState<Type>& cs) {
-            assert(hg.excess(u) > 0);
-            auto& n = cs.n;
-            auto& h = cs.h;
-
-            if (u == 15533) {
-                std::cout << "Processing critical edge" << std::endl;
-                std::cout << "Label: " << hg.label(u) << std::endl;
-                std::cout << "Excess: " << hg.excess(u) << std::endl;
-                hg.printHyperedge(hg.edgeFromLawlerNode(u));
-            }
-
-            size_t minLevel = hg.numLawlerNodes() * 2;
-            const Hyperedge e = hg.edgeFromLawlerNode(u);
-            FlowHypergraph::PinRange pin_range = hg.pinsOf(e);
-            std::vector<Pin> pins_to_scan(pin_range.size());
-            std::copy(pin_range.begin(), pin_range.end(), pins_to_scan.begin());
-            for (Pin& pin : pins_to_scan) {
-                InHe& inc = hg.getInHe(pin.he_inc_iter);
-                Node v = pin.pin;
-                if (!n.isSourceReachable(v) || (v == piercingNode)) {
-                    Flow residual = std::min({hg.excess(u), hg.capacity(e) - hg.flow(e) + hg.absoluteFlowSent(inc), hg.capacity(e) + hg.flowSent(inc)});
-                    if (u == 15533 && v == 15) {
-                        std::cout << "excess: " << hg.excess(u) << std::endl;
-                        std::cout << "capacity: " << hg.capacity(e) << std::endl;
-                        std::cout << "flow: " << hg.flow(e) << std::endl;
-                        std::cout << "absoluteFlowSent: " << hg.absoluteFlowSent(inc) << std::endl;
-                        std::cout << "flowSent: " << hg.flowSent(inc) << std::endl;
-                    }
-                    if (residual > 0) {
-                        if (hg.label(u) == hg.label(v) + 1) {
-                            hg.pushToNode(v, inc, residual);
-                            if (!n.isTarget(v) && !n.isSource(v) && !inQueue[v].exchange(true)) { queue.push(v); }
-                        } else {
-                            minLevel = std::min(minLevel, hg.label(v));
-                        }
-                    }
-                }
-                if (hg.excess(u) == 0) break;
-            }
-            if (hg.excess(u) > 0) {
-                // Relabel
-                assert(minLevel + 1 > hg.label(u));
-                hg.label(u) = minLevel + 1;
-                if (u == 15533) {
-                    std::cout << "Relabel to " << minLevel + 1 << " (excess is " << hg.excess(u) << ")" << std::endl;
-                }
-            }
-            if (u == 15533) hg.printHyperedge(hg.edgeFromLawlerNode(u));
-        }
-         */
-
         Flow exhaustFlow(CutterState<Type>& cs) {
             assert(cs.sourcePiercingNodes.size() == 1);
             auto& n = cs.n;
@@ -277,23 +221,16 @@ namespace whfc {
                         Flow residual = hg.capacity(e) - hg.flowSent(inc_u);
                         if (residual > 0) {
                             hg.pushToEdgeIn(sp.node, inc_u, residual);
-                            if (!inQueue[hg.edge_node_in(e)].exchange(true)) { e_in_nodes.push(hg.edge_node_in(e)); }
+                            if (!inQueue[hg.edge_node_in(e)].exchange(true)) { nodes.push(hg.edge_node_in(e)); }
                         }
                     }
                     piercingNode = sp.node;
                 }
             }
 
-            while (!nodes.empty() || !e_in_nodes.empty() || !e_out_nodes.empty()) {
+            while (!nodes.empty()) {
 
-                Node u;
-                if (!e_out_nodes.empty()) {
-                    u = e_out_nodes.pop();
-                } else if (!e_in_nodes.empty()){
-                    u = e_in_nodes.pop();
-                } else {
-                    u = nodes.pop();
-                }
+                Node u = nodes.pop();
 
                 if (hg.isNode(u)) {
                     dischargeNode(u, cs);
@@ -306,20 +243,15 @@ namespace whfc {
 
 
                 if (hg.excess(u) > 0) {
-                    if (hg.isNode(u)) {
-                        nodes.push(u);
-                    } else if (hg.is_edge_in(u)) {
-                        e_in_nodes.push(u);
-                    } else {
-                        e_out_nodes.push(u);
-                    }
+                    nodes.push(u);
                 } else {
                     inQueue[u] = false;
                 }
             }
 
-            //hg.printHypergraph(std::cout);
-            //hg.printExcessAndLabel();
+            hg.printExcessAndLabel();
+            hg.printHypergraph(std::cout);
+            hg.printExcessAndLabel();
             resetSourcePiercingNodeDistances(cs);
 
             Flow f = 0;

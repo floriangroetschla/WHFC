@@ -19,6 +19,8 @@ namespace whfc {
 		struct InHe {	//Hyperedge Incidence
 			Hyperedge e = invalidHyperedge;
 			Flow flow = Flow(0);
+			Flow flow_in = Flow(0);
+			Flow flow_out = Flow(0);
 			PinIndex pin_iter;
 		};
 
