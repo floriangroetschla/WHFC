@@ -131,6 +131,38 @@ namespace whfc {
             flow(edgeFromLawlerNode(e_in)) -= f;
         }
 
+        void sortPins() {
+            for (Hyperedge e : hyperedgeIDs()) {
+                PinIndex begin = beginIndexPins(e);
+                PinIndex end = PinIndex(endIndexPins(e) - 1);
+
+                for (PinIndex i = begin; i <= end;) {
+                    Pin& p = pins[i];
+                    InHe& inc_he = getInHe(p);
+
+                    inc_he.flow = inc_he.flow_in + inc_he.flow_out;
+
+                    if (inc_he.flow > 0) {
+                        InHe& inc_begin = getInHe(pins[begin]);
+                        std::swap(inc_he.pin_iter, inc_begin.pin_iter);
+                        std::swap(pins[i++], pins[begin++]);
+                    } else if (inc_he.flow < 0) {
+                        InHe& inc_end = getInHe(pins[end]);
+                        std::swap(inc_he.pin_iter, inc_end.pin_iter);
+                        std::swap(pins[i], pins[end--]);
+                    } else {
+                        i++;
+                    }
+                }
+
+                pins_sending_flow[e] = PinIndexRange(beginIndexPins(e), begin);
+                pins_receiving_flow[e] = PinIndexRange(end, endIndexPins(e));
+                std::cout << pins_sending_flow[e].begin() << ", " << pins_sending_flow[e].end() << std::endl;
+
+                printHypergraph(std::cout);
+            }
+        }
+
         inline bool is_node(Node u) { return u < numNodes(); }
         inline bool is_edge_in(Node u) { return u >= numNodes() && u < numNodes() + numHyperedges(); }
         inline bool is_edge_out(Node u) { return u >= numNodes() + numHyperedges() && u < numLawlerNodes(); }
@@ -144,7 +176,7 @@ namespace whfc {
         inline Hyperedge edgeFromLawlerNode(Node u) { assert(u >= numNodes()); return Hyperedge(u < numNodes() + numHyperedges() ? u - numNodes() : u - numNodes() - numHyperedges()); }
 
         inline Flow flowSent(const InHe& inc_u) const { return inc_u.flow_in; }
-        inline Flow flowReceived(const InHe& inc_u) const { return inc_u.flow_out; }
+        inline Flow flowReceived(const InHe& inc_u) const { return -inc_u.flow_out; }
 
         inline Flow flowSent(const Flow f) const { return f * sends_multiplier; }
 
@@ -198,9 +230,9 @@ namespace whfc {
         void printHyperedges(std::ostream& out) {
             out << "---Hyperedges---\n";
             for (const Hyperedge e: hyperedgeIDs()) {
-                out << e << " pincount = " << pinCount(e) << " w= " << capacity(e) << " pins (pin,flow_in,flow_out) = [";
+                out << e << " pincount = " << pinCount(e) << " w= " << capacity(e) << " pins (pin,flow,flow_in,flow_out) = [";
                 for (const Pin& u : pinsOf(e)) {
-                    out << "(" << u.pin << "," << getInHe(u).flow_in << "," << getInHe(u).flow_out << ") ";
+                    out << "(" << u.pin << "," << getInHe(u).flow << "," << getInHe(u).flow_in << "," << getInHe(u).flow_out << ") ";
                 }
                 out << "]" << "\n";
             }

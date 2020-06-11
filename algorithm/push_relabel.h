@@ -229,6 +229,8 @@ namespace whfc {
             }
 
             while (!nodes.empty()) {
+                //hg.printHypergraph(std::cout);
+                //hg.printExcessAndLabel();
 
                 Node u = nodes.pop();
 
@@ -249,9 +251,13 @@ namespace whfc {
                 }
             }
 
-            hg.printExcessAndLabel();
             hg.printHypergraph(std::cout);
             hg.printExcessAndLabel();
+
+            hg.sortPins();
+
+            hg.printHypergraph(std::cout);
+
             resetSourcePiercingNodeDistances(cs);
 
             Flow f = 0;
