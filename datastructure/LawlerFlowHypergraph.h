@@ -69,7 +69,7 @@ namespace whfc {
         inline void pushToEdgeIn(Node u, InHe& in_he, Flow f) {
             assert(f > 0);
             //assert(vec_excess[u] >= f); not true if u is source
-            assert(f <= capacity(in_he.e) - flowSent(in_he.flow));
+            //assert(f <= capacity(in_he.e) - flowSent(in_he.flow));
             //assert(flowReceived(in_he) <= 0);
             assert(isNode(u));
 
@@ -77,7 +77,7 @@ namespace whfc {
 
             vec_excess[u] -= f;
             vec_excess[edge_node_in(in_he.e)] += f;
-            flowIn(in_he) += flowSent(f);
+            flowIn(in_he) += f;
         }
 
         inline void pushToEdgeOut(Node u, InHe& in_he, Flow f) {
@@ -91,7 +91,7 @@ namespace whfc {
 
             vec_excess[u] -= f;
             vec_excess[edge_node_out(in_he.e)] += f;
-            flowOut(in_he) -= flowSent(f);
+            flowOut(in_he) -= f;
         }
 
         inline void pushFromEdgeInToNode(Node u, InHe& in_he, Flow f) {
@@ -103,7 +103,7 @@ namespace whfc {
 
             vec_excess[u] += f;
             vec_excess[edge_node_in(in_he.e)] -= f;
-            flowIn(in_he) -= flowSent(f);
+            flowIn(in_he) -= f;
         }
 
         inline void pushFromEdgeOutToNode(Node u, InHe& in_he, Flow f) {
@@ -115,7 +115,7 @@ namespace whfc {
 
             vec_excess[u] += f;
             vec_excess[edge_node_out(in_he.e)] -= f;
-            flowOut(in_he) += flowSent(f);
+            flowOut(in_he) += f;
         }
 
         inline void pushFromEdgeInToEdgeOut(Node e_in, Node e_out, Flow f) {
@@ -150,7 +150,7 @@ namespace whfc {
                     Pin& p = pins[i];
                     InHe& inc_he = getInHe(p);
 
-                    inc_he.flow = flowIn(inc_he) - flowOut(inc_he);
+                    inc_he.flow = flowSent(flowIn(inc_he) - flowOut(inc_he));
 
                     if (inc_he.flow > 0) {
                         InHe& inc_begin = getInHe(pins[begin]);
@@ -165,8 +165,14 @@ namespace whfc {
                     }
                 }
 
-                pins_sending_flow[e] = PinIndexRange(beginIndexPins(e), begin);
-                pins_receiving_flow[e] = PinIndexRange(PinIndex(end + 1), endIndexPins(e));
+                if (forward) {
+                    pins_sending_flow[e] = PinIndexRange(beginIndexPins(e), begin);
+                    pins_receiving_flow[e] = PinIndexRange(PinIndex(end + 1), endIndexPins(e));
+                } else {
+                    pins_receiving_flow[e] = PinIndexRange(beginIndexPins(e), begin);
+                    pins_sending_flow[e] = PinIndexRange(PinIndex(end + 1), endIndexPins(e));
+                }
+
 
                 printHypergraph(std::cout);
             }

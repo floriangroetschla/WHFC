@@ -215,13 +215,15 @@ namespace whfc {
             hg.initialize_for_push_relabel();
             queue.clear();
 
+            hg.printHypergraph(std::cout);
+
             for (auto& sp : cs.sourcePiercingNodes) {
                 hg.label(sp.node) = hg.numLawlerNodes();
                 for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(sp.node)) {
                     InHe& inc_u = hg.getInHe(inc_iter);
                     const Hyperedge e = inc_u.e;
                     if (!h.areAllPinsSourceReachable(e)) {
-                        Flow residual = hg.capacity(e) - hg.flowSent(inc_u);
+                        Flow residual = hg.capacity(e);
                         if (residual > 0) {
                             hg.pushToEdgeIn(sp.node, inc_u, residual);
                             if (!inQueue[hg.edge_node_in(e)].exchange(true)) { nodes.push(hg.edge_node_in(e)); }
@@ -232,8 +234,8 @@ namespace whfc {
             }
 
             while (!nodes.empty()) {
-                //hg.printHypergraph(std::cout);
-                //hg.printExcessAndLabel();
+                hg.printHypergraph(std::cout);
+                hg.printExcessAndLabel();
 
                 Node u = nodes.pop();
 
