@@ -67,7 +67,8 @@ namespace whfc {
 		using Pin = FlowHypergraph::Pin;
 		
 		int viewDirection = 0;
-		FlowHypergraph& hg;
+		using Hypergraph = FlowHypergraph;
+		Hypergraph& hg;
 		Flow flowValue = 0;
 
 		using ReachableNodes = typename FlowAlgorithm::ReachableNodes;
@@ -88,7 +89,7 @@ namespace whfc {
 		TimeReporter& timer;
 		Randomizer rng;
 
-		CutterState(FlowHypergraph& _hg, TimeReporter& timer) :
+		CutterState(Hypergraph& _hg, TimeReporter& timer) :
 				hg(_hg),
 				n(_hg),
 				h(_hg),

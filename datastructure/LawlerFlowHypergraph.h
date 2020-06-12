@@ -22,7 +22,7 @@ namespace whfc {
         }*/
 
         //use to get rid of any allocations
-        LawlerFlowHypergraph(size_t maxNumNodes, size_t maxNumHyperedges) : Base(maxNumNodes, maxNumHyperedges), vec_excess(numLawlerNodes(), 0), vec_label() {
+        LawlerFlowHypergraph(size_t maxNumNodes, size_t maxNumHyperedges) : Base(maxNumNodes, maxNumHyperedges), vec_excess(numLawlerNodes(), 0), vec_label(), in_flow(), out_flow() {
             //don't do clean-up here yet, so that we can use the numbers for allocating the remaining datastructures
         }
 
@@ -31,6 +31,8 @@ namespace whfc {
 
             vec_excess.clear();
             vec_label.clear();
+            in_flow.clear();
+            out_flow.clear();
         }
 
         /*
@@ -45,6 +47,8 @@ namespace whfc {
 
             vec_excess.shrink_to_fit();
             vec_label.shrink_to_fit();
+            in_flow.shrink_to_fit();
+            out_flow.shrink_to_fit();
         }
 
         inline size_t& label(Node u) {
@@ -55,6 +59,12 @@ namespace whfc {
         inline Flow& excess(Node u) { assert(u < numLawlerNodes()); return vec_excess[u]; }
 
         inline bool isNode(Node u) { return u < numNodes(); }
+
+        inline Flow& flowIn(InHe in_he) { return in_flow[pins[in_he.pin_iter].he_inc_iter]; }
+        inline Flow& flowOut(InHe in_he) { return out_flow[pins[in_he.pin_iter].he_inc_iter]; }
+
+        inline Flow flowIn(InHe in_he) const { return in_flow[pins[in_he.pin_iter].he_inc_iter]; }
+        inline Flow flowOut(InHe in_he) const { return out_flow[pins[in_he.pin_iter].he_inc_iter]; }
 
         inline void pushToEdgeIn(Node u, InHe& in_he, Flow f) {
             assert(f > 0);
@@ -67,7 +77,7 @@ namespace whfc {
 
             vec_excess[u] -= f;
             vec_excess[edge_node_in(in_he.e)] += f;
-            in_he.flow_in += flowSent(f);
+            flowIn(in_he) += flowSent(f);
         }
 
         inline void pushToEdgeOut(Node u, InHe& in_he, Flow f) {
@@ -81,7 +91,7 @@ namespace whfc {
 
             vec_excess[u] -= f;
             vec_excess[edge_node_out(in_he.e)] += f;
-            in_he.flow_out += flowSent(f);
+            flowOut(in_he) -= flowSent(f);
         }
 
         inline void pushFromEdgeInToNode(Node u, InHe& in_he, Flow f) {
@@ -93,7 +103,7 @@ namespace whfc {
 
             vec_excess[u] += f;
             vec_excess[edge_node_in(in_he.e)] -= f;
-            in_he.flow_in -= flowSent(f);
+            flowIn(in_he) -= flowSent(f);
         }
 
         inline void pushFromEdgeOutToNode(Node u, InHe& in_he, Flow f) {
@@ -105,7 +115,7 @@ namespace whfc {
 
             vec_excess[u] += f;
             vec_excess[edge_node_out(in_he.e)] -= f;
-            in_he.flow_out -= flowSent(f);
+            flowOut(in_he) += flowSent(f);
         }
 
         inline void pushFromEdgeInToEdgeOut(Node e_in, Node e_out, Flow f) {
@@ -140,7 +150,7 @@ namespace whfc {
                     Pin& p = pins[i];
                     InHe& inc_he = getInHe(p);
 
-                    inc_he.flow = inc_he.flow_in + inc_he.flow_out;
+                    inc_he.flow = flowIn(inc_he) - flowOut(inc_he);
 
                     if (inc_he.flow > 0) {
                         InHe& inc_begin = getInHe(pins[begin]);
@@ -156,8 +166,7 @@ namespace whfc {
                 }
 
                 pins_sending_flow[e] = PinIndexRange(beginIndexPins(e), begin);
-                pins_receiving_flow[e] = PinIndexRange(end, endIndexPins(e));
-                std::cout << pins_sending_flow[e].begin() << ", " << pins_sending_flow[e].end() << std::endl;
+                pins_receiving_flow[e] = PinIndexRange(PinIndex(end + 1), endIndexPins(e));
 
                 printHypergraph(std::cout);
             }
@@ -175,10 +184,17 @@ namespace whfc {
 
         inline Hyperedge edgeFromLawlerNode(Node u) { assert(u >= numNodes()); return Hyperedge(u < numNodes() + numHyperedges() ? u - numNodes() : u - numNodes() - numHyperedges()); }
 
-        inline Flow flowSent(const InHe& inc_u) const { return inc_u.flow_in; }
-        inline Flow flowReceived(const InHe& inc_u) const { return -inc_u.flow_out; }
+        inline Flow flowSent(const InHe& inc_u) const { return flowIn(inc_u); }
+        inline Flow flowReceived(const InHe& inc_u) const { return flowOut(inc_u); }
 
         inline Flow flowSent(const Flow f) const { return f * sends_multiplier; }
+
+        void alignViewDirection() {
+            if (forward != FlowHypergraph::forwardView()) {
+                std::swap(in_flow, out_flow);
+                forward = FlowHypergraph::forwardView();
+            }
+        }
 
 
         inline size_t numLawlerNodes() const {
@@ -232,7 +248,7 @@ namespace whfc {
             for (const Hyperedge e: hyperedgeIDs()) {
                 out << e << " pincount = " << pinCount(e) << " w= " << capacity(e) << " pins (pin,flow,flow_in,flow_out) = [";
                 for (const Pin& u : pinsOf(e)) {
-                    out << "(" << u.pin << "," << getInHe(u).flow << "," << getInHe(u).flow_in << "," << getInHe(u).flow_out << ") ";
+                    out << "(" << u.pin << "," << getInHe(u).flow << "," << flowIn(getInHe(u)) << "," << flowOut(getInHe(u)) << ") ";
                 }
                 out << "]" << "\n";
             }
@@ -244,8 +260,19 @@ namespace whfc {
             printHyperedges(out);
         }
 
+        void finalize() {
+            Base::finalize();
+            in_flow = std::vector<Flow>(numPins(), 0);
+            out_flow = std::vector<Flow>(numPins(), 0);
+        }
+
     private:
         std::vector<Flow> vec_excess;
         std::vector<size_t> vec_label;
+
+        std::vector<Flow> in_flow;
+        std::vector<Flow> out_flow;
+
+        bool forward = true;
     };
 }

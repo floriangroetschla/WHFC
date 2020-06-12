@@ -17,6 +17,7 @@ namespace whfc {
 
         using ReachableNodes = DistanceReachableNodes;
         using ReachableHyperedges = DistanceReachableHyperedges;
+        using Hypergraph = LawlerFlowHypergraph;
 
         using Pin = FlowHypergraph::Pin;
         using InHe = FlowHypergraph::InHe;
@@ -209,6 +210,8 @@ namespace whfc {
             auto& n = cs.n;
             auto& h = cs.h;
 
+            hg.alignViewDirection();
+
             hg.initialize_for_push_relabel();
             queue.clear();
 
@@ -267,11 +270,14 @@ namespace whfc {
             }
             cs.flowValue += f;
 
+            cs.verifyFlowConstraints();
+
             growReachable(cs);
             return f;
         }
 
         void growReachable(CutterState<Type>& cs) {
+            hg.alignViewDirection();
             cs.clearForSearch();
             auto& n = cs.n;
             auto& h = cs.h;

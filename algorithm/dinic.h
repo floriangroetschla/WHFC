@@ -15,6 +15,7 @@ namespace whfc {
 		
 		using ReachableNodes = DistanceReachableNodes;
 		using ReachableHyperedges = DistanceReachableHyperedges;
+		using Hypergraph = FlowHypergraph;
 		
 		using Pin = FlowHypergraph::Pin;
 		using InHe = FlowHypergraph::InHe;
