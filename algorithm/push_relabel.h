@@ -84,18 +84,18 @@ namespace whfc {
                     if (residual > 0) {
                         if (hg.label(u) == hg.label(e_out) + 1) {
                             hg.pushToEdgeOut(u, inc_u, residual);
-                            if (!inQueue[e_out].exchange(true)) { nodes.push(e_out); }
+                            if (!inQueue[e_out].exchange(true)) { assert(hg.excess(e_out) > 0); nodes.push(e_out); }
                         } else {
                             minLevel = std::min(minLevel, hg.label(e_out));
                         }
                     }
 
                     const Node e_in = hg.edge_node_in(e);
-                    residual = std::min(hg.excess(u), hg.capacity(e) - hg.flowSent(inc_u));
+                    residual = hg.excess(u);
                     if (residual > 0) {
                         if (hg.label(u) == hg.label(e_in) + 1) {
                             hg.pushToEdgeIn(u, inc_u, residual);
-                            if (!inQueue[e_in].exchange(true)) { nodes.push(e_in); }
+                            if (!inQueue[e_in].exchange(true)) { assert(hg.excess(e_in) > 0); nodes.push(e_in); }
                         } else {
                             minLevel = std::min(minLevel, hg.label(e_in));
                         }
@@ -121,10 +121,7 @@ namespace whfc {
             size_t minLevel = hg.numLawlerNodes() * 2;
             const Hyperedge e = hg.edgeFromLawlerNode(e_in);
 
-            FlowHypergraph::PinRange  pin_range = hg.pinsOf(e);
-            std::vector<Pin> pins_to_scan(pin_range.size());
-            std::copy(pin_range.begin(), pin_range.end(), pins_to_scan.begin());
-            for (Pin& pin : pins_to_scan) {
+            for (Pin& pin : hg.pinsOf(e)) {
                 InHe& inc = hg.getInHe(pin.he_inc_iter);
                 Node v = pin.pin;
                 if (!n.isSourceReachable(v) || (v == piercingNode)) {
@@ -132,7 +129,7 @@ namespace whfc {
                     if (residual > 0) {
                         if (hg.label(e_in) == hg.label(v) + 1) {
                             hg.pushFromEdgeInToNode(v, inc, residual);
-                            if (!n.isTarget(v) && !n.isSource(v) && !inQueue[v].exchange(true)) { nodes.push(v); }
+                            if (!n.isTarget(v) && !n.isSource(v) && !inQueue[v].exchange(true)) { assert(hg.excess(v) > 0); nodes.push(v); }
                         } else {
                             minLevel = std::min(minLevel, hg.label(v));
                         }
@@ -146,7 +143,7 @@ namespace whfc {
             if (residual > 0) {
                 if (hg.label(e_in) == hg.label(e_out) + 1) {
                     hg.pushFromEdgeInToEdgeOut(e_in, e_out, residual);
-                    if (!inQueue[e_out].exchange(true)) { nodes.push(e_out); }
+                    if (!inQueue[e_out].exchange(true)) { assert(hg.excess(e_out) > 0); nodes.push(e_out); }
                 } else {
                     minLevel = std::min(minLevel, hg.label(e_out));
                 }
@@ -172,16 +169,13 @@ namespace whfc {
             if (residual > 0) {
                 if (hg.label(e_out) == hg.label(e_in) + 1) {
                     hg.pushFromEdgeOutToEdgeIn(e_out, e_in, residual);
-                    if (!inQueue[e_in].exchange(true)) { nodes.push(e_in); }
+                    if (!inQueue[e_in].exchange(true)) { assert(hg.excess(e_in) > 0); nodes.push(e_in); }
                 } else {
                     minLevel = std::min(minLevel, hg.label(e_in));
                 }
             }
 
-            FlowHypergraph::PinRange pin_range = hg.pinsOf(e);
-            std::vector<Pin> pins_to_scan(pin_range.size());
-            std::copy(pin_range.begin(), pin_range.end(), pins_to_scan.begin());
-            for (Pin& pin : pins_to_scan) {
+            for (Pin& pin : hg.pinsOf(e)) {
                 InHe& inc = hg.getInHe(pin.he_inc_iter);
                 Node v = pin.pin;
                 if (!n.isSourceReachable(v) || (v == piercingNode)) {
@@ -189,7 +183,7 @@ namespace whfc {
                     if (residual > 0) {
                         if (hg.label(e_out) == hg.label(v) + 1) {
                             hg.pushFromEdgeOutToNode(v, inc, residual);
-                            if (!n.isTarget(v) && !n.isSource(v) && !inQueue[v].exchange(true)) { nodes.push(v); }
+                            if (!n.isTarget(v) && !n.isSource(v) && !inQueue[v].exchange(true)) { assert(hg.excess(v) > 0); nodes.push(v); }
                         } else {
                             minLevel = std::min(minLevel, hg.label(v));
                         }
@@ -215,28 +209,35 @@ namespace whfc {
             hg.initialize_for_push_relabel();
             queue.clear();
 
-            hg.printHypergraph(std::cout);
 
             for (auto& sp : cs.sourcePiercingNodes) {
-                hg.label(sp.node) = hg.numLawlerNodes();
+                hg.label(sp.node) = 100;
                 for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(sp.node)) {
                     InHe& inc_u = hg.getInHe(inc_iter);
                     const Hyperedge e = inc_u.e;
                     if (!h.areAllPinsSourceReachable(e)) {
-                        Flow residual = hg.capacity(e);
+
+                        const Node e_out = hg.edge_node_out(e);
+                        Flow residual = hg.flowReceived(inc_u);
+                        if (residual > 0) {
+                            hg.pushToEdgeOut(sp.node, inc_u, residual);
+                            if (!inQueue[e_out].exchange(true)) { assert(hg.excess(e_out) > 0); nodes.push(e_out); }
+                        }
+
+                        const Node e_in = hg.edge_node_in(e);
+                        residual = hg.capacity(e);
                         if (residual > 0) {
                             hg.pushToEdgeIn(sp.node, inc_u, residual);
-                            if (!inQueue[hg.edge_node_in(e)].exchange(true)) { nodes.push(hg.edge_node_in(e)); }
+                            if (!inQueue[e_in].exchange(true)) { assert(hg.excess(e_in) > 0); nodes.push(e_in); }
                         }
+
+
                     }
                     piercingNode = sp.node;
                 }
             }
 
             while (!nodes.empty()) {
-                hg.printHypergraph(std::cout);
-                hg.printExcessAndLabel();
-
                 Node u = nodes.pop();
 
                 if (hg.isNode(u)) {
@@ -256,12 +257,7 @@ namespace whfc {
                 }
             }
 
-            hg.printHypergraph(std::cout);
-            hg.printExcessAndLabel();
-
             hg.sortPins();
-
-            hg.printHypergraph(std::cout);
 
             resetSourcePiercingNodeDistances(cs);
 
@@ -274,11 +270,14 @@ namespace whfc {
 
             cs.verifyFlowConstraints();
 
-            growReachable(cs);
+            bool found_target = growReachable(cs);
+            assert(!found_target);
+            //hg.printHypergraph(std::cout);
+            //hg.printExcessAndLabel();
             return f;
         }
 
-        void growReachable(CutterState<Type>& cs) {
+        bool growReachable(CutterState<Type>& cs) {
             hg.alignViewDirection();
             cs.clearForSearch();
             auto& n = cs.n;
@@ -342,6 +341,7 @@ namespace whfc {
             h.compareDistances(n);
 
             resetSourcePiercingNodeDistances(cs);
+            return found_target;
         }
 
         void resetSourcePiercingNodeDistances(CutterState<Type>& cs, bool reset = true) {

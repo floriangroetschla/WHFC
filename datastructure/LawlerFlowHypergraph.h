@@ -83,7 +83,7 @@ namespace whfc {
         inline void pushToEdgeOut(Node u, InHe& in_he, Flow f) {
             assert(f > 0);
             //assert(vec_excess[u] >= f); not true if u is source
-            assert(f <= capacity(in_he.e) - flowSent(in_he.flow));
+            assert(f <= flowOut(in_he));
             //assert(flowReceived(in_he) > 0);
             assert(isNode(u));
 
@@ -150,6 +150,15 @@ namespace whfc {
                     Pin& p = pins[i];
                     InHe& inc_he = getInHe(p);
 
+                    if (flowIn(inc_he) && flowOut(inc_he)) {
+                        Flow loopedFlow = std::min(flowIn(inc_he), flowOut(inc_he));
+                        flowIn(inc_he) -= loopedFlow;
+                        flowOut(inc_he) -= loopedFlow;
+
+                        flow(inc_he.e) -= loopedFlow;
+                    }
+
+                    assert(!flowIn(inc_he) || !flowOut(inc_he));
                     inc_he.flow = flowSent(flowIn(inc_he) - flowOut(inc_he));
 
                     if (inc_he.flow > 0) {
@@ -173,8 +182,6 @@ namespace whfc {
                     pins_sending_flow[e] = PinIndexRange(PinIndex(end + 1), endIndexPins(e));
                 }
 
-
-                printHypergraph(std::cout);
             }
         }
 
