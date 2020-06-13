@@ -66,59 +66,56 @@ namespace whfc {
         inline Flow flowIn(InHe in_he) const { return in_flow[pins[in_he.pin_iter].he_inc_iter]; }
         inline Flow flowOut(InHe in_he) const { return out_flow[pins[in_he.pin_iter].he_inc_iter]; }
 
-        inline void pushToEdgeIn(Node u, InHe& in_he, Flow f) {
-            assert(f > 0);
-            //assert(vec_excess[u] >= f); not true if u is source
-            //assert(f <= capacity(in_he.e) - flowSent(in_he.flow));
-            //assert(flowReceived(in_he) <= 0);
-            assert(isNode(u));
+        inline Flow& flowIn(InHeIndex inc) { return in_flow[inc]; }
+        inline Flow& flowOut(InHeIndex inc) { return out_flow[inc]; }
+        inline Flow flowIn(InHeIndex inc) const { return in_flow[inc]; }
+        inline Flow flowOut(InHeIndex inc) const { return out_flow[inc]; }
 
-            Flow prevFlow = in_he.flow;
+        inline void push_node_to_edgeIn(const Node u, const InHeIndex inc, const Flow f) {
+            assert(f > 0);
+
+            const InHe& in_he = FlowHypergraph::getInHe(inc);
 
             vec_excess[u] -= f;
             vec_excess[edge_node_in(in_he.e)] += f;
-            flowIn(in_he) += f;
+            flowIn(inc) += f;
         }
 
-        inline void pushToEdgeOut(Node u, InHe& in_he, Flow f) {
+        inline void push_node_to_edgeOut(const Node u, const InHeIndex inc, const Flow f) {
             assert(f > 0);
-            //assert(vec_excess[u] >= f); not true if u is source
-            assert(f <= flowOut(in_he));
-            //assert(flowReceived(in_he) > 0);
             assert(isNode(u));
 
-            Flow prevFlow = in_he.flow;
+            const InHe& in_he = FlowHypergraph::getInHe(inc);
 
             vec_excess[u] -= f;
             vec_excess[edge_node_out(in_he.e)] += f;
-            flowOut(in_he) -= f;
+            flowOut(inc) -= f;
         }
 
-        inline void pushFromEdgeInToNode(Node u, InHe& in_he, Flow f) {
+        inline void push_edgeIn_to_node(const Node u, const InHeIndex inc, const Flow f) {
             assert(f > 0);
-            assert(flowSent(in_he) >= f);
+            assert(flowSent(inc) >= f);
             assert(isNode(u));
 
-            Flow prevFlow = in_he.flow;
+            const InHe& in_he = FlowHypergraph::getInHe(inc);
 
             vec_excess[u] += f;
             vec_excess[edge_node_in(in_he.e)] -= f;
-            flowIn(in_he) -= f;
+            flowIn(inc) -= f;
         }
 
-        inline void pushFromEdgeOutToNode(Node u, InHe& in_he, Flow f) {
+        inline void push_edgeOut_to_node(const Node u, const InHeIndex inc, const Flow f) {
             assert(f > 0);
-            //assert(flowReceived(in_he) >= 0);
             assert(isNode(u));
 
-            Flow prevFlow = in_he.flow;
+            const InHe& in_he = FlowHypergraph::getInHe(inc);
 
             vec_excess[u] += f;
             vec_excess[edge_node_out(in_he.e)] -= f;
-            flowOut(in_he) += f;
+            flowOut(inc) += f;
         }
 
-        inline void pushFromEdgeInToEdgeOut(Node e_in, Node e_out, Flow f) {
+        inline void push_edgeIn_to_edgeOut(const Node e_in, const Node e_out, const Flow f) {
             assert(f > 0);
             assert(f <= excess(e_in));
             assert(is_edge_out(e_out) && is_edge_in(e_in));
@@ -129,7 +126,7 @@ namespace whfc {
             flow(edgeFromLawlerNode(e_in)) += f;
         }
 
-        inline void pushFromEdgeOutToEdgeIn(Node e_out, Node e_in, Flow f) {
+        inline void push_edgeOut_to_edgeIn(const Node e_out, const Node e_in, const Flow f) {
             assert(f > 0);
             assert(f <= excess(e_out));
             assert(f <= flow(edgeFromLawlerNode(e_in)));
@@ -148,18 +145,19 @@ namespace whfc {
 
                 for (PinIndex i = begin; i <= end;) {
                     Pin& p = pins[i];
+                    const InHeIndex inc = p.he_inc_iter;
                     InHe& inc_he = getInHe(p);
 
-                    if (flowIn(inc_he) && flowOut(inc_he)) {
-                        Flow loopedFlow = std::min(flowIn(inc_he), flowOut(inc_he));
-                        flowIn(inc_he) -= loopedFlow;
-                        flowOut(inc_he) -= loopedFlow;
+                    if (flowIn(inc) && flowOut(inc)) {
+                        Flow loopedFlow = std::min(flowIn(inc), flowOut(inc));
+                        flowIn(inc) -= loopedFlow;
+                        flowOut(inc) -= loopedFlow;
 
                         flow(inc_he.e) -= loopedFlow;
                     }
 
-                    assert(!flowIn(inc_he) || !flowOut(inc_he));
-                    inc_he.flow = flowSent(flowIn(inc_he) - flowOut(inc_he));
+                    assert(!flowIn(inc) || !flowOut(inc));
+                    inc_he.flow = flowSent(flowIn(inc) - flowOut(inc));
 
                     if (inc_he.flow > 0) {
                         InHe& inc_begin = getInHe(pins[begin]);
@@ -199,6 +197,9 @@ namespace whfc {
 
         inline Flow flowSent(const InHe& inc_u) const { return flowIn(inc_u); }
         inline Flow flowReceived(const InHe& inc_u) const { return flowOut(inc_u); }
+
+        inline Flow flowSent(const InHeIndex inc) const { return flowIn(inc); }
+        inline Flow flowReceived(const InHeIndex inc) const { return flowOut(inc); }
 
         inline Flow flowSent(const Flow f) const { return f * sends_multiplier; }
 

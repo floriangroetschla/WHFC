@@ -61,8 +61,6 @@ namespace whfc {
             throw std::logic_error("Not implemented");
         }
 
-
-
         Flow growFlowOrSourceReachable(CutterState<Type>& cs) {
             throw std::logic_error("Not implemented");
         }
@@ -80,10 +78,10 @@ namespace whfc {
                 if (!h.areAllPinsSourceReachable(e)) {
 
                     const Node e_out = hg.edge_node_out(e);
-                    Flow residual = std::min(hg.excess(u), hg.flowReceived(inc_u));
+                    Flow residual = std::min(hg.excess(u), hg.flowReceived(inc_iter));
                     if (residual > 0) {
                         if (hg.label(u) == hg.label(e_out) + 1) {
-                            hg.pushToEdgeOut(u, inc_u, residual);
+                            hg.push_node_to_edgeOut(u, inc_iter, residual);
                             if (!inQueue[e_out].exchange(true)) { assert(hg.excess(e_out) > 0); nodes.push(e_out); }
                         } else {
                             minLevel = std::min(minLevel, hg.label(e_out));
@@ -94,7 +92,7 @@ namespace whfc {
                     residual = hg.excess(u);
                     if (residual > 0) {
                         if (hg.label(u) == hg.label(e_in) + 1) {
-                            hg.pushToEdgeIn(u, inc_u, residual);
+                            hg.push_node_to_edgeIn(u, inc_iter, residual);
                             if (!inQueue[e_in].exchange(true)) { assert(hg.excess(e_in) > 0); nodes.push(e_in); }
                         } else {
                             minLevel = std::min(minLevel, hg.label(e_in));
@@ -125,10 +123,10 @@ namespace whfc {
                 InHe& inc = hg.getInHe(pin.he_inc_iter);
                 Node v = pin.pin;
                 if (!n.isSourceReachable(v) || (v == piercingNode)) {
-                    Flow residual = std::min(hg.flowSent(inc), hg.excess(e_in));
+                    Flow residual = std::min(hg.flowSent(pin.he_inc_iter), hg.excess(e_in));
                     if (residual > 0) {
                         if (hg.label(e_in) == hg.label(v) + 1) {
-                            hg.pushFromEdgeInToNode(v, inc, residual);
+                            hg.push_edgeIn_to_node(v, pin.he_inc_iter, residual);
                             if (!n.isTarget(v) && !n.isSource(v) && !inQueue[v].exchange(true)) { assert(hg.excess(v) > 0); nodes.push(v); }
                         } else {
                             minLevel = std::min(minLevel, hg.label(v));
@@ -142,7 +140,7 @@ namespace whfc {
             Flow residual = std::min(hg.capacity(e) - hg.flow(e), hg.excess(e_in));
             if (residual > 0) {
                 if (hg.label(e_in) == hg.label(e_out) + 1) {
-                    hg.pushFromEdgeInToEdgeOut(e_in, e_out, residual);
+                    hg.push_edgeIn_to_edgeOut(e_in, e_out, residual);
                     if (!inQueue[e_out].exchange(true)) { assert(hg.excess(e_out) > 0); nodes.push(e_out); }
                 } else {
                     minLevel = std::min(minLevel, hg.label(e_out));
@@ -168,7 +166,7 @@ namespace whfc {
             Flow residual = std::min(hg.flow(e), hg.excess(e_out));
             if (residual > 0) {
                 if (hg.label(e_out) == hg.label(e_in) + 1) {
-                    hg.pushFromEdgeOutToEdgeIn(e_out, e_in, residual);
+                    hg.push_edgeOut_to_edgeIn(e_out, e_in, residual);
                     if (!inQueue[e_in].exchange(true)) { assert(hg.excess(e_in) > 0); nodes.push(e_in); }
                 } else {
                     minLevel = std::min(minLevel, hg.label(e_in));
@@ -182,7 +180,7 @@ namespace whfc {
                     Flow residual = hg.excess(e_out);
                     if (residual > 0) {
                         if (hg.label(e_out) == hg.label(v) + 1) {
-                            hg.pushFromEdgeOutToNode(v, inc, residual);
+                            hg.push_edgeOut_to_node(v, pin.he_inc_iter, residual);
                             if (!n.isTarget(v) && !n.isSource(v) && !inQueue[v].exchange(true)) { assert(hg.excess(v) > 0); nodes.push(v); }
                         } else {
                             minLevel = std::min(minLevel, hg.label(v));
@@ -209,25 +207,26 @@ namespace whfc {
             hg.initialize_for_push_relabel();
             queue.clear();
 
+            //hg.printHypergraph(std::cout);
 
             for (auto& sp : cs.sourcePiercingNodes) {
-                hg.label(sp.node) = 100;
+                hg.label(sp.node) = std::min<size_t>(100, hg.numLawlerNodes());  // for debugging purposes
                 for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(sp.node)) {
                     InHe& inc_u = hg.getInHe(inc_iter);
                     const Hyperedge e = inc_u.e;
                     if (!h.areAllPinsSourceReachable(e)) {
 
                         const Node e_out = hg.edge_node_out(e);
-                        Flow residual = hg.flowReceived(inc_u);
+                        Flow residual = hg.flowReceived(inc_iter);
                         if (residual > 0) {
-                            hg.pushToEdgeOut(sp.node, inc_u, residual);
+                            hg.push_node_to_edgeOut(sp.node, inc_iter, residual);
                             if (!inQueue[e_out].exchange(true)) { assert(hg.excess(e_out) > 0); nodes.push(e_out); }
                         }
 
                         const Node e_in = hg.edge_node_in(e);
                         residual = hg.capacity(e);
                         if (residual > 0) {
-                            hg.pushToEdgeIn(sp.node, inc_u, residual);
+                            hg.push_node_to_edgeIn(sp.node, inc_iter, residual);
                             if (!inQueue[e_in].exchange(true)) { assert(hg.excess(e_in) > 0); nodes.push(e_in); }
                         }
 
@@ -236,6 +235,8 @@ namespace whfc {
                     piercingNode = sp.node;
                 }
             }
+
+            //hg.printHypergraph(std::cout);
 
             while (!nodes.empty()) {
                 Node u = nodes.pop();
@@ -255,6 +256,9 @@ namespace whfc {
                 } else {
                     inQueue[u] = false;
                 }
+
+                //hg.printHypergraph(std::cout);
+                //hg.printExcessAndLabel();
             }
 
             hg.sortPins();
