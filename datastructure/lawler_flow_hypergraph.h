@@ -203,6 +203,8 @@ namespace whfc {
 
         inline Flow flowSent(const Flow f) const { return f * sends_multiplier; }
 
+        inline size_t maxNumLawlerNodes() { return maxNumNodes + 2 * maxNumHyperedges; }
+
         void alignViewDirection() {
             if (forward != FlowHypergraph::forwardView()) {
                 std::swap(in_flow, out_flow);
