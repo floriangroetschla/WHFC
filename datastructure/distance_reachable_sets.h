@@ -146,12 +146,22 @@ namespace whfc {
 		inline bool areAllPinsSources(const Hyperedge e) const { return outDistance[e].load(memory_order) == sourceSettledDistance; }
 		inline bool areAllPinsSourceReachable__unsafe__(const Hyperedge e) const { return areAllPinsSources(e) || outDistance[e].load(memory_order) >= s.base; }
 		inline bool areAllPinsSourceReachable(const Hyperedge e) const { return areAllPinsSources(e) || s.contains(outDistance[e].load(memory_order)); }
+
+		inline bool areAllPinsTargets(const Hyperedge e) const { return inDistance[e].load(memory_order) == targetSettledDistance; }
+		inline bool areAllPinsTargetReachable__unsafe__(const Hyperedge e) const { return areAllPinsTargets(e) || inDistance[e].load(memory_order) >= t.base; }
+		inline bool areAllPinsTargetReachable(const Hyperedge e) const { return areAllPinsTargets(e) || t.contains(inDistance[e].load(memory_order)); }
+
 		inline void settleAllPins(const Hyperedge e) { assert(!areAllPinsSources(e)); outDistance[e].store(sourceSettledDistance, memory_order); }
 		inline void reachAllPins(const Hyperedge e) { assert(!areAllPinsSourceReachable(e) || outDistance[e].load(memory_order) == runningDistance); outDistance[e].store(runningDistance, memory_order); }
 
 		inline bool areFlowSendingPinsSources(const Hyperedge e) const { return inDistance[e].load(memory_order) == sourceSettledDistance; }
 		inline bool areFlowSendingPinsSourceReachable__unsafe__(const Hyperedge e) const { return areFlowSendingPinsSources(e) || inDistance[e].load(memory_order) >= s.base; }
 		inline bool areFlowSendingPinsSourceReachable(const Hyperedge e) const { return areFlowSendingPinsSources(e) || s.contains(inDistance[e].load(memory_order)); }
+
+		inline bool areFlowSendingPinsTargets(const Hyperedge e) const { return outDistance[e].load(memory_order) == targetSettledDistance; }
+		inline bool areFlowSendingPinsTargetReachable__unsafe__(const Hyperedge e) const { return areFlowSendingPinsTargets(e) || outDistance[e].load(memory_order) >= t.base; }
+		inline bool areFlowSendingPinsTargetReachable(const Hyperedge e) const { return areFlowSendingPinsTargets(e) || t.contains(outDistance[e].load(memory_order)); }
+
 		inline void settleFlowSendingPins(const Hyperedge e) { assert(!areFlowSendingPinsSources(e)); inDistance[e].store(sourceSettledDistance, memory_order); }
 		inline void reachFlowSendingPins(const Hyperedge e) { assert(!areFlowSendingPinsSourceReachable(e) || inDistance[e] == runningDistance); inDistance[e].store(runningDistance, memory_order); }
 
