@@ -196,20 +196,22 @@ namespace whfc {
         Flow exhaustFlow(CutterState<Type>& cs) {
             assert(cs.sourcePiercingNodes.size() == 1);
             auto& h = cs.h;
-            
+
+            hg.initialize_for_push_relabel();
+
             cs.flipViewDirection();
             hg.alignViewDirection();
-            growReachable(cs); // grow target reachable
+            growReachable(cs, true); // grow target reachable
             cs.flipViewDirection();
             hg.alignViewDirection();
 
-            hg.initialize_for_push_relabel();
             queue.clear();
 
             //hg.printHypergraph(std::cout);
 
             for (auto& sp : cs.sourcePiercingNodes) {
-                hg.label(sp.node) = std::min<size_t>(100, hg.numLawlerNodes());  // for debugging purposes
+                size_t maxLevel = 0;
+                //hg.label(sp.node) = std::min<size_t>(100, hg.numLawlerNodes());  // for debugging purposes
                 for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(sp.node)) {
                     InHe& inc_u = hg.getInHe(inc_iter);
                     const Hyperedge e = inc_u.e;
@@ -229,11 +231,17 @@ namespace whfc {
                             if (!inQueue[e_in].exchange(true)) { assert(hg.excess(e_in) > 0); nodes.push_back(e_in); }
                         }
 
+                        if (hg.label(e_in) > maxLevel) maxLevel = hg.label(e_in);
+                        if (hg.label(e_out) > maxLevel) maxLevel = hg.label(e_out);
 
                     }
+                    hg.label(sp.node) = maxLevel + 1;
                     piercingNode = sp.node;
                 }
             }
+
+            //hg.printHypergraph(std::cout);
+            //hg.printExcessAndLabel();
 
             //hg.printHypergraph(std::cout);
 
@@ -284,18 +292,21 @@ namespace whfc {
             return f;
         }
 
-        bool growReachable(CutterState<Type>& cs) {
+        bool growReachable(CutterState<Type>& cs, bool setLabel = false) {
             hg.alignViewDirection();
             cs.clearForSearch();
             auto& n = cs.n;
             auto& h = cs.h;
             queue.clear();
             bool found_target = false;
-
+            
             for (auto& sp : cs.sourcePiercingNodes) {
                 n.setPiercingNodeDistance(sp.node, false);
                 assert(n.isSourceReachable(sp.node));
                 queue.push(sp.node);
+                if (setLabel) {
+                    hg.label(sp.node) = 0;
+                }
             }
             n.hop(); h.hop(); queue.finishNextLayer();
 
@@ -306,25 +317,49 @@ namespace whfc {
                         const Hyperedge e = inc_u.e;
                         if (!h.areAllPinsSourceReachable__unsafe__(e)) {
                             const bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(inc_u) > 0;
-                            if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e))
+                            if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e)) {
+                                if (hg.flowReceived(inc_u) > 0 && hg.label(hg.edge_node_in(e)) > hg.label(u) + 1) {
+                                    hg.label(hg.edge_node_in(e)) = hg.label(u) + 1;
+                                    for (const Pin& pv : hg.pinsNotSendingFlowInto(e)) {
+                                        if (!n.isTarget(pv.pin)) {
+                                            hg.label(pv.pin) = hg.label(hg.edge_node_in(e)) + 1;
+                                        }
+                                    }
+                                }
                                 continue;
+                            }
 
                             if (scanAllPins) {
                                 h.reachAllPins(e);
+                                if (setLabel) {
+                                    if (hg.flowReceived(inc_u) > 0) {
+                                        hg.label(hg.edge_node_in(e)) = hg.label(u) + 1;
+                                    } else {
+                                        hg.label(hg.edge_node_in(e)) = hg.label(u) + 2;
+                                    }
+                                }
                                 assert(n.distance[u] + 1 == h.outDistance[e]);
                             }
 
                             const bool scanFlowSending = !h.areFlowSendingPinsSourceReachable__unsafe__(e);
                             if (scanFlowSending) {
                                 h.reachFlowSendingPins(e);
+                                if (setLabel) hg.label(hg.edge_node_out(e)) = hg.label(u) + 1;
                                 assert(n.distance[u] + 1 == h.inDistance[e]);
                             }
 
-                            auto visit = [&](const Pin& pv) {
+                            auto visit = [&](const Pin& pv, const bool sendsFlow) {
                                 const Node v = pv.pin;
                                 found_target |= n.isTarget(v);
                                 if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)) {
                                     n.reach(v);
+                                    if (setLabel) {
+                                        if (sendsFlow) {
+                                            hg.label(v) = hg.label(hg.edge_node_out(e)) + 1;
+                                        } else {
+                                            hg.label(v) = hg.label(hg.edge_node_in(e)) + 1;
+                                        }
+                                    }
                                     assert(n.distance[u] + 1 == n.distance[v]);
                                     queue.push(v);
                                 }
@@ -332,11 +367,11 @@ namespace whfc {
 
                             if (scanFlowSending)
                                 for (const Pin& pv : hg.pinsSendingFlowInto(e))
-                                    visit(pv);
+                                    visit(pv, true);
 
                             if (scanAllPins)
                                 for (const Pin& pv : hg.pinsNotSendingFlowInto(e))
-                                    visit(pv);
+                                    visit(pv, false);
                         }
                     }
                 }
