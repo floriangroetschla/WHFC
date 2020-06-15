@@ -29,7 +29,7 @@ namespace whfc {
         LawlerFlowHypergraph& hg;
         LayeredQueue<Node> queue;
         boost::circular_buffer<Node> nodes;
-        
+
         int direction = 0;
 
         Flow upperFlowBound;
@@ -75,7 +75,7 @@ namespace whfc {
             for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(u)) {
                 InHe& inc_u = hg.getInHe(inc_iter);
                 const Hyperedge e = inc_u.e;
-                if (!h.areAllPinsSourceReachable(e)) {
+                if (h.areAllPinsSourceReachable__unsafe__(e) || h.areFlowSendingPinsSourceReachable__unsafe__(e)) {
 
                     const Node e_out = hg.edge_node_out(e);
                     Flow residual = std::min(hg.excess(u), hg.flowReceived(inc_iter));
@@ -120,7 +120,7 @@ namespace whfc {
 
             for (Pin& pin : hg.pinsOf(e)) {
                 Node v = pin.pin;
-                if (!n.isSourceReachable(v) || (v == piercingNode)) {
+                if ((n.isSourceReachable(v) && !n.isSource(v)) || (v == piercingNode) || n.isTarget(v)) {
                     Flow residual = std::min(hg.flowSent(pin.he_inc_iter), hg.excess(e_in));
                     if (residual > 0) {
                         if (hg.label(e_in) == hg.label(v) + 1) {
@@ -172,7 +172,7 @@ namespace whfc {
 
             for (Pin& pin : hg.pinsOf(e)) {
                 Node v = pin.pin;
-                if (!n.isSourceReachable(v) || (v == piercingNode)) {
+                if ((n.isSourceReachable(v) && !n.isSource(v)) || (v == piercingNode) || n.isTarget(v)) {
                     Flow residual = hg.excess(e_out);
                     if (residual > 0) {
                         if (hg.label(e_out) == hg.label(v) + 1) {
@@ -199,6 +199,8 @@ namespace whfc {
 
             hg.alignViewDirection();
 
+            growReachable(cs);
+
             hg.initialize_for_push_relabel();
             queue.clear();
 
@@ -209,7 +211,7 @@ namespace whfc {
                 for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(sp.node)) {
                     InHe& inc_u = hg.getInHe(inc_iter);
                     const Hyperedge e = inc_u.e;
-                    if (!h.areAllPinsSourceReachable(e)) {
+                    if (h.areAllPinsSourceReachable__unsafe__(e) || h.areFlowSendingPinsSourceReachable__unsafe__(e)) {
 
                         const Node e_out = hg.edge_node_out(e);
                         Flow residual = hg.flowReceived(inc_iter);
@@ -268,12 +270,15 @@ namespace whfc {
             }
             cs.flowValue += f;
 
+            //hg.printHypergraph(std::cout);
+            //hg.printExcessAndLabel();
+
             cs.verifyFlowConstraints();
+
+            //growReachable(cs);
 
             bool found_target = growReachable(cs);
             assert(!found_target);
-            //hg.printHypergraph(std::cout);
-            //hg.printExcessAndLabel();
             return f;
         }
 
