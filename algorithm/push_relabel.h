@@ -23,8 +23,8 @@ namespace whfc {
         using Pin = FlowHypergraph::Pin;
         using InHe = FlowHypergraph::InHe;
         using PinIndexRange = FlowHypergraph::PinIndexRange;
+        using PinIterator = FlowHypergraph::PinIterator;
         using DistanceT = DistanceReachableNodes::DistanceT;
-
 
         LawlerFlowHypergraph& hg;
         LayeredQueue<Node> queue;
@@ -44,7 +44,14 @@ namespace whfc {
 
         std::vector<std::atomic<bool>> inQueue;
 
-        PushRelabel(LawlerFlowHypergraph& hg, TimeReporter& timer, size_t numThreads) : hg(hg), nodes(hg.maxNumLawlerNodes()), timer(timer), inQueue(hg.maxNumLawlerNodes())
+        // for nodes
+        std::vector<InHeIndex> current_hyperedge;
+
+        // for hyperedges
+        std::vector<PinIterator> current_pin_e_in, current_pin_e_out;
+
+        PushRelabel(LawlerFlowHypergraph& hg, TimeReporter& timer, size_t numThreads) : hg(hg), nodes(hg.maxNumLawlerNodes()), timer(timer), inQueue(hg.maxNumLawlerNodes()),
+            current_hyperedge(hg.maxNumNodes, InHeIndex::Invalid()), current_pin_e_in(hg.maxNumHyperedges), current_pin_e_out(hg.maxNumHyperedges)
         {
 
         }
@@ -66,71 +73,70 @@ namespace whfc {
             throw std::logic_error("Not implemented");
         }
 
-        void dischargeNode(const Node u, CutterState<Type>& cs) {
-            assert(u < hg.numNodes());
-            assert(hg.excess(u) > 0);
-            auto& h = cs.h;
-
+        void iterateOverNode(const Node u, CutterState<Type>& cs, const bool pushFlow) {
             size_t minLevel = hg.numLawlerNodes() * 2;
-            for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(u)) {
-                InHe& inc_u = hg.getInHe(inc_iter);
+            assert(pushFlow || hg.excess(u) > 0);
+            InHeIndex he = pushFlow ? current_hyperedge[u] : hg.beginIndexHyperedges(u);
+            for (; he < hg.endIndexHyperedges(u); ++he) {
+                InHe& inc_u = hg.getInHe(he);
                 const Hyperedge e = inc_u.e;
-                //if (!h.areAllPinsSourceReachable__unsafe__(e)) {
 
-                    const Node e_out = hg.edge_node_out(e);
-                    if (hg.label(e_out) != 0) {
-                        Flow residual = std::min(hg.excess(u), hg.flowReceived(inc_iter));
-                        if (residual > 0) {
-                            if (hg.label(u) == hg.label(e_out) + 1) {
-                                hg.push_node_to_edgeOut(u, inc_iter, residual);
-                                if (!inQueue[e_out].exchange(true)) { assert(hg.excess(e_out) > 0); nodes.push_back(e_out); }
-                            } else {
-                                assert(hg.label(u) <= hg.label(e_out));
-                                if (hg.label(e_out) != 0) minLevel = std::min(minLevel, hg.label(e_out));
-                            }
+                const Node e_out = hg.edge_node_out(e);
+                if (hg.label(e_out) != 0) {
+                    Flow residual = std::min(hg.excess(u), hg.flowReceived(he));
+                    if (residual > 0) {
+                        if (hg.label(u) == hg.label(e_out) + 1) {
+                            assert(pushFlow);
+                            hg.push_node_to_edgeOut(u, he, residual);
+                            if (!inQueue[e_out].exchange(true)) { assert(hg.excess(e_out) > 0); nodes.push_back(e_out); }
+                        } else {
+                            assert(hg.label(u) <= hg.label(e_out));
+                            if (hg.label(e_out) != 0) minLevel = std::min(minLevel, hg.label(e_out));
                         }
                     }
+                }
 
-                    const Node e_in = hg.edge_node_in(e);
-                    if (hg.label(e_in) != 0) {
-                        Flow residual = hg.excess(u);
-                        if (residual > 0) {
-                            if (hg.label(u) == hg.label(e_in) + 1) {
-                                hg.push_node_to_edgeIn(u, inc_iter, residual);
-                                if (!inQueue[e_in].exchange(true)) { assert(hg.excess(e_in) > 0); nodes.push_back(e_in); }
-                            } else {
-                                assert(hg.label(u) <= hg.label(e_in));
-                                if (hg.label(e_in) != 0) minLevel = std::min(minLevel, hg.label(e_in));
-                            }
+                const Node e_in = hg.edge_node_in(e);
+                if (hg.label(e_in) != 0) {
+                    Flow residual = hg.excess(u);
+                    if (residual > 0) {
+                        if (hg.label(u) == hg.label(e_in) + 1) {
+                            assert(pushFlow);
+                            hg.push_node_to_edgeIn(u, he, residual);
+                            if (!inQueue[e_in].exchange(true)) { assert(hg.excess(e_in) > 0); nodes.push_back(e_in); }
+                        } else {
+                            assert(hg.label(u) <= hg.label(e_in));
+                            if (hg.label(e_in) != 0) minLevel = std::min(minLevel, hg.label(e_in));
                         }
                     }
-
-
-
-                //}
+                }
                 assert(hg.excess(u) >= 0);
                 if (hg.excess(u) == 0) break;
             }
-            if (hg.excess(u) > 0) {
-                // Relabel
+            current_hyperedge[u] = pushFlow ? he : hg.beginIndexHyperedges(u);
+            if (!pushFlow) {
                 assert(minLevel + 1 > hg.label(u));
                 hg.label(u) = minLevel + 1;
             }
         }
 
-        void dischargeEdgeNodeIn(const Node e_in, CutterState<Type>& cs) {
-            assert(hg.excess(e_in) > 0);
+        void iterateOverEdgeNodeIn(const Node e_in, CutterState<Type>& cs, const bool pushFlow) {
+            assert(hg.is_edge_in(e_in));
+            assert(pushFlow || hg.excess(e_in) > 0);
             auto& n = cs.n;
 
             size_t minLevel = hg.numLawlerNodes() * 2;
             const Hyperedge e = hg.edgeFromLawlerNode(e_in);
+            PinIterator pin_it = pushFlow ? current_pin_e_in[e] : hg.beginPins(e);
 
-            for (Pin& pin : hg.pinsOf(e)) {
-                Node v = pin.pin;
+            for (; pin_it < hg.endPins(e); ++pin_it) {
+                const Pin pin = *pin_it;
+                const Node v = pin.pin;
                 if (hg.label(v) != 0 || (v == piercingNode) || n.isTarget(v)) {
                     Flow residual = std::min(hg.flowSent(pin.he_inc_iter), hg.excess(e_in));
                     if (residual > 0) {
                         if (hg.label(e_in) == hg.label(v) + 1) {
+                            assert(pushFlow);
                             hg.push_edgeIn_to_node(v, pin.he_inc_iter, residual);
                             if (!n.isTarget(v) && !n.isSource(v) && !inQueue[v].exchange(true)) { assert(hg.excess(v) > 0); nodes.push_back(v); }
                         } else {
@@ -142,55 +148,46 @@ namespace whfc {
                 if (hg.excess(e_in) == 0) break;
             }
 
-            Node e_out = hg.edge_node_out(e);
-            if (hg.label(e_out) != 0) {
-                Flow residual = std::min(hg.capacity(e) - hg.flow(e), hg.excess(e_in));
-                if (residual > 0) {
-                    if (hg.label(e_in) == hg.label(e_out) + 1) {
-                        hg.push_edgeIn_to_edgeOut(e_in, e_out, residual);
-                        if (!inQueue[e_out].exchange(true)) { assert(hg.excess(e_out) > 0); nodes.push_back(e_out); }
-                    } else {
-                        assert(hg.label(e_in) <= hg.label(e_out));
-                        minLevel = std::min(minLevel, hg.label(e_out));
+            if (hg.excess(e_in) > 0 && pin_it == hg.endPins(e)) {
+                const Node e_out = hg.edge_node_out(e);
+                if (hg.label(e_out) != 0) {
+                    Flow residual = std::min(hg.capacity(e) - hg.flow(e), hg.excess(e_in));
+                    if (residual > 0) {
+                        if (hg.label(e_in) == hg.label(e_out) + 1) {
+                            assert(pushFlow);
+                            hg.push_edgeIn_to_edgeOut(e_in, e_out, residual);
+                            if (!inQueue[e_out].exchange(true)) { assert(hg.excess(e_out) > 0); nodes.push_back(e_out); }
+                        } else {
+                            assert(hg.label(e_in) <= hg.label(e_out));
+                            minLevel = std::min(minLevel, hg.label(e_out));
+                        }
                     }
                 }
             }
+            current_pin_e_in[e] = pushFlow ? pin_it : hg.beginPins(e);
 
-
-            if (hg.excess(e_in) > 0) {
-                // Relabel
+            if (!pushFlow) {
                 assert(minLevel + 1 > hg.label(e_in));
                 hg.label(e_in) = minLevel + 1;
             }
         }
 
-        void dischargeEdgeNodeOut(const Node e_out, CutterState<Type>& cs) {
+        void iterateOverEdgeNodeOut(const Node e_out, CutterState<Type>& cs, const bool pushFlow) {
             assert(hg.excess(e_out) > 0);
             auto& n = cs.n;
 
             size_t minLevel = hg.numLawlerNodes() * 2;
             const Hyperedge e = hg.edgeFromLawlerNode(e_out);
+            PinIterator pin_it = pushFlow ? current_pin_e_out[e] : hg.beginPins(e);
 
-            Node e_in = hg.edge_node_in(e);
-            if (hg.label(e_in) != 0) {
-                Flow residual = std::min(hg.flow(e), hg.excess(e_out));
-                if (residual > 0) {
-                    if (hg.label(e_out) == hg.label(e_in) + 1) {
-                        hg.push_edgeOut_to_edgeIn(e_out, e_in, residual);
-                        if (!inQueue[e_in].exchange(true)) { assert(hg.excess(e_in) > 0); nodes.push_back(e_in); }
-                    } else {
-                        assert(hg.label(e_out) <= hg.label(e_in));
-                        minLevel = std::min(minLevel, hg.label(e_in));
-                    }
-                }
-            }
-
-            for (Pin& pin : hg.pinsOf(e)) {
-                Node v = pin.pin;
+            for (; pin_it < hg.endPins(e); ++pin_it) {
+                const Pin pin = *pin_it;
+                const Node v = pin.pin;
                 if (hg.label(v) != 0 || (v == piercingNode) || n.isTarget(v)) {
                     Flow residual = hg.excess(e_out);
                     if (residual > 0) {
                         if (hg.label(e_out) == hg.label(v) + 1) {
+                            assert(pushFlow);
                             hg.push_edgeOut_to_node(v, pin.he_inc_iter, residual);
                             if (!n.isTarget(v) && !n.isSource(v) && !inQueue[v].exchange(true)) { assert(hg.excess(v) > 0); nodes.push_back(v); }
                         } else {
@@ -202,17 +199,71 @@ namespace whfc {
                 if (hg.excess(e_out) == 0) break;
             }
 
-            if (hg.excess(e_out) > 0) {
-                // Relabel
+            if (hg.excess(e_out) > 0 && pin_it == hg.endPins(e)) {
+                const Node e_in = hg.edge_node_in(e);
+                if (hg.label(e_in) != 0) {
+                    Flow residual = std::min(hg.flow(e), hg.excess(e_out));
+                    if (residual > 0) {
+                        if (hg.label(e_out) == hg.label(e_in) + 1) {
+                            assert(pushFlow);
+                            hg.push_edgeOut_to_edgeIn(e_out, e_in, residual);
+                            if (!inQueue[e_in].exchange(true)) {
+                                assert(hg.excess(e_in) > 0);
+                                nodes.push_back(e_in);
+                            }
+                        } else {
+                            assert(hg.label(e_out) <= hg.label(e_in));
+                            minLevel = std::min(minLevel, hg.label(e_in));
+                        }
+                    }
+                }
+            }
+
+            current_pin_e_out[e] = pushFlow ? pin_it : hg.beginPins(e);
+
+            if (!pushFlow) {
                 assert(minLevel + 1 > hg.label(e_out));
                 hg.label(e_out) = minLevel + 1;
+            }
+
+
+        }
+
+        void dischargeNode(const Node u, CutterState<Type>& cs) {
+            assert(u < hg.numNodes());
+            assert(hg.excess(u) > 0);
+
+            iterateOverNode(u, cs, true);
+            if (hg.excess(u) > 0) {
+                // Relabel
+                iterateOverNode(u, cs, false);
+            }
+        }
+
+        void dischargeEdgeNodeIn(const Node e_in, CutterState<Type>& cs) {
+            assert(hg.excess(e_in) > 0);
+            assert(hg.is_edge_in(e_in));
+
+            iterateOverEdgeNodeIn(e_in, cs, true);
+            if (hg.excess(e_in) > 0) {
+                // Relabel
+                iterateOverEdgeNodeIn(e_in, cs, false);
+            }
+        }
+
+        void dischargeEdgeNodeOut(const Node e_out, CutterState<Type>& cs) {
+            assert(hg.excess(e_out) > 0);
+
+            iterateOverEdgeNodeOut(e_out, cs, true);
+            if (hg.excess(e_out) > 0) {
+                // Relabel
+                iterateOverEdgeNodeOut(e_out, cs, false);
             }
         }
 
         Flow exhaustFlow(CutterState<Type>& cs) {
             assert(cs.sourcePiercingNodes.size() == 1);
             timer.start("exhaustFlow");
-            auto& h = cs.h;
 
             timer.start("initialize", "exhaustFlow");
             hg.initialize_for_push_relabel();
@@ -234,7 +285,7 @@ namespace whfc {
             timer.start("mainLoop", "exhaustFlow");
             for (auto& sp : cs.sourcePiercingNodes) {
                 size_t minLevel = 2 * hg.numLawlerNodes();
-                hg.label(sp.node) = std::min<size_t>(100, hg.numLawlerNodes());  // for debugging purposes
+                //hg.label(sp.node) = std::min<size_t>(100, hg.numLawlerNodes());  // for debugging purposes
                 for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(sp.node)) {
                     InHe& inc_u = hg.getInHe(inc_iter);
                     const Hyperedge e = inc_u.e;
@@ -343,11 +394,11 @@ namespace whfc {
             size_t currentLabel = 1;
 
             auto edge_in = [&](Hyperedge e) {
-                return hg.forwardView() ? hg.edge_node_out(e) : hg.edge_node_out(e);
+                return hg.edge_node_out(e);
             };
 
             auto edge_out = [&](Hyperedge e) {
-                return hg.forwardView() ? hg.edge_node_in(e) : hg.edge_node_in(e);
+                return hg.edge_node_in(e);
             };
 
             while (!queue.empty()) {
@@ -361,10 +412,12 @@ namespace whfc {
                             if (!cs.h.areAllPinsTargetReachable(e)) {
                                 if (hg.flowReceived(inc_u) > 0 && hg.label(e_out) == 0) {
                                     hg.label(e_out) = currentLabel;
+                                    current_pin_e_in[e] = hg.beginPins(e);
                                     queue.push(e_out);
                                 }
                                 if (hg.label(e_in) == 0) {
                                     hg.label(e_in) = currentLabel;
+                                    current_pin_e_out[e] = hg.beginPins(e);
                                     queue.push(e_in);
                                 }
                             }
@@ -375,11 +428,13 @@ namespace whfc {
 
                         if (hg.capacity(e) - hg.flow(e) > 0 && hg.label(e_out) == 0) {
                             hg.label(e_out) = currentLabel;
+                            current_pin_e_in[e] = hg.beginPins(e);
                             queue.push(e_out);
                         }
                         for (Pin& pin : hg.pinsSendingFlowInto(e)) {
                             if (hg.label(pin.pin) == 0 && (!cs.n.isTargetReachable(pin.pin) || pin.pin == target)) {
                                 hg.label(pin.pin) = currentLabel;
+                                current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
                                 queue.push(pin.pin);
                             }
                         }
@@ -389,11 +444,13 @@ namespace whfc {
 
                         if (hg.flow(e) > 0 && hg.label(e_in) == 0) {
                             hg.label(e_in) = currentLabel;
+                            current_pin_e_out[e] = hg.beginPins(e);
                             queue.push(e_in);
                         }
                         for (Pin& pin : hg.pinsOf(e)) {
                             if (hg.label(pin.pin) == 0 && (!cs.n.isTargetReachable(pin.pin) || pin.pin == target)) {
                                 hg.label(pin.pin) = currentLabel;
+                                current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
                                 queue.push(pin.pin);
                             }
                         }
