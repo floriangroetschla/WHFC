@@ -211,24 +211,30 @@ namespace whfc {
 
         Flow exhaustFlow(CutterState<Type>& cs) {
             assert(cs.sourcePiercingNodes.size() == 1);
+            timer.start("exhaustFlow");
             auto& h = cs.h;
 
+            timer.start("initialize", "exhaustFlow");
             hg.initialize_for_push_relabel();
+            timer.stop("initialize");
 
+            timer.start("setLabels", "exhaustFlow");
             cs.flipViewDirection();
             hg.alignViewDirection();
             setLabels(cs);
             cs.flipViewDirection();
             hg.alignViewDirection();
+            timer.stop("setLabels");
 
             queue.clear();
 
             //hg.printHypergraph(std::cout);
             //hg.printExcessAndLabel();
 
+            timer.start("mainLoop", "exhaustFlow");
             for (auto& sp : cs.sourcePiercingNodes) {
                 size_t minLevel = 2 * hg.numLawlerNodes();
-                hg.label(sp.node) = std::min<size_t>(10, hg.numLawlerNodes());  // for debugging purposes
+                hg.label(sp.node) = std::min<size_t>(100, hg.numLawlerNodes());  // for debugging purposes
                 for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(sp.node)) {
                     InHe& inc_u = hg.getInHe(inc_iter);
                     const Hyperedge e = inc_u.e;
@@ -291,8 +297,11 @@ namespace whfc {
                 //hg.printHypergraph(std::cout);
                 //hg.printExcessAndLabel();
             }
+            timer.stop("mainLoop");
 
+            timer.start("sortPins", "exhaustFlow");
             hg.sortPins();
+            timer.stop("sortPins");
 
             resetSourcePiercingNodeDistances(cs);
 
@@ -310,8 +319,11 @@ namespace whfc {
 
             //growReachable(cs);
 
+            timer.start("growReachable", "exhaustFlow");
             bool found_target = growReachable(cs);
             assert(!found_target);
+            timer.stop("growReachable");
+            timer.stop("exhaustFlow");
             return f;
         }
 
@@ -390,7 +402,7 @@ namespace whfc {
                 currentLabel++;
                 queue.finishNextLayer();
             }
-            //hg.label(target) = currentLabel;
+            hg.label(target) = currentLabel + 1;
         }
 
         bool growReachable(CutterState<Type>& cs, bool setLabel = false) {
