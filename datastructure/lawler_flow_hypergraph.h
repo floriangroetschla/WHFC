@@ -218,11 +218,10 @@ namespace whfc {
         }
 
         void initialize_for_push_relabel() {
-            vec_excess.clear();
-            vec_excess.resize(numLawlerNodes(), 0);
-
-            vec_label.clear();
-            vec_label.resize(numLawlerNodes(), 0);
+            vec_excess.resize(numLawlerNodes());
+            vec_label.resize(numLawlerNodes());
+            std::fill(vec_excess.begin(), vec_excess.end(), 0);
+            std::fill(vec_label.begin(), vec_label.end(), 0);
         }
 
         void printExcessAndLabel() {
