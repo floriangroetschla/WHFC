@@ -51,7 +51,7 @@ namespace whfc {
         // for hyperedges
         std::vector<PinIterator> current_pin_e_in, current_pin_e_out;
 
-        size_t numPushes, numRelabel;
+        size_t numPushes, numRelabel, numEdgeScans;
 
         PushRelabel(LawlerFlowHypergraph& hg, TimeReporter& timer, size_t numThreads) : hg(hg), nodes(hg.maxNumLawlerNodes()), timer(timer), inQueue(hg.maxNumLawlerNodes()),
             current_hyperedge(hg.maxNumNodes, InHeIndex::Invalid()), current_pin_e_in(hg.maxNumHyperedges), current_pin_e_out(hg.maxNumHyperedges)
@@ -64,6 +64,7 @@ namespace whfc {
             nodes.clear();
             numPushes = 0;
             numRelabel = 0;
+            numEdgeScans = 0;
         }
 
         ScanList& getScanList() {
@@ -88,6 +89,7 @@ namespace whfc {
                 const Hyperedge e = inc_u.e;
 
                 if (!cs.h.areAllPinsSourceReachable__unsafe__(e)) {
+                    numEdgeScans += 2;
                     const Node e_out = hg.edge_node_out(e);
                     Flow residual = std::min(hg.excess(u), hg.flowReceived(he));
                     if (residual > 0) {
@@ -138,6 +140,7 @@ namespace whfc {
                 const Pin pin = *pin_it;
                 const Node v = pin.pin;
                 if (!cs.n.isSourceReachable(v) || (v == piercingNode) || v == target) {
+                    numEdgeScans++;
                     Flow residual = std::min(hg.flowSent(pin.he_inc_iter), hg.excess(e_in));
                     if (residual > 0) {
                         if (hg.label(e_in) == hg.label(v) + 1) {
@@ -155,6 +158,7 @@ namespace whfc {
             }
 
             if (hg.excess(e_in) > 0 && pin_it == hg.endPins(e)) {
+                numEdgeScans++;
                 const Node e_out = hg.edge_node_out(e);
                 Flow residual = std::min(hg.capacity(e) - hg.flow(e), hg.excess(e_in));
                 if (residual > 0) {
@@ -188,6 +192,7 @@ namespace whfc {
                 const Pin pin = *pin_it;
                 const Node v = pin.pin;
                 if (!cs.n.isSourceReachable(v) || (v == piercingNode) || (v == target)) {
+                    numEdgeScans++;
                     Flow residual = hg.excess(e_out);
                     if (residual > 0) {
                         if (hg.label(e_out) == hg.label(v) + 1) {
@@ -205,6 +210,7 @@ namespace whfc {
             }
 
             if (hg.excess(e_out) > 0 && pin_it == hg.endPins(e)) {
+                numEdgeScans++;
                 const Node e_in = hg.edge_node_in(e);
                 Flow residual = std::min(hg.flow(e), hg.excess(e_out));
                 if (residual > 0) {
@@ -291,7 +297,7 @@ namespace whfc {
 
             timer.start("mainLoop", "exhaustFlow");
             for (auto& sp : cs.sourcePiercingNodes) {
-                hg.label(sp.node) = std::min<size_t>(100, hg.numLawlerNodes());  // for debugging purposes
+                //hg.label(sp.node) = std::min<size_t>(100, hg.numLawlerNodes());  // for debugging purposes
                 for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(sp.node)) {
                     InHe& inc_u = hg.getInHe(inc_iter);
                     const Hyperedge e = inc_u.e;
@@ -341,10 +347,10 @@ namespace whfc {
                 //hg.printHypergraph(std::cout);
                 //hg.printExcessAndLabel();
 
-                /*if (numRelabel % (10 * hg.numLawlerNodes()) == 0) {
+                if (numEdgeScans > 12 * hg.numLawlerNodes() + 2 * hg.numHyperedges()) {
                     setLabels(cs);
-                    numRelabel++;
-                }*/
+                    numEdgeScans = 0;
+                }
             }
             timer.stop("mainLoop");
 
@@ -471,7 +477,6 @@ namespace whfc {
                 currentLabel++;
                 queue.finishNextLayer();
             }
-            //hg.label(target) = n;
             cs.flipViewDirection();
             hg.alignViewDirection();
         }
