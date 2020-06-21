@@ -294,12 +294,8 @@ namespace whfc {
 
             queue.clear();
 
-            //hg.printHypergraph(std::cout);
-            //hg.printExcessAndLabel();
-
             timer.start("mainLoop", "exhaustFlow");
             for (auto& sp : cs.sourcePiercingNodes) {
-                //hg.label(sp.node) = std::min<size_t>(100, hg.numLawlerNodes());  // for debugging purposes
                 for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(sp.node)) {
                     InHe& inc_u = hg.getInHe(inc_iter);
                     const Hyperedge e = inc_u.e;
@@ -346,9 +342,6 @@ namespace whfc {
                     inQueue[u] = false;
                 }
 
-                //hg.printHypergraph(std::cout);
-                //hg.printExcessAndLabel();
-
                 if (numEdgeScans > 12 * hg.numLawlerNodes() + 2 * hg.numHyperedges()) {
                     setLabels(cs);
                     numEdgeScans = 0;
@@ -369,12 +362,7 @@ namespace whfc {
             }
             cs.flowValue += f;
 
-            //hg.printHypergraph(std::cout);
-            //hg.printExcessAndLabel();
-
             cs.verifyFlowConstraints();
-
-            //growReachable(cs);
 
             timer.start("growReachable", "exhaustFlow");
             bool found_target = growReachable(cs);
