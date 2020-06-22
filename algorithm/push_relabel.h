@@ -43,7 +43,7 @@ namespace whfc {
         Node piercingNode;
         Node target;
 
-        std::vector<std::atomic<bool>> inQueue;
+        std::vector<bool> inQueue;
 
         // for nodes
         std::vector<InHeIndex> current_hyperedge;
@@ -79,7 +79,8 @@ namespace whfc {
             throw std::logic_error("Not implemented");
         }
 
-        void iterateOverNode(const Node u, CutterState<Type>& cs, const bool pushFlow) {
+        template<bool pushFlow>
+        __attribute__((always_inline)) inline void iterateOverNode(const Node u, CutterState<Type>& cs) {
             size_t minLevel = hg.numLawlerNodes() * 2;
             assert(pushFlow || hg.excess(u) > 0);
             InHeIndex he = pushFlow ? current_hyperedge[u] : hg.beginIndexHyperedges(u);
@@ -97,7 +98,7 @@ namespace whfc {
                             assert(pushFlow);
                             numPushes++;
                             hg.push_node_to_edgeOut(u, he, residual);
-                            if (!inQueue[e_out].exchange(true)) { assert(hg.excess(e_out) > 0); nodes.push_back(e_out); }
+                            if (!inQueue[e_out]) { assert(hg.excess(e_out) > 0); nodes.push_back(e_out); inQueue[e_out] = true; }
                         } else {
                             assert(hg.label(u) <= hg.label(e_out));
                             if (hg.label(e_out) != 0) minLevel = std::min(minLevel, hg.label(e_out));
@@ -111,7 +112,7 @@ namespace whfc {
                             assert(pushFlow);
                             numPushes++;
                             hg.push_node_to_edgeIn(u, he, residual);
-                            if (!inQueue[e_in].exchange(true)) { assert(hg.excess(e_in) > 0); nodes.push_back(e_in); }
+                            if (!inQueue[e_in]) { assert(hg.excess(e_in) > 0); nodes.push_back(e_in); inQueue[e_in] = true; }
                         } else {
                             assert(hg.label(u) <= hg.label(e_in));
                             if (hg.label(e_in) != 0) minLevel = std::min(minLevel, hg.label(e_in));
@@ -128,7 +129,8 @@ namespace whfc {
             }
         }
 
-        void iterateOverEdgeNodeIn(const Node e_in, CutterState<Type>& cs, const bool pushFlow) {
+        template<bool pushFlow>
+        __attribute__((always_inline)) inline void iterateOverEdgeNodeIn(const Node e_in, CutterState<Type>& cs) {
             assert(hg.is_edge_in(e_in));
             assert(pushFlow || hg.excess(e_in) > 0);
 
@@ -147,7 +149,7 @@ namespace whfc {
                             assert(pushFlow);
                             numPushes++;
                             hg.push_edgeIn_to_node(v, pin.he_inc_iter, residual);
-                            if (!(v == target) && !(v == piercingNode) && !inQueue[v].exchange(true)) { assert(hg.excess(v) > 0); nodes.push_back(v); }
+                            if (!(v == target) && !(v == piercingNode) && !inQueue[v]) { assert(hg.excess(v) > 0); nodes.push_back(v); inQueue[v] = true; }
                         } else {
                             assert(hg.label(e_in) <= hg.label(v) || v == piercingNode);
                             minLevel = std::min(minLevel, hg.label(v));
@@ -166,7 +168,7 @@ namespace whfc {
                         assert(pushFlow);
                         numPushes++;
                         hg.push_edgeIn_to_edgeOut(e_in, e_out, residual);
-                        if (!inQueue[e_out].exchange(true)) { assert(hg.excess(e_out) > 0); nodes.push_back(e_out); }
+                        if (!inQueue[e_out]) { assert(hg.excess(e_out) > 0); nodes.push_back(e_out); inQueue[e_out] = true; }
                     } else {
                         assert(hg.label(e_in) <= hg.label(e_out));
                         minLevel = std::min(minLevel, hg.label(e_out));
@@ -181,7 +183,8 @@ namespace whfc {
             }
         }
 
-        void iterateOverEdgeNodeOut(const Node e_out, CutterState<Type>& cs, const bool pushFlow) {
+        template<bool pushFlow>
+        __attribute__((always_inline)) inline void iterateOverEdgeNodeOut(const Node e_out, CutterState<Type>& cs) {
             assert(hg.excess(e_out) > 0);
 
             size_t minLevel = hg.numLawlerNodes() * 2;
@@ -199,7 +202,7 @@ namespace whfc {
                             assert(pushFlow);
                             numPushes++;
                             hg.push_edgeOut_to_node(v, pin.he_inc_iter, residual);
-                            if (!(v == target) && !(v == piercingNode) && !inQueue[v].exchange(true)) { assert(hg.excess(v) > 0); nodes.push_back(v); }
+                            if (!(v == target) && !(v == piercingNode) && !inQueue[v]) { assert(hg.excess(v) > 0); nodes.push_back(v); inQueue[v] = true; }
                         } else {
                             assert(hg.label(e_out) <= hg.label(v) || piercingNode == v);
                             minLevel = std::min(minLevel, hg.label(v));
@@ -218,9 +221,10 @@ namespace whfc {
                         assert(pushFlow);
                         numPushes++;
                         hg.push_edgeOut_to_edgeIn(e_out, e_in, residual);
-                        if (!inQueue[e_in].exchange(true)) {
+                        if (!inQueue[e_in]) {
                             assert(hg.excess(e_in) > 0);
                             nodes.push_back(e_in);
+                            inQueue[e_in] = true;
                         }
                     } else {
                         assert(hg.label(e_out) <= hg.label(e_in));
@@ -243,11 +247,11 @@ namespace whfc {
             assert(u < hg.numNodes());
             assert(hg.excess(u) > 0);
 
-            iterateOverNode(u, cs, true);
+            iterateOverNode<true>(u, cs);
             if (hg.excess(u) > 0) {
                 // Relabel
                 numRelabel++;
-                iterateOverNode(u, cs, false);
+                iterateOverNode<false>(u, cs);
             }
         }
 
@@ -255,22 +259,22 @@ namespace whfc {
             assert(hg.excess(e_in) > 0);
             assert(hg.is_edge_in(e_in));
 
-            iterateOverEdgeNodeIn(e_in, cs, true);
+            iterateOverEdgeNodeIn<true>(e_in, cs);
             if (hg.excess(e_in) > 0) {
                 // Relabel
                 numRelabel++;
-                iterateOverEdgeNodeIn(e_in, cs, false);
+                iterateOverEdgeNodeIn<false>(e_in, cs);
             }
         }
 
         void dischargeEdgeNodeOut(const Node e_out, CutterState<Type>& cs) {
             assert(hg.excess(e_out) > 0);
 
-            iterateOverEdgeNodeOut(e_out, cs, true);
+            iterateOverEdgeNodeOut<true>(e_out, cs);
             if (hg.excess(e_out) > 0) {
                 // Relabel
                 numRelabel++;
-                iterateOverEdgeNodeOut(e_out, cs, false);
+                iterateOverEdgeNodeOut<false>(e_out, cs);
             }
         }
 
@@ -305,7 +309,7 @@ namespace whfc {
                             Flow residual = hg.flowReceived(inc_iter);
                             if (residual > 0) {
                                 hg.push_node_to_edgeOut(sp.node, inc_iter, residual);
-                                if (!inQueue[e_out].exchange(true)) { assert(hg.excess(e_out) > 0); nodes.push_back(e_out); }
+                                if (!inQueue[e_out]) { assert(hg.excess(e_out) > 0); nodes.push_back(e_out); inQueue[e_out] = true; }
                             }
                         }
 
@@ -314,7 +318,7 @@ namespace whfc {
                             Flow residual = hg.capacity(e);
                             if (residual > 0) {
                                 hg.push_node_to_edgeIn(sp.node, inc_iter, residual);
-                                if (!inQueue[e_in].exchange(true)) { assert(hg.excess(e_in) > 0); nodes.push_back(e_in); }
+                                if (!inQueue[e_in]) { assert(hg.excess(e_in) > 0); nodes.push_back(e_in); inQueue[e_in] = true; }
                             }
                         }
                     }
