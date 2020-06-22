@@ -8,6 +8,8 @@ namespace whfc_rb {
         bool precomputeCuts;
         bool distancePiercing;
         size_t numThreads;
+        std::string graphName;
+        size_t k;
         double percentage_bfs_from_cut = 0.2;
     };
 }

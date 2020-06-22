@@ -42,7 +42,7 @@ namespace whfc_rb {
 
             if (extractor_info.cutAtStake == extractor_info.baseCut) return false;
 
-            static constexpr bool write_snapshot = false;
+            static constexpr bool write_snapshot = true;
             if constexpr (write_snapshot) {
                 writeSnapshot(extractor_info);
             }
@@ -107,7 +107,7 @@ namespace whfc_rb {
                     extractor_info.source,
                     extractor_info.target
             };
-            std::string hg_filename = "Snapshot" + std::to_string(instance_counter);
+            std::string hg_filename = "snapshots/Snapshot-" + config.graphName + "-" + std::to_string(config.k) + "-" + std::to_string(instance_counter);
             instance_counter++;
             std::cout << "Wrote snapshot: " << hg_filename << std::endl;
             whfc::HMetisIO::writeFlowHypergraph(extractor.fhgb, hg_filename);

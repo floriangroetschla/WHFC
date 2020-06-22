@@ -9,6 +9,7 @@
 #include "recursive_bisection/partition_threadsafe.h"
 #include "recursive_bisection/tbb_thread_pinning.h"
 #include "recursive_bisection/config.h"
+#include <filesystem>
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
     timer.report(std::cout);
@@ -42,7 +43,7 @@ int main(int argc, const char *argv[]) {
 
     bool precomputeCuts = true;
 
-    whfc_rb::PartitionConfig config = {true, patoh_preset, precomputeCuts, distancePiercing, numThreads};
+    whfc_rb::PartitionConfig config = {true, patoh_preset, precomputeCuts, distancePiercing, numThreads, std::filesystem::path(argv[1]).filename(), numParts};
     std::cout << "useThreadPinning: " << useThreadPinning << std::endl;
     std::cout << "precomputeCuts: " << precomputeCuts << std::endl;
     std::cout << "distancePiercing: " << distancePiercing << std::endl;
