@@ -1,0 +1,40 @@
+#include "recursive_bisection/hypergraph.h"
+#include "io/hmetis_io.h"
+#include <iostream>
+#include "extern/patoh_wrapper.h"
+#include <random>
+#include "util/timer.h"
+#include <tbb/tbb.h>
+#include "recursive_bisection/k_way_refiner_parallel.h"
+#include "recursive_bisection/partition_threadsafe.h"
+#include "recursive_bisection/tbb_thread_pinning.h"
+#include "recursive_bisection/config.h"
+#include <filesystem>
+
+int main(int argc, const char *argv[]) {
+
+    if (argc != 2) {
+        throw std::runtime_error("Usage ./KWayRefinementParallel HypergraphFile");
+    }
+    whfc::LawlerFlowHypergraph hg = whfc::HMetisIO::readLawlerHypergraph(argv[1]);
+    hg.maxNumHyperedges = hg.numHyperedges();
+    hg.maxNumNodes = hg.numNodes();
+
+    const whfc_rb::PartitionConfig config = {true, "D", true, true, 1, std::filesystem::path(argv[1]).filename(), 2};
+    whfc::HyperFlowCutter<whfc::PushRelabel, whfc::LawlerFlowHypergraph> hfc(hg, 0, config);
+    whfc::TimeReporter timer("Total");
+
+    whfc::WHFC_IO::WHFCInformation i = whfc::WHFC_IO::readAdditionalInformation(argv[1]);
+    whfc::WHFC_IO::readRandomGeneratorState(argv[1], hfc.cs.rng);
+    hfc.cs.setMaxBlockWeight(0, i.maxBlockWeight[0]);
+    hfc.cs.setMaxBlockWeight(1, i.maxBlockWeight[1]);
+    hfc.upperFlowBound = i.upperFlowBound;
+
+    bool hfc_result = hfc.enumerateCutsUntilBalancedOrFlowBoundExceeded(i.s, i.t);
+    timer.merge(hfc.timer, "Total", "HyperFlowCutter");
+
+    timer.report(std::cout);
+
+    return 0;
+}
+

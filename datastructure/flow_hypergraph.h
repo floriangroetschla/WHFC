@@ -283,8 +283,8 @@ namespace whfc {
 		
 		Flow maxHyperedgeCapacity = maxFlow;
 
-        const size_t maxNumNodes;
-        const size_t maxNumHyperedges;
+        size_t maxNumNodes;
+        size_t maxNumHyperedges;
 
 	public:
 		std::vector<NodeData> nodes;

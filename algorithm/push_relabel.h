@@ -375,7 +375,7 @@ namespace whfc {
             timer.stop("growReachable");
             timer.stop("exhaustFlow");
 
-            std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numLawlerNodes: " << hg.numLawlerNodes() << std::endl;
+            //std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numLawlerNodes: " << hg.numLawlerNodes() << std::endl;
 
             return f;
         }

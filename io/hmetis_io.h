@@ -5,6 +5,7 @@
 #include "../datastructure/flow_hypergraph_builder.h"
 
 #include "../recursive_bisection/hypergraph.h"
+#include "../datastructure/lawler_flow_hypergraph.h"
 
 namespace whfc {
 	class HMetisIO {
@@ -95,8 +96,14 @@ namespace whfc {
 			FlowHypergraphBuilder hgb;
 			return readFlowHypergraphWithBuilder(hgb, filename);
 		}
-		
-		static FlowHypergraphBuilder& readFlowHypergraphWithBuilder(FlowHypergraphBuilder& hgb, const std::string& filename) {
+
+		static LawlerFlowHypergraph readLawlerHypergraph(const std::string& filename) {
+		    LawlerFlowHypergraph hgb;
+		    return readFlowHypergraphWithBuilder<LawlerFlowHypergraph>(hgb, filename);
+		}
+
+		template<class Builder=FlowHypergraphBuilder>
+		static Builder& readFlowHypergraphWithBuilder(Builder& hgb, const std::string& filename) {
 			std::ifstream f(filename);
 			if (!f)
 				throw std::runtime_error("File: " + filename + " not found.");
