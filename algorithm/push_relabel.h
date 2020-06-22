@@ -53,8 +53,13 @@ namespace whfc {
 
         size_t numPushes, numRelabel, numEdgeScans;
 
+        std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> thisLayer_thread_specific;
+        std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> nextLayer_thread_specific;
+
         PushRelabel(LawlerFlowHypergraph& hg, TimeReporter& timer, size_t numThreads) : hg(hg), nodes(hg.maxNumLawlerNodes()), timer(timer), inQueue(hg.maxNumLawlerNodes()),
-            current_hyperedge(hg.maxNumNodes, InHeIndex::Invalid()), current_pin_e_in(hg.maxNumHyperedges), current_pin_e_out(hg.maxNumHyperedges)
+            current_hyperedge(hg.maxNumNodes, InHeIndex::Invalid()), current_pin_e_in(hg.maxNumHyperedges), current_pin_e_out(hg.maxNumHyperedges),
+            thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()),
+            nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>())
         {
 
         }
@@ -376,8 +381,13 @@ namespace whfc {
             return f;
         }
 
+        inline bool tryToGetNode(const Node u, const size_t currentLabel, const size_t n) {
+            return hg.label(u) > currentLabel && __atomic_exchange_n(&hg.label(u), currentLabel, __ATOMIC_ACQ_REL) == n;
+        }
+
         void setLabels(CutterState<Type>& cs) {
-            queue.clear();
+            std::vector<Node>& thisLayer = thisLayer_thread_specific->local();
+            bool nodes_left = true;
 
             hg.equalizeLabels();
 
@@ -385,76 +395,99 @@ namespace whfc {
             std::fill(current_pin_e_out.begin(), current_pin_e_out.end(), PinIterator(0));
             std::fill(current_hyperedge.begin(), current_hyperedge.end(), InHeIndex::Invalid());
 
-            // Source and target of the bfs
+            // Source and target of the bfs, not of the flow instance
             const Node source = *cs.targetPiercingNodes.begin()->node;
             const Node target = *cs.sourcePiercingNodes.begin()->node;
 
-            queue.push(source);
+            thisLayer.clear();
+            thisLayer.push_back(source);
             hg.label(source) = 0;
 
-            queue.finishNextLayer();
-
             size_t currentLabel = 1;
-
             const size_t n = hg.numLawlerNodes();
 
-            while (!queue.empty()) {
-                while (!queue.currentLayerEmpty()) {
-                    const Node u = queue.pop();
-                    if (hg.isNode(u)) {
-                        for (InHe& inc_u : hg.hyperedgesOf(u)) {
-                            const Hyperedge e = inc_u.e;
-                            const Node e_in = hg.edge_node_in(e);
-                            const Node e_out = hg.edge_node_out(e);
-                            if (!cs.h.areAllPinsSourceReachable__unsafe__(e)) {
-                                if (hg.flowSent(inc_u) > 0 && hg.label(e_in) == n) {
-                                    hg.label(e_in) = currentLabel;
-                                    current_pin_e_in[e] = hg.beginPins(e);
-                                    queue.push(e_in);
-                                }
-                                if (hg.label(e_out) == n) {
-                                    hg.label(e_out) = currentLabel;
-                                    current_pin_e_out[e] = hg.beginPins(e);
-                                    queue.push(e_out);
-                                }
-                            }
-                        }
-                    } else if (hg.is_edge_out(u)) {
-                        const Hyperedge e = hg.edgeFromLawlerNode(u);
-                        const Node e_in = hg.edge_node_in(e);
-
-                        if (hg.capacity(e) - hg.flow(e) > 0 && hg.label(e_in) == n) {
-                            hg.label(e_in) = currentLabel;
+            auto visitNode = [&](const Node u, std::vector<Node>& queue) {
+                for (InHe& inc_u : hg.hyperedgesOf(u)) {
+                    const Hyperedge e = inc_u.e;
+                    const Node e_in = hg.edge_node_in(e);
+                    const Node e_out = hg.edge_node_out(e);
+                    if (!cs.h.areAllPinsSourceReachable__unsafe__(e)) {
+                        if (hg.flowSent(inc_u) > 0 && tryToGetNode(e_in, currentLabel, n)) {
                             current_pin_e_in[e] = hg.beginPins(e);
-                            queue.push(e_in);
+                            queue.push_back(e_in);
                         }
-                        for (Pin& pin : hg.pinsOf(e)) {
-                            if (hg.label(pin.pin) == n && (hg.flowReceived(pin.he_inc_iter) > 0) && (!cs.n.isSourceReachable__unsafe__(pin.pin))) {
-                                hg.label(pin.pin) = currentLabel;
-                                current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
-                                queue.push(pin.pin);
-                            }
-                        }
-                    } else {
-                        const Hyperedge e = hg.edgeFromLawlerNode(u);
-                        const Node e_out = hg.edge_node_out(e);
-
-                        if (hg.flow(e) > 0 && hg.label(e_out) == n) {
-                            hg.label(e_out) = currentLabel;
+                        if (tryToGetNode(e_out, currentLabel, n)) {
                             current_pin_e_out[e] = hg.beginPins(e);
-                            queue.push(e_out);
-                        }
-                        for (Pin& pin : hg.pinsOf(e)) {
-                            if (hg.label(pin.pin) == n && (!cs.n.isSourceReachable__unsafe__(pin.pin))) {
-                                hg.label(pin.pin) = currentLabel;
-                                current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
-                                queue.push(pin.pin);
-                            }
+                            queue.push_back(e_out);
                         }
                     }
                 }
+            };
+
+            auto visitEdgeIn = [&](const Node e_in, std::vector<Node>& queue) {
+                const Hyperedge e = hg.edgeFromLawlerNode(e_in);
+                const Node e_out = hg.edge_node_out(e);
+
+                if (hg.flow(e) > 0 && tryToGetNode(e_out, currentLabel, n)) {
+                    current_pin_e_out[e] = hg.beginPins(e);
+                    queue.push_back(e_out);
+                }
+                for (Pin& pin : hg.pinsOf(e)) {
+                    if ((!cs.n.isSourceReachable__unsafe__(pin.pin)) && tryToGetNode(pin.pin, currentLabel, n)) {
+                        current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
+                        queue.push_back(pin.pin);
+                    }
+                }
+            };
+
+            auto visitEdgeOut = [&](const Node e_out, std::vector<Node>& queue) {
+                const Hyperedge e = hg.edgeFromLawlerNode(e_out);
+                const Node e_in = hg.edge_node_in(e);
+
+                if (hg.capacity(e) - hg.flow(e) > 0 && tryToGetNode(e_in, currentLabel, n)) {
+                    current_pin_e_in[e] = hg.beginPins(e);
+                    queue.push_back(e_in);
+                }
+                for (Pin& pin : hg.pinsOf(e)) {
+                    if ((!cs.n.isSourceReachable__unsafe__(pin.pin)) && (hg.flowReceived(pin.he_inc_iter) > 0) && tryToGetNode(pin.pin, currentLabel, n)) {
+                        current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
+                        queue.push_back(pin.pin);
+                    }
+                }
+            };
+
+            while (nodes_left) {
+                tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
+                    tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
+                        std::vector<Node>& localQueue = nextLayer_thread_specific->local();
+                        for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
+                            const Node u = vector[i];
+                            if (hg.isNode(u)) {
+                                visitNode(u, localQueue);
+                            } else if (hg.is_edge_in(u)) {
+                                visitEdgeIn(u, localQueue);
+                            } else {
+                                assert(hg.is_edge_out(u));
+                                visitEdgeOut(u, localQueue);
+                            }
+                        }
+                    });
+                });
+
+                nodes_left = false;
+                for (std::vector<Node>& nextLayer : *nextLayer_thread_specific) {
+                    if (nextLayer.size() > 0) {
+                        nodes_left = true;
+                        break;
+                    }
+                }
+
+                std::swap(thisLayer_thread_specific, nextLayer_thread_specific);
+
+                for (std::vector<Node>& nextLayer : *nextLayer_thread_specific) {
+                    nextLayer.clear();
+                }
                 currentLabel++;
-                queue.finishNextLayer();
             }
         }
 
