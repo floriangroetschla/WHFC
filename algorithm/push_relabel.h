@@ -350,7 +350,8 @@ namespace whfc {
             timer.stop("mainLoop");
 
             timer.start("sortPins", "exhaustFlow");
-            hg.sortPins();
+            //hg.sortPins();
+            hg.writeBackFlow();
             timer.stop("sortPins");
 
             resetSourcePiercingNodeDistances(cs);
@@ -457,7 +458,7 @@ namespace whfc {
             }
         }
 
-        bool growReachable(CutterState<Type>& cs, bool setLabel = false) {
+        bool growReachable(CutterState<Type>& cs) {
             hg.alignViewDirection();
             cs.clearForSearch();
             auto& n = cs.n;
@@ -469,9 +470,6 @@ namespace whfc {
                 n.setPiercingNodeDistance(sp.node, false);
                 assert(n.isSourceReachable(sp.node));
                 queue.push(sp.node);
-                if (setLabel) {
-                    hg.label(sp.node) = 0;
-                }
             }
             n.hop(); h.hop(); queue.finishNextLayer();
 
@@ -483,33 +481,17 @@ namespace whfc {
                         if (!h.areAllPinsSourceReachable__unsafe__(e)) {
                             const bool scanAllPins = !hg.isSaturated(e) || hg.flowReceived(inc_u) > 0;
                             if (!scanAllPins && h.areFlowSendingPinsSourceReachable__unsafe__(e)) {
-                                if (hg.flowReceived(inc_u) > 0 && hg.label(hg.edge_node_in(e)) > hg.label(u) + 1) {
-                                    hg.label(hg.edge_node_in(e)) = hg.label(u) + 1;
-                                    for (const Pin& pv : hg.pinsNotSendingFlowInto(e)) {
-                                        if (!n.isTarget(pv.pin)) {
-                                            hg.label(pv.pin) = hg.label(hg.edge_node_in(e)) + 1;
-                                        }
-                                    }
-                                }
                                 continue;
                             }
 
                             if (scanAllPins) {
                                 h.reachAllPins(e);
-                                if (setLabel) {
-                                    if (hg.flowReceived(inc_u) > 0) {
-                                        hg.label(hg.edge_node_in(e)) = hg.label(u) + 1;
-                                    } else {
-                                        hg.label(hg.edge_node_in(e)) = hg.label(u) + 2;
-                                    }
-                                }
                                 assert(n.distance[u] + 1 == h.outDistance[e]);
                             }
 
                             const bool scanFlowSending = !h.areFlowSendingPinsSourceReachable__unsafe__(e);
                             if (scanFlowSending) {
                                 h.reachFlowSendingPins(e);
-                                if (setLabel) hg.label(hg.edge_node_out(e)) = hg.label(u) + 1;
                                 assert(n.distance[u] + 1 == h.inDistance[e]);
                             }
 
@@ -518,25 +500,20 @@ namespace whfc {
                                 found_target |= n.isTarget(v);
                                 if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v)) {
                                     n.reach(v);
-                                    if (setLabel) {
-                                        if (sendsFlow) {
-                                            hg.label(v) = hg.label(hg.edge_node_out(e)) + 1;
-                                        } else {
-                                            hg.label(v) = hg.label(hg.edge_node_in(e)) + 1;
-                                        }
-                                    }
                                     assert(n.distance[u] + 1 == n.distance[v]);
                                     queue.push(v);
                                 }
                             };
 
-                            if (scanFlowSending)
-                                for (const Pin& pv : hg.pinsSendingFlowInto(e))
-                                    visit(pv, true);
-
-                            if (scanAllPins)
-                                for (const Pin& pv : hg.pinsNotSendingFlowInto(e))
-                                    visit(pv, false);
+                            if (scanFlowSending || scanAllPins) {
+                                for (const Pin& pv : hg.pinsOf(e)) {
+                                    if (hg.flowSent(pv.he_inc_iter) > 0 && scanFlowSending) {
+                                        visit(pv, true);
+                                    } else if (hg.flowSent(pv.he_inc_iter) == 0 && scanAllPins) {
+                                        visit(pv, false);
+                                    }
+                                }
+                            }
                         }
                     }
                 }

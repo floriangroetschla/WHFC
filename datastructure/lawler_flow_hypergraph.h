@@ -138,6 +138,26 @@ namespace whfc {
             flow(edgeFromLawlerNode(e_in)) -= f;
         }
 
+        void writeBackFlow() {
+            for (Hyperedge e : hyperedgeIDs()) {
+                for (const Pin& pv : pinsOf(e)) {
+                    InHe& inc_he = getInHe(pv);
+                    const InHeIndex inc = pv.he_inc_iter;
+
+                    if (flowIn(inc) && flowOut(inc)) {
+                        Flow loopedFlow = std::min(flowIn(inc), flowOut(inc));
+                        flowIn(inc) -= loopedFlow;
+                        flowOut(inc) -= loopedFlow;
+
+                        flow(inc_he.e) -= loopedFlow;
+                    }
+
+                    assert(!flowIn(inc) || !flowOut(inc));
+                    inc_he.flow = flowSent(flowIn(inc) - flowOut(inc));
+                }
+            }
+        }
+
         void sortPins() {
             for (Hyperedge e : hyperedgeIDs()) {
                 PinIndex begin = beginIndexPins(e);

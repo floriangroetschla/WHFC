@@ -660,13 +660,15 @@ namespace whfc {
 				assert(flow_in == flow_out);
 				assert(flow_in == std::abs(hg.flow(e)));
 				assert(flow_in <= hg.capacity(e));
-				
+
+				/*
 				for (Pin& p : hg.pinsSendingFlowInto(e))
 					assert(hg.flowSent(p) > 0);
 				for (Pin& p : hg.pinsReceivingFlowFrom(e))
 					assert(hg.flowReceived(p) > 0);
 				for (Pin& p : hg.pinsWithoutFlow(e))
 					assert(hg.flowSent(p) == 0);
+				 */
 			}
 #endif
 		}
@@ -702,10 +704,10 @@ namespace whfc {
 				for (const Pin& p : hg.pinsOf(e)) {
 					assert(!h.areAllPinsSources(e) || n.isSource(p.pin) || isIsolated(p.pin));
 					assert(!h.areAllPinsSourceReachable(e) || n.isSourceReachable(p.pin));
-				}
-				for (const Pin& p : hg.pinsSendingFlowInto(e)) {
-					assert(!h.areFlowSendingPinsSources(e) || n.isSource(p.pin) || isIsolated(p.pin));
-					assert(!h.areFlowSendingPinsSourceReachable(e) || n.isSourceReachable(p.pin));
+					if (hg.flowSent(p) > 0) {
+                        assert(!h.areFlowSendingPinsSources(e) || n.isSource(p.pin) || isIsolated(p.pin));
+                        assert(!h.areFlowSendingPinsSourceReachable(e) || n.isSourceReachable(p.pin));
+					}
 				}
 			}
 #endif

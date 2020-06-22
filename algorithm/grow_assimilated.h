@@ -66,15 +66,18 @@ public:
 						cs.settleFlowSendingPins(e);
 					}
 
-					for (const Pin& pv : scanAllPins ? hg.pinsOf(e) : hg.pinsSendingFlowInto(e)) {
-						const Node v = pv.pin;
-						assert(!n.isTargetReachable(v));
-						assert(reach_and_settle || n.isSourceReachable(v) || cs.isIsolated(v));
-						if (!n.isSource(v) && !cs.isIsolated(v)) {
-							cs.settleNode(v);
-							nodes_to_scan.push(v);
-						}
+					for (const Pin& pv : hg.pinsOf(e)) {
+                        if (scanAllPins || hg.flowSent(pv) > 0) {
+                            const Node v = pv.pin;
+                            assert(!n.isTargetReachable(v));
+                            assert(reach_and_settle || n.isSourceReachable(v) || cs.isIsolated(v));
+                            if (!n.isSource(v) && !cs.isIsolated(v)) {
+                                cs.settleNode(v);
+                                nodes_to_scan.push(v);
+                            }
+                        }
 					}
+
 				}
 			}
 		}
