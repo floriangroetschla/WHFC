@@ -342,7 +342,7 @@ namespace whfc {
                     inQueue[u] = false;
                 }
 
-                if (numEdgeScans > 12 * hg.numLawlerNodes() + 2 * hg.numHyperedges()) {
+                if (numEdgeScans > 12 * hg.numLawlerNodes() + hg.numHyperedges() + 2 * hg.numPins()) {
                     setLabels(cs);
                     numEdgeScans = 0;
                 }
@@ -383,8 +383,6 @@ namespace whfc {
             std::fill(current_pin_e_in.begin(), current_pin_e_in.end(), PinIterator(0));
             std::fill(current_pin_e_out.begin(), current_pin_e_out.end(), PinIterator(0));
             std::fill(current_hyperedge.begin(), current_hyperedge.end(), InHeIndex::Invalid());
-
-            //hg.printHypergraph(std::cout);
 
             // Source and target of the bfs
             const Node source = *cs.targetPiercingNodes.begin()->node;
@@ -430,7 +428,7 @@ namespace whfc {
                             queue.push(e_in);
                         }
                         for (Pin& pin : hg.pinsOf(e)) {
-                            if (hg.label(pin.pin) == n && (hg.flowReceived(pin.he_inc_iter) > 0) && (!cs.n.isSourceReachable(pin.pin))) {
+                            if (hg.label(pin.pin) == n && (hg.flowReceived(pin.he_inc_iter) > 0) && (!cs.n.isSourceReachable__unsafe__(pin.pin))) {
                                 hg.label(pin.pin) = currentLabel;
                                 current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
                                 queue.push(pin.pin);
@@ -446,7 +444,7 @@ namespace whfc {
                             queue.push(e_out);
                         }
                         for (Pin& pin : hg.pinsOf(e)) {
-                            if (hg.label(pin.pin) == n && (!cs.n.isSourceReachable(pin.pin))) {
+                            if (hg.label(pin.pin) == n && (!cs.n.isSourceReachable__unsafe__(pin.pin))) {
                                 hg.label(pin.pin) = currentLabel;
                                 current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
                                 queue.push(pin.pin);
