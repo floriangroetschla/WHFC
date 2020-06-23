@@ -21,7 +21,7 @@ int main(int argc, const char *argv[]) {
     hg.maxNumNodes = hg.numNodes();
 
     const whfc_rb::PartitionConfig config = {true, "D", true, true, 1, std::filesystem::path(argv[1]).filename(), 2};
-    whfc::HyperFlowCutter<whfc::PushRelabel, whfc::LawlerFlowHypergraph> hfc(hg, 0, config);
+    whfc::HyperFlowCutter<whfc::Dinic, whfc::FlowHypergraphBuilder> hfc(hg, 0, config);
     whfc::TimeReporter timer("Total");
 
     whfc::WHFC_IO::WHFCInformation i = whfc::WHFC_IO::readAdditionalInformation(argv[1]);
@@ -31,6 +31,10 @@ int main(int argc, const char *argv[]) {
     hfc.upperFlowBound = i.upperFlowBound;
 
     bool hfc_result = hfc.enumerateCutsUntilBalancedOrFlowBoundExceeded(i.s, i.t);
+    std::cout << "num_nodes: " << hg.numNodes() << std::endl;
+    std::cout << "num_hyperedges: " << hg.numHyperedges() << std::endl;
+    std::cout << "flow_value: " << hfc.cs.flowValue << std::endl;
+
     timer.merge(hfc.timer, "Total", "HyperFlowCutter");
 
     timer.report(std::cout);

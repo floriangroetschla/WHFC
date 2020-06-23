@@ -31,7 +31,7 @@ namespace whfc_rb {
                                               partition.partWeight(part1) / maxBlockWeight1);
 
             timer.start("Extraction", "WHFCRefinerTwoWay");
-            FlowHypergraphBuilderExtractor<whfc::FlowHypergraphBuilder>::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1, hfc.cs.borderNodes.distance, timer);
+            ExtractorType::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1, hfc.cs.borderNodes.distance, timer);
             timer.stop("Extraction");
 
             // call WHFC to improve the bisection
@@ -42,7 +42,7 @@ namespace whfc_rb {
 
             if (extractor_info.cutAtStake == extractor_info.baseCut) return false;
 
-            static constexpr bool write_snapshot = true;
+            static constexpr bool write_snapshot = false;
             if constexpr (write_snapshot) {
                 writeSnapshot(extractor_info);
             }
@@ -80,15 +80,16 @@ namespace whfc_rb {
         }
 
     private:
-        FlowHypergraphBuilderExtractor<whfc::FlowHypergraphBuilder> extractor;
-        whfc::HyperFlowCutter<whfc::Dinic, whfc::FlowHypergraph> hfc;
+        using ExtractorType = FlowHypergraphBuilderExtractor<whfc::LawlerFlowHypergraph>;
+        ExtractorType extractor;
+        whfc::HyperFlowCutter<whfc::PushRelabel, whfc::LawlerFlowHypergraph> hfc;
         whfc::TimeReporter timer;
         const PartitionConfig& config;
 
         size_t instance_counter = 0;
 
         template<class PartitionImpl>
-        void reassign(PartitionImpl &partition, FlowHypergraphBuilderExtractor<whfc::FlowHypergraphBuilder>::ExtractorInfo &info, PartitionID part0,
+        void reassign(PartitionImpl &partition, ExtractorType::ExtractorInfo &info, PartitionID part0,
                       PartitionID part1) {
             for (whfc::Node localID : extractor.localNodeIDs()) {
                 assert(localID < extractor.fhgb.numNodes());
@@ -100,7 +101,7 @@ namespace whfc_rb {
             }
         }
 
-        void writeSnapshot(FlowHypergraphBuilderExtractor<whfc::FlowHypergraphBuilder>::ExtractorInfo &extractor_info) {
+        void writeSnapshot(ExtractorType::ExtractorInfo &extractor_info) {
             whfc::WHFC_IO::WHFCInformation i = {
                     {hfc.cs.maxBlockWeight(0), hfc.cs.maxBlockWeight(1)},
                     extractor_info.cutAtStake - extractor_info.baseCut,
