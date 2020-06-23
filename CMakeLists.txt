@@ -37,3 +37,4 @@ add_executable(KWayRefinementParallel test_kway_parallel.cpp)
 target_link_libraries(KWayRefinementParallel ${CMAKE_SOURCE_DIR}/extern/libpatoh.a)
 target_link_libraries(KWayRefinementParallel ${TBB_LIBRARIES})
 
+add_executable(SnapshotRunner snapshot_runner.cpp)
