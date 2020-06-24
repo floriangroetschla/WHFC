@@ -22,13 +22,14 @@ int main(int argc, const char *argv[]) {
     hfc.cs.setMaxBlockWeight(0, i.maxBlockWeight[0]);
     hfc.cs.setMaxBlockWeight(1, i.maxBlockWeight[1]);
     hfc.upperFlowBound = i.upperFlowBound;
+    hfc.timer.active = false;
 
+    timer.start("Total");
     bool hfc_result = hfc.enumerateCutsUntilBalancedOrFlowBoundExceeded(i.s, i.t);
+    timer.stop("Total");
     std::cout << "num_nodes: " << hg.numNodes() << std::endl;
     std::cout << "num_hyperedges: " << hg.numHyperedges() << std::endl;
     std::cout << "flow_value: " << hfc.cs.flowValue << std::endl;
-
-    timer.merge(hfc.timer, "Total", "HyperFlowCutter");
 
     timer.report(std::cout);
 
