@@ -20,8 +20,8 @@ int main(int argc, const char *argv[]) {
     hg.maxNumHyperedges = hg.numHyperedges();
     hg.maxNumNodes = hg.numNodes();
 
-    const whfc_rb::PartitionConfig config = {true, "D", true, true, 1, std::filesystem::path(argv[1]).filename(), 2};
-    whfc::HyperFlowCutter<whfc::Dinic, whfc::FlowHypergraphBuilder> hfc(hg, 0, config);
+    const whfc_rb::PartitionConfig config = {true, "D", true, true, 1, argv[1], 2};
+    whfc::HyperFlowCutter<whfc::PushRelabel, whfc::LawlerFlowHypergraph> hfc(hg, 0, config);
     whfc::TimeReporter timer("Total");
 
     whfc::WHFC_IO::WHFCInformation i = whfc::WHFC_IO::readAdditionalInformation(argv[1]);
