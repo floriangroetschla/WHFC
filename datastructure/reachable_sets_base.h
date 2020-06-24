@@ -39,14 +39,17 @@ namespace whfc {
 		
 		inline void unsettleSource(const Node u) {
 			sourceWeight -= hg.nodeWeight(u);
+			numSettledNodes--;
 		}
 		
 		inline void unsettleTarget(const Node u) {
 			targetWeight -= hg.nodeWeight(u);
+			numSettledNodes--;
 		}
 
 		inline void settle(const Node u) {
 			sourceWeight += hg.nodeWeight(u);
+			numSettledNodes++;
 		}
 		
 		inline void reachTarget(const Node u) {
@@ -55,6 +58,7 @@ namespace whfc {
 		
 		inline void settleTarget(const Node u) {
 			targetWeight += hg.nodeWeight(u);
+			numSettledNodes++;
 		}
 
 		void resetSourceReachableToSource() {
@@ -74,6 +78,7 @@ namespace whfc {
 		}
 
 		NodeWeight sourceReachableWeight = NodeWeight(0), sourceWeight = NodeWeight(0), targetReachableWeight = NodeWeight(0), targetWeight = NodeWeight(0);
+		size_t numSettledNodes = 0;
 		
 	protected:
 		const FlowHypergraph& hg;

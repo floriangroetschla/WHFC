@@ -244,8 +244,8 @@ namespace whfc {
             //std::fill(vec_label.begin(), vec_label.end(), 0);
         }
 
-        void equalizeLabels() {
-            std::fill(vec_label.begin(), vec_label.end(), numLawlerNodes());
+        void equalizeLabels(size_t n) {
+            std::fill(vec_label.begin(), vec_label.end(), n);
         }
 
         void printExcessAndLabel() {

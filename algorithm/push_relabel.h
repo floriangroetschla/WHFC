@@ -346,7 +346,7 @@ namespace whfc {
                     inQueue[u] = false;
                 }
 
-                if (numEdgeScans > 12 * hg.numLawlerNodes() + hg.numHyperedges() + 2 * hg.numPins()) {
+                if (numEdgeScans > 12 * (hg.numLawlerNodes() - cs.n.numSettledNodes) + hg.numHyperedges() + 2 * hg.numPins()) {
                     setLabels(cs);
                     numEdgeScans = 0;
                 }
@@ -383,7 +383,9 @@ namespace whfc {
         void setLabels(CutterState<Type>& cs) {
             queue.clear();
 
-            hg.equalizeLabels();
+            const size_t n = (hg.numNodes() - cs.n.numSettledNodes) + 2 * hg.numHyperedges();
+
+            hg.equalizeLabels(n);
 
             std::fill(current_pin_e_in.begin(), current_pin_e_in.end(), PinIterator(0));
             std::fill(current_pin_e_out.begin(), current_pin_e_out.end(), PinIterator(0));
@@ -399,8 +401,6 @@ namespace whfc {
             queue.finishNextLayer();
 
             size_t currentLabel = 1;
-
-            const size_t n = hg.numLawlerNodes();
 
             while (!queue.empty()) {
                 while (!queue.currentLayerEmpty()) {
