@@ -28,7 +28,7 @@ namespace whfc {
 
         static constexpr size_t ALPHA = 6;
         static constexpr size_t BETA = 12;
-        static constexpr float globalUpdateFreq = 0.5;
+        float globalUpdateFreq = 0.5;
 
         LawlerFlowHypergraph& hg;
         LayeredQueue<Node> queue;
@@ -69,6 +69,7 @@ namespace whfc {
             numPushes = 0;
             numRelabel = 0;
             workSinceLastRelabel = 0;
+            globalUpdateFreq = 0.5;
         }
 
         ScanList& getScanList() {
@@ -296,7 +297,8 @@ namespace whfc {
             timer.stop("initialize");
 
             timer.start("setLabels", "exhaustFlow");
-            std::array<size_t, 2> numScans = globalUpdate(cs);
+            size_t n = hg.numNodes() - cs.n.numSettledNodes + 2 * hg.numHyperedges();
+            std::array<size_t, 2> numScans = globalUpdate(cs, n);
             timer.stop("setLabels");
 
             size_t nm = ALPHA * numScans[0] + numScans[1];
@@ -312,7 +314,7 @@ namespace whfc {
                     const Hyperedge e = inc_u.e;
                     if (!cs.h.areAllPinsSourceReachable__unsafe__(e)) {
                         const Node e_out = hg.edge_node_out(e);
-                        if (hg.label(e_out) != hg.numLawlerNodes()) {
+                        if (hg.label(e_out) != n) {
                             Flow residual = hg.flowReceived(inc_iter);
                             if (residual > 0) {
                                 hg.push_node_to_edgeOut(sp.node, inc_iter, residual);
@@ -321,7 +323,7 @@ namespace whfc {
                         }
 
                         const Node e_in = hg.edge_node_in(e);
-                        if (hg.label(e_in) != hg.numLawlerNodes()) {
+                        if (hg.label(e_in) != n) {
                             Flow residual = hg.capacity(e);
                             if (residual > 0) {
                                 hg.push_node_to_edgeIn(sp.node, inc_iter, residual);
@@ -387,12 +389,12 @@ namespace whfc {
             return f;
         }
 
-        std::array<size_t, 2> globalUpdate(CutterState<Type>& cs, size_t numNodes = 0) {
+        size_t scannedNodesLastIteration = 0;
+
+        std::array<size_t, 2> globalUpdate(CutterState<Type>& cs, size_t n) {
             size_t scannedNodes = 0;
             size_t scannedEdges = 0;
             queue.clear();
-
-            const size_t n = numNodes == 0 ? (hg.numNodes() - cs.n.numSettledNodes) + 2 * hg.numHyperedges() : numNodes;
 
             hg.equalizeLabels(n);
 
@@ -412,8 +414,8 @@ namespace whfc {
             size_t currentLabel = 1;
 
             while (!queue.empty()) {
-                scannedNodes++;
                 while (!queue.currentLayerEmpty()) {
+                    scannedNodes++;
                     const Node u = queue.pop();
                     if (hg.isNode(u)) {
                         for (InHe& inc_u : hg.hyperedgesOf(u)) {
@@ -475,6 +477,8 @@ namespace whfc {
                 currentLabel++;
                 queue.finishNextLayer();
             }
+            if (scannedNodes == scannedNodesLastIteration) globalUpdateFreq /= 2;
+            scannedNodesLastIteration = scannedNodes;
             return {scannedNodes, scannedEdges};
         }
 
