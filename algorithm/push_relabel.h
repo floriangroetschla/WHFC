@@ -354,7 +354,7 @@ namespace whfc {
                 }
 
                 if (workSinceLastRelabel * globalUpdateFreq > nm) {
-                    globalUpdate(cs);
+                    globalUpdate(cs, numScans[0]);
                     workSinceLastRelabel = 0;
                 }
             }
@@ -387,12 +387,12 @@ namespace whfc {
             return f;
         }
 
-        std::array<size_t, 2> globalUpdate(CutterState<Type>& cs) {
+        std::array<size_t, 2> globalUpdate(CutterState<Type>& cs, size_t numNodes = 0) {
             size_t scannedNodes = 0;
             size_t scannedEdges = 0;
             queue.clear();
 
-            const size_t n = (hg.numNodes() - cs.n.numSettledNodes) + 2 * hg.numHyperedges();
+            const size_t n = numNodes == 0 ? (hg.numNodes() - cs.n.numSettledNodes) + 2 * hg.numHyperedges() : numNodes;
 
             hg.equalizeLabels(n);
 
