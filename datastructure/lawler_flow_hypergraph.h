@@ -6,13 +6,14 @@
 #include <tbb/parallel_for_each.h>
 #include "flow_hypergraph_builder.h"
 #include "../recursive_bisection/mock_builder.h"
+#include "../recursive_bisection/timestamp_set.hpp"
 
 namespace whfc {
     class LawlerFlowHypergraph : public FlowHypergraphBuilder {
     public:
         using Base = FlowHypergraphBuilder;
 
-        LawlerFlowHypergraph() : Base() {
+        LawlerFlowHypergraph() : Base(), vec_excess(0,0), vec_label(0,0) {
             clear();
         }
 
@@ -21,9 +22,8 @@ namespace whfc {
             reinitialize(nNodes);
         }*/
 
-        //use to get rid of any allocations
-        LawlerFlowHypergraph(size_t maxNumNodes, size_t maxNumHyperedges) : Base(maxNumNodes, maxNumHyperedges), vec_excess(numLawlerNodes(), 0), vec_label(), in_flow(), out_flow() {
-            //don't do clean-up here yet, so that we can use the numbers for allocating the remaining datastructures
+        LawlerFlowHypergraph(size_t maxNumNodes, size_t maxNumHyperedges) : Base(maxNumNodes, maxNumHyperedges), vec_excess(numLawlerNodes(), 0), vec_label(numLawlerNodes(), numLawlerNodes()), in_flow(), out_flow() {
+
         }
 
         void clear() {
@@ -45,8 +45,6 @@ namespace whfc {
         void shrink_to_fit() {
             Base::shrink_to_fit();
 
-            vec_excess.shrink_to_fit();
-            vec_label.shrink_to_fit();
             in_flow.shrink_to_fit();
             out_flow.shrink_to_fit();
         }
@@ -238,14 +236,13 @@ namespace whfc {
         }
 
         void initialize_for_push_relabel() {
-            vec_excess.resize(numLawlerNodes());
-            vec_label.resize(numLawlerNodes());
-            std::fill(vec_excess.begin(), vec_excess.end(), 0);
-            //std::fill(vec_label.begin(), vec_label.end(), 0);
+            vec_excess.clear();
+            vec_label.clear();
         }
 
         void equalizeLabels(size_t n) {
-            std::fill(vec_label.begin(), vec_label.end(), n);
+            vec_label.defaultValue = n;
+            vec_label.clear();
         }
 
         void printExcessAndLabel() {
@@ -301,13 +298,19 @@ namespace whfc {
 
         void finalize() {
             Base::finalize();
-            in_flow = std::vector<Flow>(numPins(), 0);
-            out_flow = std::vector<Flow>(numPins(), 0);
+            in_flow.resize(numPins(), 0);
+            out_flow.resize(numPins(), 0);
+            std::fill(in_flow.begin(), in_flow.end(), 0);
+            std::fill(out_flow.begin(), out_flow.end(), 0);
+            vec_excess.resize(numLawlerNodes());
+            vec_label.resize(numLawlerNodes());
+            vec_excess.clear();
+            vec_label.clear();
         }
 
     private:
-        std::vector<Flow> vec_excess;
-        std::vector<size_t> vec_label;
+        ldc::TimestampMap<Flow> vec_excess;
+        ldc::TimestampMap<size_t> vec_label;
 
         std::vector<Flow> in_flow;
         std::vector<Flow> out_flow;

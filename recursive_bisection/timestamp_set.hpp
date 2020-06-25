@@ -62,7 +62,16 @@ public:
 		generation++;	
 	}
 
-	const T defaultValue;
+	void resize(size_t n) {
+	    timestamps.resize(n, 0);
+	    map.resize(n, defaultValue);
+	}
+
+	size_t size() {
+	    return timestamps.size();
+	}
+
+	T defaultValue;
 private:
 	std::vector<TimestampT> timestamps;
 	TimestampT generation;
