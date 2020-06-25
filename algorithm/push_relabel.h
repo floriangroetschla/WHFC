@@ -284,6 +284,38 @@ namespace whfc {
             }
         }
 
+        void pushRelabel(CutterState<Type>& cs, const size_t nm, const size_t n, const bool keepNodesWithHighLabel) {
+            while (!nodes.empty()) {
+                Node u = nodes.front();
+                nodes.pop_front();
+
+                if (!keepNodesWithHighLabel && hg.label(u) >= n) {
+                    continue;
+                }
+
+                if (hg.isNode(u)) {
+                    dischargeNode(u, cs);
+                } else if (hg.is_edge_in(u)) {
+                    dischargeEdgeNodeIn(u, cs);
+                } else {
+                    assert(hg.is_edge_out(u));
+                    dischargeEdgeNodeOut(u, cs);
+                }
+
+
+                if (hg.excess(u) > 0) {
+                    nodes.push_back(u);
+                } else {
+                    inQueue[u] = false;
+                }
+
+                if (!keepNodesWithHighLabel && workSinceLastRelabel * globalUpdateFreq > nm) {
+                    globalUpdate(cs, n);
+                    workSinceLastRelabel = 0;
+                }
+            }
+        }
+
         Flow exhaustFlow(CutterState<Type>& cs) {
             assert(cs.sourcePiercingNodes.size() == 1);
             timer.start("exhaustFlow");
@@ -335,31 +367,26 @@ namespace whfc {
                 piercingNode = sp.node;
             }
 
-            while (!nodes.empty()) {
-                Node u = nodes.front();
-                nodes.pop_front();
+            timer.start("phase1", "mainLoop");
+            // Phase 1
+            pushRelabel(cs, nm, numScans[0], false);
+            timer.stop("phase1");
 
-                if (hg.isNode(u)) {
-                    dischargeNode(u, cs);
-                } else if (hg.is_edge_in(u)) {
-                    dischargeEdgeNodeIn(u, cs);
+            assert(nodes.empty());
+
+            timer.start("phase2", "mainLoop");
+            // Phase 2
+            hg.equalizeLabels(numScans[0]);
+            for (Node node_id(0); node_id < hg.numLawlerNodes(); ++node_id) {
+                if (hg.excess(node_id) > 0 && node_id != piercingNode && node_id != target) {
+                    assert(inQueue[node_id]);
+                    nodes.push_back(node_id);
                 } else {
-                    assert(hg.is_edge_out(u));
-                    dischargeEdgeNodeOut(u, cs);
-                }
-
-
-                if (hg.excess(u) > 0) {
-                    nodes.push_back(u);
-                } else {
-                    inQueue[u] = false;
-                }
-
-                if (workSinceLastRelabel * globalUpdateFreq > nm) {
-                    globalUpdate(cs, numScans[0]);
-                    workSinceLastRelabel = 0;
+                    assert(!inQueue[node_id]);
                 }
             }
+            pushRelabel(cs, nm, numScans[0], true);
+            timer.stop("phase2");
             timer.stop("mainLoop");
 
             timer.start("sortPins", "exhaustFlow");
@@ -384,7 +411,7 @@ namespace whfc {
             timer.stop("growReachable");
             timer.stop("exhaustFlow");
 
-            //std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numLawlerNodes: " << hg.numLawlerNodes() << std::endl;
+            std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numLawlerNodes: " << hg.numLawlerNodes() << std::endl;
 
             return f;
         }
