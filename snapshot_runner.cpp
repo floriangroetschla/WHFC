@@ -29,7 +29,8 @@ int main(int argc, const char *argv[]) {
     timer.stop("Total");
     std::cout << "num_nodes: " << hg.numNodes() << std::endl;
     std::cout << "num_hyperedges: " << hg.numHyperedges() << std::endl;
-    std::cout << "flow_value: " << hfc.cs.flowValue << std::endl;
+    std::cout << "flow_value: " << (hfc.cs.hasCut ? hfc.cs.flowValue : 0) << std::endl;
+
 
     timer.report(std::cout);
 
