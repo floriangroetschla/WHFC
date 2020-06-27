@@ -36,6 +36,7 @@ namespace whfc {
         struct StackFrame {
             Node u;
             InHeIndex parent_he_it;
+            InHeIndex child_he_it;
         };
         FixedCapacityStack<StackFrame> stack;
 
@@ -420,6 +421,96 @@ namespace whfc {
             std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numLawlerNodes: " << hg.numLawlerNodes() << std::endl;
 
             return f;
+        }
+
+        Flow phase2(CutterState<Type>& cs) {
+            auto& n = cs.n;
+            auto& h = cs.h;
+
+            const Node source = *cs.sourcePiercingNodes.begin()->node;
+            const Node target = *cs.targetPiercingNodes.begin()->node;
+
+            for (const Hyperedge e : hg.hyperedgeIDs()) {
+                hg.flow(e) = 0;
+            }
+
+            assert(stack.empty());
+            stack.push({ target, InHeIndex::Invalid(), InHeIndex::Invalid() });
+
+            while (!stack.empty()) {
+                const Node u = stack.top().u;
+                Node v = invalidNode;
+                InHeIndex inc_v_it = InHeIndex::Invalid();
+                InHeIndex inc_u_it = InHeIndex::Invalid();
+                for (InHeIndex he_it = hg.beginIndexHyperedges(u) ; he_it < hg.endIndexHyperedges(u); he_it++) {
+                    InHe& inc_u = hg.getInHe(he_it);
+                    const Hyperedge e = inc_u.e;
+                    const Flow residual_to_u = hg.flowReceived(inc_u);
+                    //assert((residual > 0) == (!hg.isSaturated(e) || hg.absoluteFlowReceived(inc_u) > 0));
+
+                    if (residual_to_u > 0) {
+                        for (Pin& pin : hg.pinsOf(e)) {
+                            if (hg.flowSent(pin.he_inc_iter) > 0) {
+                                //const Flow residual = std::min(residual_to_u, hg.flowSent(pin.he_inc_iter));
+                                v = pin.pin;
+                                inc_v_it = pin.he_inc_iter;
+                                inc_u_it = he_it;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (v != invalidNode)
+                        break;
+                }
+
+                if (v == invalidNode) {
+                    inQueue[stack.top().u] = false;
+                    stack.pop();
+                }
+                else {
+                    if (v == source) {
+                        stack.top().child_he_it = inc_u_it;
+                        augment(inc_v_it);
+                    } else if (inQueue[v]) {
+                        stack.top().child_he_it = inc_u_it;
+                        removeCircularFlow(v, inc_v_it);
+                    } else {
+                        stack.top().child_he_it = inc_u_it;
+                        stack.push({v, inc_v_it, InHeIndex::Invalid()});
+                        inQueue[v] = true;
+                    }
+                }
+
+            }
+        }
+
+        void removeCircularFlow(Node u, InHeIndex inc_u_it) {
+
+        }
+
+
+        void augment(InHeIndex inc_source_it) {
+            Flow bottleneckCapacity = maxFlow;
+            int64_t lowest_bottleneck = std::numeric_limits<int64_t>::max();
+            InHeIndex inc_v_it = inc_source_it;
+            for (int64_t stack_pointer = stack.size() - 1; stack_pointer >= 0; --stack_pointer) {
+                const StackFrame& t = stack.at(stack_pointer);
+                const Flow residual = std::min(hg.flowSent(inc_v_it), hg.flowReceived(t.child_he_it));
+                if (residual <= bottleneckCapacity) {
+                    bottleneckCapacity = residual;
+                    lowest_bottleneck = stack_pointer;
+                }
+                inc_v_it = t.parent_he_it;
+            }
+            assert(bottleneckCapacity > 0);
+            inc_v_it = inc_source_it;
+            for (int64_t stack_pointer = stack.size() - 1; stack_pointer >= 0; --stack_pointer) {
+                const StackFrame& t = stack.at(stack_pointer);
+                hg.routeFlow(inc_v_it, t.child_he_it, bottleneckCapacity);
+                inc_v_it = t.parent_he_it;
+            }
+            stack.popDownTo(lowest_bottleneck);
         }
 
         std::array<size_t, 2> globalUpdate(CutterState<Type>& cs, size_t n) {

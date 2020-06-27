@@ -69,6 +69,19 @@ namespace whfc {
         inline Flow flowIn(InHeIndex inc) const { return in_flow[inc]; }
         inline Flow flowOut(InHeIndex inc) const { return out_flow[inc]; }
 
+        void routeFlow(const InHeIndex he_sending, const InHeIndex he_receiving, const Flow f) {
+            assert(getInHe(he_sending).e == getInHe(he_receiving).e);
+
+            InHe& in_he_sending = getInHe(he_sending);
+            InHe& in_he_receiving = getInHe(he_receiving);
+            in_he_sending.flow += flowSent(f);
+            in_he_receiving.flow -= flowSent(f);
+            flow(in_he_sending.e) += f;
+
+            flowIn(he_sending) -= f;
+            flowOut(he_receiving) -= f;
+        }
+
         inline void push_node_to_edgeIn(const Node u, const InHeIndex inc, const Flow f) {
             assert(f > 0);
 
