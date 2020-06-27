@@ -28,11 +28,16 @@ namespace whfc {
 
         static constexpr size_t ALPHA = 6;
         static constexpr size_t BETA = 12;
-        float globalUpdateFreq = 0.5;
+        static constexpr float globalUpdateFreq = 1;
 
         LawlerFlowHypergraph& hg;
         LayeredQueue<Node> queue;
         boost::circular_buffer<Node> nodes;
+        struct StackFrame {
+            Node u;
+            InHeIndex parent_he_it;
+        };
+        FixedCapacityStack<StackFrame> stack;
 
         int direction = 0;
 
@@ -57,7 +62,7 @@ namespace whfc {
 
         size_t numPushes, numRelabel, workSinceLastRelabel;
 
-        PushRelabel(LawlerFlowHypergraph& hg, TimeReporter& timer, size_t numThreads) : hg(hg), nodes(hg.maxNumLawlerNodes()), timer(timer), inQueue(hg.maxNumLawlerNodes()),
+        PushRelabel(LawlerFlowHypergraph& hg, TimeReporter& timer, size_t numThreads) : hg(hg), nodes(hg.maxNumLawlerNodes()), stack(hg.maxNumLawlerNodes()), timer(timer), inQueue(hg.maxNumLawlerNodes()),
             current_hyperedge(hg.maxNumNodes, InHeIndex::Invalid()), current_pin_e_in(hg.maxNumHyperedges), current_pin_e_out(hg.maxNumHyperedges)
         {
 
@@ -69,7 +74,6 @@ namespace whfc {
             numPushes = 0;
             numRelabel = 0;
             workSinceLastRelabel = 0;
-            globalUpdateFreq = 0.5;
         }
 
         ScanList& getScanList() {
@@ -310,7 +314,9 @@ namespace whfc {
                 }
 
                 if (!keepNodesWithHighLabel && workSinceLastRelabel * globalUpdateFreq > nm) {
+                    timer.start("globalUpdate", "phase1");
                     globalUpdate(cs, n);
+                    timer.stop("globalUpdate");
                     workSinceLastRelabel = 0;
                 }
             }
@@ -416,18 +422,12 @@ namespace whfc {
             return f;
         }
 
-        size_t scannedNodesLastIteration = 0;
-
         std::array<size_t, 2> globalUpdate(CutterState<Type>& cs, size_t n) {
             size_t scannedNodes = 0;
             size_t scannedEdges = 0;
             queue.clear();
 
             hg.equalizeLabels(n);
-
-            std::fill(current_pin_e_in.begin(), current_pin_e_in.end(), PinIterator(0));
-            std::fill(current_pin_e_out.begin(), current_pin_e_out.end(), PinIterator(0));
-            std::fill(current_hyperedge.begin(), current_hyperedge.end(), InHeIndex::Invalid());
 
             // Source and target of the bfs
             const Node source = *cs.targetPiercingNodes.begin()->node;
@@ -504,8 +504,7 @@ namespace whfc {
                 currentLabel++;
                 queue.finishNextLayer();
             }
-            if (scannedNodes == scannedNodesLastIteration) globalUpdateFreq /= 2;
-            scannedNodesLastIteration = scannedNodes;
+
             return {scannedNodes, scannedEdges};
         }
 
