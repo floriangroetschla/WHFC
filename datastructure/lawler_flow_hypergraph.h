@@ -69,14 +69,30 @@ namespace whfc {
         inline Flow flowIn(InHeIndex inc) const { return in_flow[inc]; }
         inline Flow flowOut(InHeIndex inc) const { return out_flow[inc]; }
 
-        void routeFlow(const InHeIndex he_sending, const InHeIndex he_receiving, const Flow f) {
-            assert(getInHe(he_sending).e == getInHe(he_receiving).e);
+        void routeFlow(const InHeIndex in_he_u, const InHeIndex in_he_v, Flow flow_delta) {
+            InHe& inc_u = getInHe(in_he_u);
+            InHe& inc_v = getInHe(in_he_v);
 
-            InHe& in_he_sending = getInHe(he_sending);
-            InHe& in_he_receiving = getInHe(he_receiving);
-            in_he_sending.flow += flowSent(f);
-            in_he_receiving.flow -= flowSent(f);
-            
+            Flow flow_delta_on_v_eOut_eIn_u = std::min({ absoluteFlowSent(inc_v), absoluteFlowReceived(inc_u), flow_delta });
+            inc_u.flow += flowSent(flow_delta_on_v_eOut_eIn_u);
+            inc_v.flow -= flowSent(flow_delta_on_v_eOut_eIn_u);
+            flow_delta -= flow_delta_on_v_eOut_eIn_u;
+
+            Flow flow_delta_on_v_eOut_u = std::min(flow_delta, absoluteFlowReceived(inc_u));
+            inc_u.flow += flowSent(flow_delta_on_v_eOut_u);
+            inc_v.flow -= flowSent(flow_delta_on_v_eOut_u);
+            //does not influence flow(e)
+            flow_delta -= flow_delta_on_v_eOut_u;
+
+            Flow flow_delta_on_v_eIn_u = std::min(flow_delta, absoluteFlowSent(inc_v));
+            inc_u.flow += flowSent(flow_delta_on_v_eIn_u);
+            inc_v.flow -= flowSent(flow_delta_on_v_eIn_u);
+            //does not influence flow(e)
+            flow_delta -= flow_delta_on_v_eIn_u;
+
+            Flow flow_delta_on_v_eIn_eOut_u = flow_delta;
+            inc_u.flow += flowSent(flow_delta_on_v_eIn_eOut_u);
+            inc_v.flow -= flowSent(flow_delta_on_v_eIn_eOut_u);
         }
 
         inline void push_node_to_edgeIn(const Node u, const InHeIndex inc, const Flow f) {
