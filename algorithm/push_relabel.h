@@ -383,6 +383,7 @@ namespace whfc {
 
             timer.start("phase2", "mainLoop");
             // Phase 2
+            /*
             hg.equalizeLabels(numScans[0]);
             for (Node node_id(0); node_id < hg.numLawlerNodes(); ++node_id) {
                 if (hg.excess(node_id) > 0 && node_id != piercingNode && node_id != target) {
@@ -392,21 +393,22 @@ namespace whfc {
                     assert(!inQueue[node_id]);
                 }
             }
-            pushRelabel(cs, nm, numScans[0], true);
+            pushRelabel(cs, nm, numScans[0], true);*/
+
+            phase2(cs);
             timer.stop("phase2");
             timer.stop("mainLoop");
 
-            timer.start("sortPins", "exhaustFlow");
-            //hg.sortPins();
+            timer.start("writeBackFlow", "exhaustFlow");
             hg.writeBackFlow();
-            timer.stop("sortPins");
+            timer.stop("writeBackFlow");
 
             resetSourcePiercingNodeDistances(cs);
 
             Flow f = 0;
 
-            for (auto& sp : cs.sourcePiercingNodes) {
-                f -= hg.excess(sp.node);
+            for (auto& sp : cs.targetPiercingNodes) {
+                f += hg.excess(sp.node);
             }
             cs.flowValue += f;
 
@@ -427,6 +429,8 @@ namespace whfc {
             auto& n = cs.n;
             auto& h = cs.h;
 
+            inQueue = std::vector<bool>(hg.numLawlerNodes(), false);
+
             const Node source = *cs.sourcePiercingNodes.begin()->node;
             const Node target = *cs.targetPiercingNodes.begin()->node;
 
@@ -445,13 +449,14 @@ namespace whfc {
                 for (InHeIndex he_it = hg.beginIndexHyperedges(u) ; he_it < hg.endIndexHyperedges(u); he_it++) {
                     InHe& inc_u = hg.getInHe(he_it);
                     const Hyperedge e = inc_u.e;
-                    const Flow residual_to_u = hg.flowReceived(inc_u);
+                    const Flow residual_to_u = hg.flowReceived(inc_u) - hg.flowSent(inc_u) + hg.flowSent(inc_u.flow);
                     //assert((residual > 0) == (!hg.isSaturated(e) || hg.absoluteFlowReceived(inc_u) > 0));
 
                     if (residual_to_u > 0) {
                         for (Pin& pin : hg.pinsOf(e)) {
-                            if (hg.flowSent(pin.he_inc_iter) > 0) {
-                                //const Flow residual = std::min(residual_to_u, hg.flowSent(pin.he_inc_iter));
+                            InHe& inc_v = hg.getInHe(pin.he_inc_iter);
+                            const Flow residual_from_v = hg.flowSent(inc_v) - hg.flowReceived(inc_v) - hg.flowSent(inc_v.flow);
+                            if (pin.pin != u && residual_from_v > 0) {
                                 v = pin.pin;
                                 inc_v_it = pin.he_inc_iter;
                                 inc_u_it = he_it;
@@ -486,17 +491,56 @@ namespace whfc {
         }
 
         void removeCircularFlow(Node u, InHeIndex inc_u_it) {
+            std::cout << "removeCircularFlow" << std::endl;
+            Flow bottleneckCapacity = maxFlow;
+            int64_t lowest_bottleneck = std::numeric_limits<int64_t>::max();
+            InHeIndex inc_v_it = inc_u_it;
+            for (int64_t stack_pointer = stack.size() - 1; stack_pointer >= 0; --stack_pointer) {
+                const StackFrame& t = stack.at(stack_pointer);
+                InHe& inc_v = hg.getInHe(inc_v_it);
+                InHe& inc_u = hg.getInHe(t.child_he_it);
+                const Flow residual_from_v = hg.flowSent(inc_v) - hg.flowReceived(inc_v) - hg.flowSent(inc_v.flow);
+                const Flow residual_to_u = hg.flowReceived(inc_u) - hg.flowSent(inc_u) + hg.flowSent(inc_u.flow);
+                const Flow residual = std::min(residual_from_v, residual_to_u);
+                if (residual <= bottleneckCapacity) {
+                    bottleneckCapacity = residual;
+                    lowest_bottleneck = stack_pointer;
+                }
+                if (t.u == u) break;
+                inc_v_it = t.parent_he_it;
+            }
+            assert(bottleneckCapacity > 0);
+            std::cout << bottleneckCapacity << std::endl;
+            inc_v_it = inc_u_it;
+            for (int64_t stack_pointer = stack.size() - 1; stack_pointer >= 0; --stack_pointer) {
+                const StackFrame& t = stack.at(stack_pointer);
+                std::cout << t.u << " ";
+                //hg.routeFlow(inc_v_it, t.child_he_it, bottleneckCapacity);
 
+                hg.flowIn(inc_v_it) -= bottleneckCapacity;
+                hg.flowOut(t.child_he_it) -= bottleneckCapacity;
+
+                inc_v_it = t.parent_he_it;
+                if (stack_pointer > lowest_bottleneck) inQueue[t.u] = false;
+                if (t.u == u) break;
+            }
+            std::cout << std::endl;
+            stack.popDownTo(lowest_bottleneck);
         }
 
 
         void augment(InHeIndex inc_source_it) {
+            std::cout << "augment" << std::endl;
             Flow bottleneckCapacity = maxFlow;
             int64_t lowest_bottleneck = std::numeric_limits<int64_t>::max();
             InHeIndex inc_v_it = inc_source_it;
             for (int64_t stack_pointer = stack.size() - 1; stack_pointer >= 0; --stack_pointer) {
                 const StackFrame& t = stack.at(stack_pointer);
-                const Flow residual = std::min(hg.flowSent(inc_v_it), hg.flowReceived(t.child_he_it));
+                InHe& inc_v = hg.getInHe(inc_v_it);
+                InHe& inc_u = hg.getInHe(t.child_he_it);
+                const Flow residual_from_v = hg.flowSent(inc_v) - hg.flowReceived(inc_v) - hg.flowSent(inc_v.flow);
+                const Flow residual_to_u = hg.flowReceived(inc_u) - hg.flowSent(inc_u) + hg.flowSent(inc_u.flow);
+                const Flow residual = std::min(residual_from_v, residual_to_u);
                 if (residual <= bottleneckCapacity) {
                     bottleneckCapacity = residual;
                     lowest_bottleneck = stack_pointer;
@@ -504,12 +548,16 @@ namespace whfc {
                 inc_v_it = t.parent_he_it;
             }
             assert(bottleneckCapacity > 0);
+            std::cout << bottleneckCapacity << std::endl;
             inc_v_it = inc_source_it;
             for (int64_t stack_pointer = stack.size() - 1; stack_pointer >= 0; --stack_pointer) {
                 const StackFrame& t = stack.at(stack_pointer);
+                std::cout << t.u << " ";
                 hg.routeFlow(inc_v_it, t.child_he_it, bottleneckCapacity);
                 inc_v_it = t.parent_he_it;
+                if (stack_pointer > lowest_bottleneck) inQueue[t.u] = false;
             }
+            std::cout << std::endl;
             stack.popDownTo(lowest_bottleneck);
         }
 

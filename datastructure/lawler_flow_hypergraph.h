@@ -76,10 +76,7 @@ namespace whfc {
             InHe& in_he_receiving = getInHe(he_receiving);
             in_he_sending.flow += flowSent(f);
             in_he_receiving.flow -= flowSent(f);
-            flow(in_he_sending.e) += f;
-
-            flowIn(he_sending) -= f;
-            flowOut(he_receiving) -= f;
+            
         }
 
         inline void push_node_to_edgeIn(const Node u, const InHeIndex inc, const Flow f) {
@@ -151,21 +148,16 @@ namespace whfc {
 
         void writeBackFlow() {
             for (Hyperedge e : hyperedgeIDs()) {
-                for (const Pin& pv : pinsOf(e)) {
-                    InHe& inc_he = getInHe(pv);
-                    const InHeIndex inc = pv.he_inc_iter;
+                Flow flow_on_edge = 0;
+                for (Pin& p : pinsOf(e)) {
+                    const InHeIndex inc = p.he_inc_iter;
+                    InHe& inc_he = getInHe(p);
+                    flow_on_edge += absoluteFlowSent(inc_he);
 
-                    if (flowIn(inc) && flowOut(inc)) {
-                        Flow loopedFlow = std::min(flowIn(inc), flowOut(inc));
-                        flowIn(inc) -= loopedFlow;
-                        flowOut(inc) -= loopedFlow;
-
-                        flow(inc_he.e) -= loopedFlow;
-                    }
-
-                    assert(!flowIn(inc) || !flowOut(inc));
-                    inc_he.flow = flowSent(flowIn(inc) - flowOut(inc));
+                    flowIn(inc) = absoluteFlowSent(inc_he);
+                    flowOut(inc) = absoluteFlowReceived(inc_he);
                 }
+                flow(e) = flow_on_edge;
             }
         }
 
