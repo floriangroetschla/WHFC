@@ -69,6 +69,8 @@ namespace whfc {
         inline Flow flowIn(InHeIndex inc) const { return in_flow[inc]; }
         inline Flow flowOut(InHeIndex inc) const { return out_flow[inc]; }
 
+
+
         void routeFlow(const InHeIndex in_he_u, const InHeIndex in_he_v, Flow flow_delta) {
             InHe& inc_u = getInHe(in_he_u);
             InHe& inc_v = getInHe(in_he_v);
@@ -174,6 +176,21 @@ namespace whfc {
                     flowOut(inc) = absoluteFlowReceived(inc_he);
                 }
                 flow(e) = flow_on_edge;
+            }
+        }
+
+        void buildResidualNetwork() {
+            for (Hyperedge e : hyperedgeIDs()) {
+                Flow previous_flow_on_edge = 0;
+                for (Pin& p : pinsOf(e)) {
+                    const InHeIndex inc = p.he_inc_iter;
+                    InHe& inc_he = getInHe(p);
+                    previous_flow_on_edge += absoluteFlowSent(inc_he);
+
+                    flowIn(inc) = flowSent(inc) - absoluteFlowSent(inc_he);
+                    flowOut(inc) = flowReceived(inc) - absoluteFlowReceived(inc_he);
+                }
+                flow(e) -= previous_flow_on_edge;
             }
         }
 

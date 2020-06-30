@@ -35,8 +35,7 @@ namespace whfc {
         boost::circular_buffer<Node> nodes;
         struct StackFrame {
             Node u;
-            InHeIndex parent_he_it;
-            InHeIndex child_he_it;
+            InHeIndex he_it;
         };
         FixedCapacityStack<StackFrame> stack;
 
@@ -381,7 +380,10 @@ namespace whfc {
 
             assert(nodes.empty());
 
+            hg.printHypergraph(std::cout);
+            hg.printExcessAndLabel();
             timer.start("phase2", "mainLoop");
+            hg.buildResidualNetwork();
             // Phase 2
             /*
             hg.equalizeLabels(numScans[0]);
@@ -395,7 +397,13 @@ namespace whfc {
             }
             pushRelabel(cs, nm, numScans[0], true);*/
 
+            hg.printHypergraph(std::cout);
+            hg.printExcessAndLabel();
+
             phase2(cs);
+
+            hg.printHypergraph(std::cout);
+            hg.printExcessAndLabel();
             timer.stop("phase2");
             timer.stop("mainLoop");
 
@@ -434,132 +442,159 @@ namespace whfc {
             const Node source = *cs.sourcePiercingNodes.begin()->node;
             const Node target = *cs.targetPiercingNodes.begin()->node;
 
-            for (const Hyperedge e : hg.hyperedgeIDs()) {
-                hg.flow(e) = 0;
-            }
-
             assert(stack.empty());
-            stack.push({ target, InHeIndex::Invalid(), InHeIndex::Invalid() });
+            stack.push({ source, InHeIndex::Invalid() });
 
             while (!stack.empty()) {
                 const Node u = stack.top().u;
-                Node v = invalidNode;
-                InHeIndex inc_v_it = InHeIndex::Invalid();
-                InHeIndex inc_u_it = InHeIndex::Invalid();
-                for (InHeIndex he_it = hg.beginIndexHyperedges(u) ; he_it < hg.endIndexHyperedges(u); he_it++) {
-                    InHe& inc_u = hg.getInHe(he_it);
-                    const Hyperedge e = inc_u.e;
-                    const Flow residual_to_u = hg.flowReceived(inc_u) - hg.flowSent(inc_u) + hg.flowSent(inc_u.flow);
-                    //assert((residual > 0) == (!hg.isSaturated(e) || hg.absoluteFlowReceived(inc_u) > 0));
+                bool found_new_node = false;
+                if (hg.isNode(u)) {
+                    for (InHeIndex he_it = hg.beginIndexHyperedges(u); he_it < hg.endIndexHyperedges(u); ++he_it) {
+                        InHe& inc_u = hg.getInHe(he_it);
+                        const Hyperedge e = inc_u.e;
+                        const Flow residual_to_edge_in = hg.flowSent(inc_u);
+                        const Flow residual_to_edge_out = -hg.flowReceived(inc_u);
 
-                    if (residual_to_u > 0) {
-                        for (Pin& pin : hg.pinsOf(e)) {
-                            InHe& inc_v = hg.getInHe(pin.he_inc_iter);
-                            const Flow residual_from_v = hg.flowSent(inc_v) - hg.flowReceived(inc_v) - hg.flowSent(inc_v.flow);
-                            if (pin.pin != u && residual_from_v > 0) {
-                                v = pin.pin;
-                                inc_v_it = pin.he_inc_iter;
-                                inc_u_it = he_it;
+                        if (residual_to_edge_in > 0) {
+                            stack.push({ hg.edge_node_in(e), he_it });
+                            found_new_node = true;
+                            break;
+                        } else if (residual_to_edge_out > 0) {
+                            stack.push({ hg.edge_node_out(e), he_it });
+                            found_new_node = true;
+                            break;
+                        }
+
+                    }
+                } else if (hg.is_edge_in(u)) {
+                    const Hyperedge e = hg.edgeFromLawlerNode(u);
+                    if (hg.flow(e) > 0) {
+                        stack.push( { hg.edge_node_out(e), InHeIndex::Invalid() });
+                        found_new_node = true;
+                    }
+                    if (!found_new_node) {
+                        for (PinIterator pin_it = hg.beginPins(e); pin_it < hg.endPins(e); ++pin_it) {
+                            const Pin pin = *pin_it;
+                            const Node v = pin.pin;
+                            const InHe& inc_v = hg.getInHe(pin.he_inc_iter);
+                            const Flow residual_to_v = -hg.flowSent(pin.he_inc_iter);
+                            if (residual_to_v > 0) {
+                                stack.push( { v, pin.he_inc_iter });
+                                found_new_node = true;
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    assert(hg.is_edge_out(u));
+                    const Hyperedge e = hg.edgeFromLawlerNode(u);
+                    if (hg.flow(e) < 0) {
+                        stack.push( { hg.edge_node_in(e), InHeIndex::Invalid() });
+                        found_new_node = true;
+                    }
+                    if (!found_new_node) {
+                        for (PinIterator pin_it = hg.beginPins(e); pin_it < hg.endPins(e); ++pin_it) {
+                            const Pin pin = *pin_it;
+                            const Node v = pin.pin;
+                            const InHe& inc_v = hg.getInHe(pin.he_inc_iter);
+                            const Flow residual_to_v = hg.flowReceived(pin.he_inc_iter);
+                            if (residual_to_v > 0) {
+                                stack.push( { v, pin.he_inc_iter });
+                                found_new_node = true;
                                 break;
                             }
                         }
                     }
 
-                    if (v != invalidNode)
-                        break;
                 }
 
-                if (v == invalidNode) {
+                if (found_new_node) {
+                    if (stack.top().u == target) {
+                        pushBack(maxFlow, source, true);
+                    } else if (hg.excess(stack.top().u) > 0) {
+                        const Node top = stack.top().u;
+                        Flow flow_pushed_back = pushBack(hg.excess(stack.top().u), source, false);
+                        hg.excess(top) -= flow_pushed_back;
+                    } else if (inQueue[stack.top().u]) {
+                        pushBack(maxFlow, stack.top().u, false);
+                    } else {
+                        inQueue[stack.top().u] = true;
+                    }
+                } else {
                     inQueue[stack.top().u] = false;
                     stack.pop();
                 }
-                else {
-                    if (v == source) {
-                        stack.top().child_he_it = inc_u_it;
-                        augment(inc_v_it);
-                    } else if (inQueue[v]) {
-                        stack.top().child_he_it = inc_u_it;
-                        removeCircularFlow(v, inc_v_it);
+
+            }
+        }
+
+        Flow pushBack(Flow bottleneckCapacity, Node first_node, bool writeFlowToResult) {
+            int64_t lowest_bottleneck = std::numeric_limits<int64_t>::max();
+            for (int64_t stack_pointer = stack.size() - 1; stack_pointer > 0; --stack_pointer) {
+                const StackFrame& t = stack.at(stack_pointer);
+                Flow residual = 0;
+                if (hg.isNode(t.u)) {
+                    if (hg.is_edge_out(stack.at(stack_pointer-1).u)) {
+                        residual = hg.flowReceived(t.he_it);
                     } else {
-                        stack.top().child_he_it = inc_u_it;
-                        stack.push({v, inc_v_it, InHeIndex::Invalid()});
-                        inQueue[v] = true;
+                        residual = -hg.flowSent(t.he_it);
+                    }
+                } else if (hg.is_edge_in(t.u)) {
+                    if (t.he_it != InHeIndex::Invalid()) {
+                        residual = hg.flowSent(t.he_it);
+                    } else {
+                        residual = -hg.flow(hg.edgeFromLawlerNode(t.u));
+                    }
+                } else {
+                    if (t.he_it != InHeIndex::Invalid()) {
+                        residual = hg.flowReceived(t.he_it);
+                    } else {
+                        residual = hg.flow(hg.edgeFromLawlerNode(t.u));
                     }
                 }
-
-            }
-        }
-
-        void removeCircularFlow(Node u, InHeIndex inc_u_it) {
-            std::cout << "removeCircularFlow" << std::endl;
-            Flow bottleneckCapacity = maxFlow;
-            int64_t lowest_bottleneck = std::numeric_limits<int64_t>::max();
-            InHeIndex inc_v_it = inc_u_it;
-            for (int64_t stack_pointer = stack.size() - 1; stack_pointer >= 0; --stack_pointer) {
-                const StackFrame& t = stack.at(stack_pointer);
-                InHe& inc_v = hg.getInHe(inc_v_it);
-                InHe& inc_u = hg.getInHe(t.child_he_it);
-                const Flow residual_from_v = hg.flowSent(inc_v) - hg.flowReceived(inc_v) - hg.flowSent(inc_v.flow);
-                const Flow residual_to_u = hg.flowReceived(inc_u) - hg.flowSent(inc_u) + hg.flowSent(inc_u.flow);
-                const Flow residual = std::min(residual_from_v, residual_to_u);
                 if (residual <= bottleneckCapacity) {
                     bottleneckCapacity = residual;
                     lowest_bottleneck = stack_pointer;
                 }
-                if (t.u == u) break;
-                inc_v_it = t.parent_he_it;
+                if (stack.at(stack_pointer - 1).u == first_node) break;
             }
             assert(bottleneckCapacity > 0);
-            std::cout << bottleneckCapacity << std::endl;
-            inc_v_it = inc_u_it;
-            for (int64_t stack_pointer = stack.size() - 1; stack_pointer >= 0; --stack_pointer) {
+            std::cout << "Push back " << bottleneckCapacity << std::endl;
+
+            for (int64_t stack_pointer = stack.size() - 1; stack_pointer > 0; --stack_pointer) {
                 const StackFrame& t = stack.at(stack_pointer);
                 std::cout << t.u << " ";
-                //hg.routeFlow(inc_v_it, t.child_he_it, bottleneckCapacity);
-
-                hg.flowIn(inc_v_it) -= bottleneckCapacity;
-                hg.flowOut(t.child_he_it) -= bottleneckCapacity;
-
-                inc_v_it = t.parent_he_it;
-                if (stack_pointer > lowest_bottleneck) inQueue[t.u] = false;
-                if (t.u == u) break;
-            }
-            std::cout << std::endl;
-            stack.popDownTo(lowest_bottleneck);
-        }
-
-
-        void augment(InHeIndex inc_source_it) {
-            std::cout << "augment" << std::endl;
-            Flow bottleneckCapacity = maxFlow;
-            int64_t lowest_bottleneck = std::numeric_limits<int64_t>::max();
-            InHeIndex inc_v_it = inc_source_it;
-            for (int64_t stack_pointer = stack.size() - 1; stack_pointer >= 0; --stack_pointer) {
-                const StackFrame& t = stack.at(stack_pointer);
-                InHe& inc_v = hg.getInHe(inc_v_it);
-                InHe& inc_u = hg.getInHe(t.child_he_it);
-                const Flow residual_from_v = hg.flowSent(inc_v) - hg.flowReceived(inc_v) - hg.flowSent(inc_v.flow);
-                const Flow residual_to_u = hg.flowReceived(inc_u) - hg.flowSent(inc_u) + hg.flowSent(inc_u.flow);
-                const Flow residual = std::min(residual_from_v, residual_to_u);
-                if (residual <= bottleneckCapacity) {
-                    bottleneckCapacity = residual;
-                    lowest_bottleneck = stack_pointer;
+                if (hg.isNode(t.u)) {
+                    if (hg.is_edge_out(stack.at(stack_pointer-1).u)) {
+                        hg.flowOut(t.he_it) -= bottleneckCapacity;
+                        if (writeFlowToResult) hg.getInHe(t.he_it).flow -= hg.flowSent(bottleneckCapacity);
+                    } else {
+                        hg.flowIn(t.he_it) += bottleneckCapacity;
+                        if (writeFlowToResult) hg.getInHe(t.he_it).flow += hg.flowSent(bottleneckCapacity);
+                    }
+                } else if (hg.is_edge_in(t.u)) {
+                    if (t.he_it != InHeIndex::Invalid()) {
+                        hg.flowIn(t.he_it) -= bottleneckCapacity;
+                        if (writeFlowToResult) hg.getInHe(t.he_it).flow += hg.flowSent(bottleneckCapacity);
+                    } else {
+                        hg.flow(hg.edgeFromLawlerNode(t.u)) += bottleneckCapacity;
+                    }
+                } else {
+                    if (t.he_it != InHeIndex::Invalid()) {
+                        hg.flowOut(t.he_it) -= bottleneckCapacity;
+                        if (writeFlowToResult) hg.getInHe(t.he_it).flow += hg.flowSent(bottleneckCapacity);
+                    } else {
+                        hg.flow(hg.edgeFromLawlerNode(t.u)) -= bottleneckCapacity;
+                    }
                 }
-                inc_v_it = t.parent_he_it;
-            }
-            assert(bottleneckCapacity > 0);
-            std::cout << bottleneckCapacity << std::endl;
-            inc_v_it = inc_source_it;
-            for (int64_t stack_pointer = stack.size() - 1; stack_pointer >= 0; --stack_pointer) {
-                const StackFrame& t = stack.at(stack_pointer);
-                std::cout << t.u << " ";
-                hg.routeFlow(inc_v_it, t.child_he_it, bottleneckCapacity);
-                inc_v_it = t.parent_he_it;
-                if (stack_pointer > lowest_bottleneck) inQueue[t.u] = false;
+                if (stack_pointer >= lowest_bottleneck) inQueue[t.u] = false;
+                if (stack.at(stack_pointer - 1).u == first_node) break;
             }
             std::cout << std::endl;
-            stack.popDownTo(lowest_bottleneck);
+            stack.popDownTo(lowest_bottleneck-1);
+            return bottleneckCapacity;
         }
+
 
         std::array<size_t, 2> globalUpdate(CutterState<Type>& cs, size_t n) {
             size_t scannedNodes = 0;
