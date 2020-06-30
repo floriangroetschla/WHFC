@@ -380,30 +380,11 @@ namespace whfc {
 
             assert(nodes.empty());
 
-            hg.printHypergraph(std::cout);
-            hg.printExcessAndLabel();
             timer.start("phase2", "mainLoop");
             hg.buildResidualNetwork();
-            // Phase 2
-            /*
-            hg.equalizeLabels(numScans[0]);
-            for (Node node_id(0); node_id < hg.numLawlerNodes(); ++node_id) {
-                if (hg.excess(node_id) > 0 && node_id != piercingNode && node_id != target) {
-                    assert(inQueue[node_id]);
-                    nodes.push_back(node_id);
-                } else {
-                    assert(!inQueue[node_id]);
-                }
-            }
-            pushRelabel(cs, nm, numScans[0], true);*/
 
-            hg.printHypergraph(std::cout);
-            hg.printExcessAndLabel();
+            Flow augmented_flow = phase2(cs);
 
-            phase2(cs);
-
-            hg.printHypergraph(std::cout);
-            hg.printExcessAndLabel();
             timer.stop("phase2");
             timer.stop("mainLoop");
 
@@ -419,6 +400,7 @@ namespace whfc {
                 f += hg.excess(sp.node);
             }
             cs.flowValue += f;
+            assert(f == augmented_flow);
 
             cs.verifyFlowConstraints();
 
@@ -437,7 +419,9 @@ namespace whfc {
             auto& n = cs.n;
             auto& h = cs.h;
 
-            inQueue = std::vector<bool>(hg.numLawlerNodes(), false);
+            Flow total_augmented_flow = 0;
+
+            std::fill(inQueue.begin(), inQueue.end(), false);
 
             const Node source = *cs.sourcePiercingNodes.begin()->node;
             const Node target = *cs.targetPiercingNodes.begin()->node;
@@ -510,12 +494,15 @@ namespace whfc {
 
                 if (found_new_node) {
                     if (stack.top().u == target) {
-                        pushBack(maxFlow, source, true);
+                        //std::cout << "Push back from target" << std::endl;
+                        total_augmented_flow += pushBack(maxFlow, source, true);
                     } else if (hg.excess(stack.top().u) > 0) {
+                        //std::cout << "Push back excess to source" << std::endl;
                         const Node top = stack.top().u;
                         Flow flow_pushed_back = pushBack(hg.excess(stack.top().u), source, false);
                         hg.excess(top) -= flow_pushed_back;
                     } else if (inQueue[stack.top().u]) {
+                        //std::cout << "Push back looped flow" << std::endl;
                         pushBack(maxFlow, stack.top().u, false);
                     } else {
                         inQueue[stack.top().u] = true;
@@ -526,6 +513,7 @@ namespace whfc {
                 }
 
             }
+            return total_augmented_flow;
         }
 
         Flow pushBack(Flow bottleneckCapacity, Node first_node, bool writeFlowToResult) {
@@ -536,20 +524,26 @@ namespace whfc {
                 if (hg.isNode(t.u)) {
                     if (hg.is_edge_out(stack.at(stack_pointer-1).u)) {
                         residual = hg.flowReceived(t.he_it);
+                        assert(residual > 0);
                     } else {
                         residual = -hg.flowSent(t.he_it);
+                        assert(residual > 0);
                     }
                 } else if (hg.is_edge_in(t.u)) {
                     if (t.he_it != InHeIndex::Invalid()) {
                         residual = hg.flowSent(t.he_it);
+                        assert(residual > 0);
                     } else {
                         residual = -hg.flow(hg.edgeFromLawlerNode(t.u));
+                        assert(residual > 0);
                     }
                 } else {
                     if (t.he_it != InHeIndex::Invalid()) {
-                        residual = hg.flowReceived(t.he_it);
+                        residual = -hg.flowReceived(t.he_it);
+                        assert(residual > 0);
                     } else {
                         residual = hg.flow(hg.edgeFromLawlerNode(t.u));
+                        assert(residual > 0);
                     }
                 }
                 if (residual <= bottleneckCapacity) {
@@ -559,18 +553,19 @@ namespace whfc {
                 if (stack.at(stack_pointer - 1).u == first_node) break;
             }
             assert(bottleneckCapacity > 0);
-            std::cout << "Push back " << bottleneckCapacity << std::endl;
+            //std::cout << "Push back " << bottleneckCapacity << std::endl;
+            if (lowest_bottleneck == std::numeric_limits<int64_t>::max()) lowest_bottleneck = 1;
 
             for (int64_t stack_pointer = stack.size() - 1; stack_pointer > 0; --stack_pointer) {
                 const StackFrame& t = stack.at(stack_pointer);
-                std::cout << t.u << " ";
+                //std::cout << t.u << " ";
                 if (hg.isNode(t.u)) {
                     if (hg.is_edge_out(stack.at(stack_pointer-1).u)) {
                         hg.flowOut(t.he_it) -= bottleneckCapacity;
                         if (writeFlowToResult) hg.getInHe(t.he_it).flow -= hg.flowSent(bottleneckCapacity);
                     } else {
                         hg.flowIn(t.he_it) += bottleneckCapacity;
-                        if (writeFlowToResult) hg.getInHe(t.he_it).flow += hg.flowSent(bottleneckCapacity);
+                        if (writeFlowToResult) hg.getInHe(t.he_it).flow -= hg.flowSent(bottleneckCapacity);
                     }
                 } else if (hg.is_edge_in(t.u)) {
                     if (t.he_it != InHeIndex::Invalid()) {
@@ -581,7 +576,7 @@ namespace whfc {
                     }
                 } else {
                     if (t.he_it != InHeIndex::Invalid()) {
-                        hg.flowOut(t.he_it) -= bottleneckCapacity;
+                        hg.flowOut(t.he_it) += bottleneckCapacity;
                         if (writeFlowToResult) hg.getInHe(t.he_it).flow += hg.flowSent(bottleneckCapacity);
                     } else {
                         hg.flow(hg.edgeFromLawlerNode(t.u)) -= bottleneckCapacity;
@@ -590,7 +585,8 @@ namespace whfc {
                 if (stack_pointer >= lowest_bottleneck) inQueue[t.u] = false;
                 if (stack.at(stack_pointer - 1).u == first_node) break;
             }
-            std::cout << std::endl;
+            //std::cout << std::endl;
+            if (lowest_bottleneck == std::numeric_limits<int64_t>::max()) lowest_bottleneck = 1;
             stack.popDownTo(lowest_bottleneck-1);
             return bottleneckCapacity;
         }
