@@ -28,7 +28,7 @@ namespace whfc {
 
         static constexpr size_t ALPHA = 6;
         static constexpr size_t BETA = 12;
-        static constexpr float globalUpdateFreq = 5;
+        static constexpr float globalUpdateFreq = 1;
 
         LawlerFlowHypergraph& hg;
         LayeredQueue<Node> queue;
@@ -60,7 +60,7 @@ namespace whfc {
         // for hyperedges
         std::vector<PinIterator> current_pin_e_in, current_pin_e_out;
 
-        size_t numPushes, numRelabel, workSinceLastRelabel;
+        size_t numPushes, numRelabel, numGlobalUpdate, workSinceLastRelabel;
 
         PushRelabel(LawlerFlowHypergraph& hg, TimeReporter& timer, size_t numThreads) : hg(hg), nodes(hg.maxNumLawlerNodes()), stack(hg.maxNumLawlerNodes()), timer(timer), inQueue(hg.maxNumLawlerNodes()),
             current_hyperedge(hg.maxNumNodes, InHeIndex::Invalid()), current_pin_e_in(hg.maxNumHyperedges), current_pin_e_out(hg.maxNumHyperedges)
@@ -73,6 +73,7 @@ namespace whfc {
             nodes.clear();
             numPushes = 0;
             numRelabel = 0;
+            numGlobalUpdate = 0;
             workSinceLastRelabel = 0;
         }
 
@@ -316,6 +317,7 @@ namespace whfc {
                 if (!keepNodesWithHighLabel && workSinceLastRelabel * globalUpdateFreq > nm) {
                     timer.start("globalUpdate", "phase1");
                     globalUpdate(cs, n);
+                    numGlobalUpdate++;
                     timer.stop("globalUpdate");
                     workSinceLastRelabel = 0;
                 }
@@ -381,7 +383,9 @@ namespace whfc {
             assert(nodes.empty());
 
             timer.start("phase2", "mainLoop");
+            timer.start("buildResidualNetwork", "phase2");
             hg.buildResidualNetwork();
+            timer.stop("buildResidualNetwork");
 
             Flow augmented_flow = phase2(cs);
 
@@ -410,7 +414,7 @@ namespace whfc {
             timer.stop("growReachable");
             timer.stop("exhaustFlow");
 
-            std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numLawlerNodes: " << hg.numLawlerNodes() << std::endl;
+            std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numGlobalUpdate: " << numGlobalUpdate << ", numLawlerNodes: " << hg.numLawlerNodes() << std::endl;
 
             return f;
         }
@@ -421,15 +425,18 @@ namespace whfc {
 
             Flow total_augmented_flow = 0;
 
+            timer.start("resets", "phase2");
             std::fill(inQueue.begin(), inQueue.end(), false);
 
             std::fill(current_hyperedge.begin(), current_hyperedge.end(), InHeIndex::Invalid());
             std::fill(current_pin_e_in.begin(), current_pin_e_in.end(), PinIterator(0));
             std::fill(current_pin_e_out.begin(), current_pin_e_out.end(), PinIterator(0));
+            timer.stop("resets");
 
             const Node source = *cs.sourcePiercingNodes.begin()->node;
             const Node target = *cs.targetPiercingNodes.begin()->node;
 
+            timer.start("dfs", "phase2");
             assert(stack.empty());
             stack.push({ source, InHeIndex::Invalid() });
 
@@ -442,8 +449,8 @@ namespace whfc {
                     for (; he_it < hg.endIndexHyperedges(u); ++he_it) {
                         InHe& inc_u = hg.getInHe(he_it);
                         const Hyperedge e = inc_u.e;
-                        const Flow residual_to_edge_in = hg.flowSent(inc_u);
-                        const Flow residual_to_edge_out = -hg.flowReceived(inc_u);
+                        const Flow residual_to_edge_in = hg.flowSent(he_it);
+                        const Flow residual_to_edge_out = -hg.flowReceived(he_it);
 
                         if (residual_to_edge_in > 0) {
                             stack.push({ hg.edge_node_in(e), he_it });
@@ -523,6 +530,7 @@ namespace whfc {
                 }
 
             }
+            timer.stop("dfs");
             return total_augmented_flow;
         }
 
