@@ -28,7 +28,7 @@ namespace whfc {
 
         static constexpr size_t ALPHA = 6;
         static constexpr size_t BETA = 12;
-        static constexpr float globalUpdateFreq = 1;
+        static constexpr float globalUpdateFreq = 5;
 
         LawlerFlowHypergraph& hg;
         LayeredQueue<Node> queue;
@@ -89,7 +89,7 @@ namespace whfc {
         }
 
         template<bool pushFlow>
-        __attribute__((always_inline)) inline void iterateOverNode(const Node u, CutterState<Type>& cs) {
+        void iterateOverNode(const Node u, CutterState<Type>& cs) {
             if (!pushFlow) workSinceLastRelabel += BETA;
             size_t minLevel = hg.numLawlerNodes() * 2;
             assert(pushFlow || hg.excess(u) > 0);
@@ -140,7 +140,7 @@ namespace whfc {
         }
 
         template<bool pushFlow>
-        __attribute__((always_inline)) inline void iterateOverEdgeNodeIn(const Node e_in, CutterState<Type>& cs) {
+        void iterateOverEdgeNodeIn(const Node e_in, CutterState<Type>& cs) {
             assert(hg.is_edge_in(e_in));
             assert(pushFlow || hg.excess(e_in) > 0);
             if (!pushFlow) workSinceLastRelabel += BETA;
@@ -194,7 +194,7 @@ namespace whfc {
         }
 
         template<bool pushFlow>
-        __attribute__((always_inline)) inline void iterateOverEdgeNodeOut(const Node e_out, CutterState<Type>& cs) {
+        void iterateOverEdgeNodeOut(const Node e_out, CutterState<Type>& cs) {
             assert(hg.excess(e_out) > 0);
             if (!pushFlow) workSinceLastRelabel += BETA;
             size_t minLevel = hg.numLawlerNodes() * 2;
@@ -423,6 +423,10 @@ namespace whfc {
 
             std::fill(inQueue.begin(), inQueue.end(), false);
 
+            std::fill(current_hyperedge.begin(), current_hyperedge.end(), InHeIndex::Invalid());
+            std::fill(current_pin_e_in.begin(), current_pin_e_in.end(), PinIterator(0));
+            std::fill(current_pin_e_out.begin(), current_pin_e_out.end(), PinIterator(0));
+
             const Node source = *cs.sourcePiercingNodes.begin()->node;
             const Node target = *cs.targetPiercingNodes.begin()->node;
 
@@ -433,7 +437,9 @@ namespace whfc {
                 const Node u = stack.top().u;
                 bool found_new_node = false;
                 if (hg.isNode(u)) {
-                    for (InHeIndex he_it = hg.beginIndexHyperedges(u); he_it < hg.endIndexHyperedges(u); ++he_it) {
+                    InHeIndex& he_it = current_hyperedge[u];
+                    if (he_it == InHeIndex::Invalid()) he_it = hg.beginIndexHyperedges(u);
+                    for (; he_it < hg.endIndexHyperedges(u); ++he_it) {
                         InHe& inc_u = hg.getInHe(he_it);
                         const Hyperedge e = inc_u.e;
                         const Flow residual_to_edge_in = hg.flowSent(inc_u);
@@ -457,7 +463,9 @@ namespace whfc {
                         found_new_node = true;
                     }
                     if (!found_new_node) {
-                        for (PinIterator pin_it = hg.beginPins(e); pin_it < hg.endPins(e); ++pin_it) {
+                        PinIterator& pin_it = current_pin_e_in[e];
+                        if (pin_it == PinIterator(0)) pin_it = hg.beginPins(e);
+                        for ( ; pin_it < hg.endPins(e); ++pin_it) {
                             const Pin pin = *pin_it;
                             const Node v = pin.pin;
                             const InHe& inc_v = hg.getInHe(pin.he_inc_iter);
@@ -477,7 +485,9 @@ namespace whfc {
                         found_new_node = true;
                     }
                     if (!found_new_node) {
-                        for (PinIterator pin_it = hg.beginPins(e); pin_it < hg.endPins(e); ++pin_it) {
+                        PinIterator& pin_it = current_pin_e_out[e];
+                        if (pin_it == PinIterator(0)) pin_it = hg.beginPins(e);
+                        for ( ; pin_it < hg.endPins(e); ++pin_it) {
                             const Pin pin = *pin_it;
                             const Node v = pin.pin;
                             const InHe& inc_v = hg.getInHe(pin.he_inc_iter);
