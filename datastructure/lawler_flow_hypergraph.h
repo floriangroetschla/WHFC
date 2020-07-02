@@ -22,7 +22,7 @@ namespace whfc {
             reinitialize(nNodes);
         }*/
 
-        LawlerFlowHypergraph(size_t maxNumNodes, size_t maxNumHyperedges) : Base(maxNumNodes, maxNumHyperedges), vec_excess(numLawlerNodes(), 0), vec_label(numLawlerNodes(), numLawlerNodes()), in_flow(), out_flow() {
+        LawlerFlowHypergraph(size_t maxNumNodes, size_t maxNumHyperedges) : Base(maxNumNodes, maxNumHyperedges), vec_excess(numLawlerNodes(), 0), vec_label(numLawlerNodes(), numLawlerNodes()), in_flow(), out_flow(), edge_flow() {
 
         }
 
@@ -149,19 +149,19 @@ namespace whfc {
             vec_excess[e_in] -= f;
             vec_excess[e_out] += f;
 
-            flow(edgeFromLawlerNode(e_in)) += f;
+            edge_flow[edgeFromLawlerNode(e_in)] += f;
         }
 
         inline void push_edgeOut_to_edgeIn(const Node e_out, const Node e_in, const Flow f) {
             assert(f > 0);
             assert(f <= excess(e_out));
-            assert(f <= flow(edgeFromLawlerNode(e_in)));
+            assert(f <= edge_flow_pr(edgeFromLawlerNode(e_in)));
             assert(is_edge_out(e_out) && is_edge_in(e_in));
 
             vec_excess[e_out] -= f;
             vec_excess[e_in] += f;
 
-            flow(edgeFromLawlerNode(e_in)) -= f;
+            edge_flow[edgeFromLawlerNode(e_in)] -= f;
         }
 
         void writeBackFlow() {
@@ -257,6 +257,8 @@ namespace whfc {
         inline Flow flowSent(const InHeIndex inc) const { return flowIn(inc); }
         inline Flow flowReceived(const InHeIndex inc) const { return flowOut(inc); }
 
+        inline Flow& edge_flow_pr(const Hyperedge e) { return edge_flow[e]; }
+
         inline Flow flowSent(const Flow f) const { return f * sends_multiplier; }
 
         inline size_t maxNumLawlerNodes() { return maxNumNodes + 2 * maxNumHyperedges; }
@@ -338,8 +340,10 @@ namespace whfc {
             Base::finalize();
             in_flow.resize(numPins(), 0);
             out_flow.resize(numPins(), 0);
+            edge_flow.resize(numHyperedges(), 0);
             std::fill(in_flow.begin(), in_flow.end(), 0);
             std::fill(out_flow.begin(), out_flow.end(), 0);
+            std::fill(edge_flow.begin(), edge_flow.end(), 0);
             vec_excess.resize(numLawlerNodes());
             vec_label.resize(numLawlerNodes());
             vec_excess.clear();
@@ -354,5 +358,7 @@ namespace whfc {
         std::vector<Flow> out_flow;
 
         bool forward = true;
+
+        std::vector<Flow> edge_flow;
     };
 }

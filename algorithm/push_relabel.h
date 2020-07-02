@@ -173,7 +173,7 @@ namespace whfc {
             if (hg.excess(e_in) > 0 && pin_it == hg.endPins(e)) {
                 if (!pushFlow) workSinceLastRelabel++;
                 const Node e_out = hg.edge_node_out(e);
-                Flow residual = std::min(hg.capacity(e) - hg.flow(e), hg.excess(e_in));
+                Flow residual = std::min(hg.capacity(e) - hg.edge_flow_pr(e), hg.excess(e_in));
                 if (residual > 0) {
                     if (hg.label(e_in) == hg.label(e_out) + 1) {
                         assert(pushFlow);
@@ -226,7 +226,7 @@ namespace whfc {
             if (hg.excess(e_out) > 0 && pin_it == hg.endPins(e)) {
                 if (!pushFlow) workSinceLastRelabel++;
                 const Node e_in = hg.edge_node_in(e);
-                Flow residual = std::min(hg.flow(e), hg.excess(e_out));
+                Flow residual = std::min(hg.edge_flow_pr(e), hg.excess(e_out));
                 if (residual > 0) {
                     if (hg.label(e_out) == hg.label(e_in) + 1) {
                         assert(pushFlow);
@@ -384,7 +384,7 @@ namespace whfc {
 
             timer.start("phase2", "mainLoop");
             timer.start("buildResidualNetwork", "phase2");
-            hg.buildResidualNetwork();
+            //hg.buildResidualNetwork();
             timer.stop("buildResidualNetwork");
 
             Flow augmented_flow = phase2(cs);
@@ -393,7 +393,7 @@ namespace whfc {
             timer.stop("mainLoop");
 
             timer.start("writeBackFlow", "exhaustFlow");
-            hg.writeBackFlow();
+            //hg.writeBackFlow();
             timer.stop("writeBackFlow");
 
             resetSourcePiercingNodeDistances(cs);
@@ -449,23 +449,23 @@ namespace whfc {
                     for (; he_it < hg.endIndexHyperedges(u); ++he_it) {
                         InHe& inc_u = hg.getInHe(he_it);
                         const Hyperedge e = inc_u.e;
-                        const Flow residual_to_edge_in = hg.flowSent(he_it);
-                        const Flow residual_to_edge_out = -hg.flowReceived(he_it);
 
-                        if (residual_to_edge_in > 0) {
-                            stack.push({ hg.edge_node_in(e), he_it });
-                            found_new_node = true;
-                            break;
-                        } else if (residual_to_edge_out > 0) {
+                        const Flow residual_to_edge_in = hg.flowSent(he_it) - hg.absoluteFlowSent(inc_u);
+                        const Flow residual_to_edge_out = -(hg.flowReceived(he_it) - hg.absoluteFlowReceived(inc_u));
+
+                        if (residual_to_edge_out > 0) {
                             stack.push({ hg.edge_node_out(e), he_it });
                             found_new_node = true;
                             break;
+                        } else if (residual_to_edge_in > 0) {
+                            stack.push({ hg.edge_node_in(e), he_it });
+                            found_new_node = true;
+                            break;
                         }
-
                     }
                 } else if (hg.is_edge_in(u)) {
                     const Hyperedge e = hg.edgeFromLawlerNode(u);
-                    if (hg.flow(e) > 0) {
+                    if (hg.edge_flow_pr(e) - hg.flow(e) > 0) {
                         stack.push( { hg.edge_node_out(e), InHeIndex::Invalid() });
                         found_new_node = true;
                     }
@@ -476,7 +476,7 @@ namespace whfc {
                             const Pin pin = *pin_it;
                             const Node v = pin.pin;
                             const InHe& inc_v = hg.getInHe(pin.he_inc_iter);
-                            const Flow residual_to_v = -hg.flowSent(pin.he_inc_iter);
+                            const Flow residual_to_v = -(hg.flowSent(pin.he_inc_iter) - hg.absoluteFlowSent(inc_v));
                             if (residual_to_v > 0) {
                                 stack.push( { v, pin.he_inc_iter });
                                 found_new_node = true;
@@ -487,7 +487,7 @@ namespace whfc {
                 } else {
                     assert(hg.is_edge_out(u));
                     const Hyperedge e = hg.edgeFromLawlerNode(u);
-                    if (hg.flow(e) < 0) {
+                    if (hg.edge_flow_pr(e) - hg.flow(e) < 0) {
                         stack.push( { hg.edge_node_in(e), InHeIndex::Invalid() });
                         found_new_node = true;
                     }
@@ -498,7 +498,7 @@ namespace whfc {
                             const Pin pin = *pin_it;
                             const Node v = pin.pin;
                             const InHe& inc_v = hg.getInHe(pin.he_inc_iter);
-                            const Flow residual_to_v = hg.flowReceived(pin.he_inc_iter);
+                            const Flow residual_to_v = hg.flowReceived(pin.he_inc_iter) - hg.absoluteFlowReceived(inc_v);
                             if (residual_to_v > 0) {
                                 stack.push( { v, pin.he_inc_iter });
                                 found_new_node = true;
@@ -534,33 +534,33 @@ namespace whfc {
             return total_augmented_flow;
         }
 
-        Flow pushBack(Flow bottleneckCapacity, Node first_node, bool writeFlowToResult) {
-            int64_t lowest_bottleneck = std::numeric_limits<int64_t>::max();
+        Flow pushBack(Flow bottleneckCapacity, Node first_node, bool augment) {
+            int64_t lowest_bottleneck = stack.size();
             for (int64_t stack_pointer = stack.size() - 1; stack_pointer > 0; --stack_pointer) {
                 const StackFrame& t = stack.at(stack_pointer);
                 Flow residual = 0;
                 if (hg.isNode(t.u)) {
                     if (hg.is_edge_out(stack.at(stack_pointer-1).u)) {
-                        residual = hg.flowReceived(t.he_it);
+                        residual = hg.flowReceived(t.he_it) - hg.absoluteFlowReceived(hg.getInHe(t.he_it));
                         assert(residual > 0);
                     } else {
-                        residual = -hg.flowSent(t.he_it);
+                        residual = -(hg.flowSent(t.he_it) - hg.absoluteFlowSent(hg.getInHe(t.he_it)));
                         assert(residual > 0);
                     }
                 } else if (hg.is_edge_in(t.u)) {
                     if (t.he_it != InHeIndex::Invalid()) {
-                        residual = hg.flowSent(t.he_it);
+                        residual = hg.flowSent(t.he_it) - hg.absoluteFlowSent(hg.getInHe(t.he_it));
                         assert(residual > 0);
                     } else {
-                        residual = -hg.flow(hg.edgeFromLawlerNode(t.u));
+                        residual = -(hg.edge_flow_pr(hg.edgeFromLawlerNode(t.u)) - hg.flow(hg.edgeFromLawlerNode(t.u)));
                         assert(residual > 0);
                     }
                 } else {
                     if (t.he_it != InHeIndex::Invalid()) {
-                        residual = -hg.flowReceived(t.he_it);
+                        residual = -(hg.flowReceived(t.he_it) - hg.absoluteFlowReceived(hg.getInHe(t.he_it)));
                         assert(residual > 0);
                     } else {
-                        residual = hg.flow(hg.edgeFromLawlerNode(t.u));
+                        residual = hg.edge_flow_pr(hg.edgeFromLawlerNode(t.u)) - hg.flow(hg.edgeFromLawlerNode(t.u));
                         assert(residual > 0);
                     }
                 }
@@ -572,32 +572,51 @@ namespace whfc {
             }
             assert(bottleneckCapacity > 0);
             //std::cout << "Push back " << bottleneckCapacity << std::endl;
-            if (lowest_bottleneck == std::numeric_limits<int64_t>::max()) lowest_bottleneck = 1;
 
             for (int64_t stack_pointer = stack.size() - 1; stack_pointer > 0; --stack_pointer) {
                 const StackFrame& t = stack.at(stack_pointer);
                 //std::cout << t.u << " ";
                 if (hg.isNode(t.u)) {
                     if (hg.is_edge_out(stack.at(stack_pointer-1).u)) {
-                        hg.flowOut(t.he_it) -= bottleneckCapacity;
-                        if (writeFlowToResult) hg.getInHe(t.he_it).flow -= hg.flowSent(bottleneckCapacity);
+                        if (!augment) {
+                            hg.flowOut(t.he_it) -= bottleneckCapacity;
+                        } else {
+                            hg.getInHe(t.he_it).flow -= hg.flowSent(bottleneckCapacity);
+                        }
                     } else {
-                        hg.flowIn(t.he_it) += bottleneckCapacity;
-                        if (writeFlowToResult) hg.getInHe(t.he_it).flow -= hg.flowSent(bottleneckCapacity);
+                        if (!augment) {
+                            hg.flowIn(t.he_it) += bottleneckCapacity;
+                        } else {
+                            hg.getInHe(t.he_it).flow -= hg.flowSent(bottleneckCapacity);
+                        }
                     }
                 } else if (hg.is_edge_in(t.u)) {
                     if (t.he_it != InHeIndex::Invalid()) {
-                        hg.flowIn(t.he_it) -= bottleneckCapacity;
-                        if (writeFlowToResult) hg.getInHe(t.he_it).flow += hg.flowSent(bottleneckCapacity);
+                        if (!augment) {
+                            hg.flowIn(t.he_it) -= bottleneckCapacity;
+                        } else {
+                            hg.getInHe(t.he_it).flow += hg.flowSent(bottleneckCapacity);
+                        }
                     } else {
-                        hg.flow(hg.edgeFromLawlerNode(t.u)) += bottleneckCapacity;
+                        if (!augment) {
+                            hg.edge_flow_pr(hg.edgeFromLawlerNode(t.u)) += bottleneckCapacity;
+                        } else {
+                            hg.flow(hg.edgeFromLawlerNode(t.u)) -= bottleneckCapacity;
+                        }
                     }
                 } else {
                     if (t.he_it != InHeIndex::Invalid()) {
-                        hg.flowOut(t.he_it) += bottleneckCapacity;
-                        if (writeFlowToResult) hg.getInHe(t.he_it).flow += hg.flowSent(bottleneckCapacity);
+                        if (!augment) {
+                            hg.flowOut(t.he_it) += bottleneckCapacity;
+                        } else {
+                            hg.getInHe(t.he_it).flow += hg.flowSent(bottleneckCapacity);
+                        }
                     } else {
-                        hg.flow(hg.edgeFromLawlerNode(t.u)) -= bottleneckCapacity;
+                        if (!augment) {
+                            hg.edge_flow_pr(hg.edgeFromLawlerNode(t.u)) -= bottleneckCapacity;
+                        } else {
+                            hg.flow(hg.edgeFromLawlerNode(t.u)) += bottleneckCapacity;
+                        }
                     }
                 }
                 if (stack_pointer >= lowest_bottleneck) inQueue[t.u] = false;
@@ -656,7 +675,7 @@ namespace whfc {
                         const Node e_in = hg.edge_node_in(e);
 
                         scannedEdges++;
-                        if (hg.capacity(e) - hg.flow(e) > 0 && hg.label(e_in) == n) {
+                        if (hg.capacity(e) - hg.edge_flow_pr(e) > 0 && hg.label(e_in) == n) {
                             hg.label(e_in) = currentLabel;
                             current_pin_e_in[e] = hg.beginPins(e);
                             queue.push(e_in);
@@ -674,7 +693,7 @@ namespace whfc {
                         const Node e_out = hg.edge_node_out(e);
 
                         scannedEdges++;
-                        if (hg.flow(e) > 0 && hg.label(e_out) == n) {
+                        if (hg.edge_flow_pr(e) > 0 && hg.label(e_out) == n) {
                             hg.label(e_out) = currentLabel;
                             current_pin_e_out[e] = hg.beginPins(e);
                             queue.push(e_out);
