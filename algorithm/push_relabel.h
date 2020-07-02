@@ -35,7 +35,8 @@ namespace whfc {
         boost::circular_buffer<Node> nodes;
         struct StackFrame {
             Node u;
-            InHeIndex he_it;
+            InHeIndex child_he_it;
+            InHeIndex parent_he_it;
         };
         FixedCapacityStack<StackFrame> stack;
 
@@ -423,115 +424,69 @@ namespace whfc {
             auto& n = cs.n;
             auto& h = cs.h;
 
-            Flow total_augmented_flow = 0;
-
-            timer.start("resets", "phase2");
-            std::fill(inQueue.begin(), inQueue.end(), false);
-
-            std::fill(current_hyperedge.begin(), current_hyperedge.end(), InHeIndex::Invalid());
-            std::fill(current_pin_e_in.begin(), current_pin_e_in.end(), PinIterator(0));
-            std::fill(current_pin_e_out.begin(), current_pin_e_out.end(), PinIterator(0));
-            timer.stop("resets");
+            inQueue = std::vector<bool>(hg.numLawlerNodes(), false);
 
             const Node source = *cs.sourcePiercingNodes.begin()->node;
             const Node target = *cs.targetPiercingNodes.begin()->node;
 
-            timer.start("dfs", "phase2");
             assert(stack.empty());
-            stack.push({ source, InHeIndex::Invalid() });
+            stack.push({ source, InHeIndex::Invalid(), InHeIndex::Invalid() });
 
             while (!stack.empty()) {
                 const Node u = stack.top().u;
-                bool found_new_node = false;
-                if (hg.isNode(u)) {
-                    InHeIndex& he_it = current_hyperedge[u];
-                    if (he_it == InHeIndex::Invalid()) he_it = hg.beginIndexHyperedges(u);
-                    for (; he_it < hg.endIndexHyperedges(u); ++he_it) {
-                        InHe& inc_u = hg.getInHe(he_it);
-                        const Hyperedge e = inc_u.e;
+                Node v = invalidNode;
+                bool found_node = false;
+                for (InHeIndex he_it = hg.beginIndexHyperedges(u) ; he_it < hg.endIndexHyperedges(u); he_it++) {
+                    InHe& inc_u = hg.getInHe(he_it);
+                    const Hyperedge e = inc_u.e;
+                    const Flow residual_from_u_to_e = hg.flowSent(he_it) - hg.flowReceived(he_it) - hg.flowSent(inc_u.flow);
 
-                        const Flow residual_to_edge_in = hg.flowSent(he_it) - hg.absoluteFlowSent(inc_u);
-                        const Flow residual_to_edge_out = -(hg.flowReceived(he_it) - hg.absoluteFlowReceived(inc_u));
-
-                        if (residual_to_edge_out > 0) {
-                            stack.push({ hg.edge_node_out(e), he_it });
-                            found_new_node = true;
-                            break;
-                        } else if (residual_to_edge_in > 0) {
-                            stack.push({ hg.edge_node_in(e), he_it });
-                            found_new_node = true;
-                            break;
-                        }
-                    }
-                } else if (hg.is_edge_in(u)) {
-                    const Hyperedge e = hg.edgeFromLawlerNode(u);
-                    if (hg.edge_flow_pr(e) - hg.flow(e) > 0) {
-                        stack.push( { hg.edge_node_out(e), InHeIndex::Invalid() });
-                        found_new_node = true;
-                    }
-                    if (!found_new_node) {
-                        PinIterator& pin_it = current_pin_e_in[e];
-                        if (pin_it == PinIterator(0)) pin_it = hg.beginPins(e);
-                        for ( ; pin_it < hg.endPins(e); ++pin_it) {
-                            const Pin pin = *pin_it;
-                            const Node v = pin.pin;
-                            const InHe& inc_v = hg.getInHe(pin.he_inc_iter);
-                            const Flow residual_to_v = -(hg.flowSent(pin.he_inc_iter) - hg.absoluteFlowSent(inc_v));
-                            if (residual_to_v > 0) {
-                                stack.push( { v, pin.he_inc_iter });
-                                found_new_node = true;
-                                break;
+                    if (residual_from_u_to_e > 0) {
+                        if (hg.excess(hg.edge_node_in(e)) > 0) {
+                            Flow pushed_back = pushBack(std::min(hg.excess(hg.edge_node_in(e)), residual_from_u_to_e), source, false);
+                            // set stuff
+                        } else if (hg.excess(hg.edge_node_out(e)) > 0) {
+                            pushBack(hg.excess(hg.edge_node_out(e)), source, false);
+                            // set stuff
+                        } else {
+                            for (Pin& pin : hg.pinsOf(e)) {
+                                InHe& inc_v = hg.getInHe(pin.he_inc_iter);
+                                const Flow residual_from_e_to_v = -(hg.flowSent(inc_v) - hg.flowReceived(inc_v)) + hg.flowSent(inc_v.flow);
+                                if (pin.pin != u && residual_from_e_to_v > 0) {
+                                    v = pin.pin;
+                                    stack.top().child_he_it = he_it;
+                                    stack.push({v, InHeIndex::Invalid(), pin.he_inc_iter});
+                                    found_node = true;
+                                    break;
+                                }
                             }
                         }
-                    }
-                } else {
-                    assert(hg.is_edge_out(u));
-                    const Hyperedge e = hg.edgeFromLawlerNode(u);
-                    if (hg.edge_flow_pr(e) - hg.flow(e) < 0) {
-                        stack.push( { hg.edge_node_in(e), InHeIndex::Invalid() });
-                        found_new_node = true;
-                    }
-                    if (!found_new_node) {
-                        PinIterator& pin_it = current_pin_e_out[e];
-                        if (pin_it == PinIterator(0)) pin_it = hg.beginPins(e);
-                        for ( ; pin_it < hg.endPins(e); ++pin_it) {
-                            const Pin pin = *pin_it;
-                            const Node v = pin.pin;
-                            const InHe& inc_v = hg.getInHe(pin.he_inc_iter);
-                            const Flow residual_to_v = hg.flowReceived(pin.he_inc_iter) - hg.absoluteFlowReceived(inc_v);
-                            if (residual_to_v > 0) {
-                                stack.push( { v, pin.he_inc_iter });
-                                found_new_node = true;
-                                break;
-                            }
-                        }
+
                     }
 
+                    if (v != invalidNode)
+                        break;
                 }
 
-                if (found_new_node) {
-                    if (stack.top().u == target) {
-                        //std::cout << "Push back from target" << std::endl;
-                        total_augmented_flow += pushBack(maxFlow, source, true);
-                    } else if (hg.excess(stack.top().u) > 0) {
-                        //std::cout << "Push back excess to source" << std::endl;
-                        const Node top = stack.top().u;
-                        Flow flow_pushed_back = pushBack(hg.excess(stack.top().u), source, false);
-                        hg.excess(top) -= flow_pushed_back;
-                    } else if (inQueue[stack.top().u]) {
-                        //std::cout << "Push back looped flow" << std::endl;
-                        pushBack(maxFlow, stack.top().u, false);
-                    } else {
-                        inQueue[stack.top().u] = true;
-                    }
-                } else {
+                if (v == invalidNode) {
                     inQueue[stack.top().u] = false;
                     stack.pop();
                 }
+                else {
+                    if (v == source) {
+                        stack.top().child_he_it = inc_u_it;
+                        augment(inc_v_it);
+                    } else if (inQueue[v]) {
+                        stack.top().child_he_it = inc_u_it;
+                        removeCircularFlow(v, inc_v_it);
+                    } else {
+                        stack.top().child_he_it = inc_u_it;
+                        stack.push({v, inc_v_it, InHeIndex::Invalid()});
+                        inQueue[v] = true;
+                    }
+                }
 
             }
-            timer.stop("dfs");
-            return total_augmented_flow;
         }
 
         Flow pushBack(Flow bottleneckCapacity, Node first_node, bool augment) {
