@@ -67,7 +67,7 @@ namespace whfc {
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> thisLayer_thread_specific;
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> nextLayer_thread_specific;
 
-        PushRelabel(LawlerFlowHypergraph& hg, TimeReporter& timer, size_t numThreads) : hg(hg), nodes(hg.maxNumLawlerNodes()), stack(hg.maxNumLawlerNodes()), timer(timer), inQueue(hg.maxNumLawlerNodes()),
+        PushRelabel(LawlerFlowHypergraph& hg, TimeReporter& timer, size_t numThreads) : hg(hg), /*nodes(hg.maxNumLawlerNodes()),*/ stack(hg.maxNumLawlerNodes()), timer(timer), inQueue(hg.maxNumLawlerNodes()),
             current_hyperedge(hg.maxNumNodes, InHeIndex::Invalid()), current_pin_e_in(hg.maxNumHyperedges), current_pin_e_out(hg.maxNumHyperedges),
             thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()), nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>())
         {
@@ -76,7 +76,7 @@ namespace whfc {
 
         void reset() {
             queue.clear();
-            nodes.clear();
+            //nodes.clear();
             numPushes = 0;
             numRelabel = 0;
             numGlobalUpdate = 0;
@@ -115,7 +115,7 @@ namespace whfc {
                             assert(pushFlow);
                             numPushes++;
                             hg.push_node_to_edgeOut(u, he, residual);
-                            if (!inQueue.set(e_out)) { assert(hg.excess(e_out) > 0); queue.push_back(e_out); }
+                            if (inQueue.set(e_out)) { assert(hg.excess(e_out) > 0); queue.push_back(e_out); }
                         } else {
                             assert(hg.label(u) <= hg.label(e_out));
                             if (hg.label(e_out) != 0) minLevel = std::min(minLevel, hg.label(e_out));
@@ -129,7 +129,7 @@ namespace whfc {
                             assert(pushFlow);
                             numPushes++;
                             hg.push_node_to_edgeIn(u, he, residual);
-                            if (!inQueue.set(e_in)) { queue.push_back(e_in); }
+                            if (inQueue.set(e_in)) { queue.push_back(e_in); }
                         } else {
                             assert(hg.label(u) <= hg.label(e_in));
                             if (hg.label(e_in) != 0) minLevel = std::min(minLevel, hg.label(e_in));
@@ -166,7 +166,7 @@ namespace whfc {
                             assert(pushFlow);
                             numPushes++;
                             hg.push_edgeIn_to_node(v, pin.he_inc_iter, residual);
-                            if (!(v == target) && !(v == piercingNode) && !inQueue.set(v)) { queue.push_back(v); }
+                            if (!(v == target) && !(v == piercingNode) && inQueue.set(v)) { queue.push_back(v); }
                         } else {
                             assert(hg.label(e_in) <= hg.label(v) || v == piercingNode);
                             minLevel = std::min(minLevel, hg.label(v));
@@ -185,7 +185,7 @@ namespace whfc {
                         assert(pushFlow);
                         numPushes++;
                         hg.push_edgeIn_to_edgeOut(e_in, e_out, residual);
-                        if (!inQueue.set(e_out)) { queue.push_back(e_out); }
+                        if (inQueue.set(e_out)) { queue.push_back(e_out); }
                     } else {
                         assert(hg.label(e_in) <= hg.label(e_out));
                         minLevel = std::min(minLevel, hg.label(e_out));
@@ -219,7 +219,7 @@ namespace whfc {
                             assert(pushFlow);
                             numPushes++;
                             hg.push_edgeOut_to_node(v, pin.he_inc_iter, residual);
-                            if (!(v == target) && !(v == piercingNode) && !inQueue.set(v)) { queue.push_back(v); }
+                            if (!(v == target) && !(v == piercingNode) && inQueue.set(v)) { queue.push_back(v); }
                         } else {
                             assert(hg.label(e_out) <= hg.label(v) || piercingNode == v);
                             minLevel = std::min(minLevel, hg.label(v));
@@ -238,7 +238,7 @@ namespace whfc {
                         assert(pushFlow);
                         numPushes++;
                         hg.push_edgeOut_to_edgeIn(e_out, e_in, residual);
-                        if (!inQueue.set(e_in)) {
+                        if (inQueue.set(e_in)) {
                             queue.push_back(e_in);
                         }
                     } else {
@@ -267,6 +267,7 @@ namespace whfc {
                 // Relabel
                 numRelabel++;
                 iterateOverNode<false>(u, cs, queue);
+                if (hg.label_next_iteration(u) < n && inQueue.set(u)) queue.push_back(u);
             } else {
                 hg.label_next_iteration(u) = n;
             }
@@ -276,11 +277,14 @@ namespace whfc {
             assert(hg.excess(e_in) > 0);
             assert(hg.is_edge_in(e_in));
 
+            std::cout << "Test" << std::endl;
             iterateOverEdgeNodeIn<true>(e_in, cs, queue);
             if (hg.excess(e_in) > 0) {
+                std::cout << "Test2" << std::endl;
                 // Relabel
                 numRelabel++;
                 iterateOverEdgeNodeIn<false>(e_in, cs, queue);
+                if (hg.label_next_iteration(e_in) < n && inQueue.set(e_in)) queue.push_back(e_in);
             } else {
                 hg.label_next_iteration(e_in) = n;
             }
@@ -294,12 +298,13 @@ namespace whfc {
                 // Relabel
                 numRelabel++;
                 iterateOverEdgeNodeOut<false>(e_out, cs, queue);
+                if (hg.label_next_iteration(e_out) < n && inQueue.set(e_out)) queue.push_back(e_out);
             } else {
                 hg.label_next_iteration(e_out) = n;
             }
         }
 
-        void pushRelabel(CutterState<Type>& cs, const size_t nm, const size_t n, const bool keepNodesWithHighLabel) {
+        void pushRelabel(CutterState<Type>& cs, const size_t nm, const bool keepNodesWithHighLabel) {
             bool nodes_left = true;
 
             while (nodes_left) {
@@ -307,10 +312,23 @@ namespace whfc {
 
                 tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
+                        for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
+                            const Node u = vector[i];
+                            std::cout << u << std::endl;
+                            hg.excess_next_iteration(u) = hg.excess(u);
+                            hg.label_next_iteration(u) = hg.label(u);
+                        }
+                    });
+                });
+
+                std::cout << "Second phase" << std::endl;
+
+                tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
+                    tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
                         std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
                         for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
                             const Node u = vector[i];
-
+                            std::cout << u << ", " << hg.label(u) << ", " << n << std::endl;
                             if (hg.label(u) >= n) continue;
 
                             if (hg.isNode(u)) {
@@ -327,17 +345,24 @@ namespace whfc {
 
                 tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
-                        std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
                         for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
                             const Node u = vector[i];
-
-
-
+                            hg.excess(u) = hg.excess_next_iteration(u);
+                            hg.label(u) = hg.label_next_iteration(u);
                         }
                     });
                 });
 
-                //nodes_left anpassen
+                std::swap(thisLayer_thread_specific, nextLayer_thread_specific);
+
+                nodes_left = false;
+                for (std::vector<Node>& vector : *thisLayer_thread_specific) {
+                    if (vector.size() > 0) nodes_left = true;
+                }
+
+                for (std::vector<Node>& vector : *nextLayer_thread_specific) {
+                    vector.clear();
+                }
 
                 if (!keepNodesWithHighLabel && workSinceLastRelabel * globalUpdateFreq > nm) {
                     timer.start("globalUpdate", "phase1");
@@ -346,6 +371,8 @@ namespace whfc {
                     timer.stop("globalUpdate");
                     workSinceLastRelabel = 0;
                 }
+
+                hg.nextIteration();
             }
 
         }
@@ -362,15 +389,7 @@ namespace whfc {
             hg.initialize_for_push_relabel();
             timer.stop("initialize");
 
-            timer.start("setLabels", "exhaustFlow");
-            size_t n = hg.numNodes() - cs.n.numSettledNodes + 2 * hg.numHyperedges();
-            std::array<size_t, 2> numScans = globalUpdate(cs, n);
-            timer.stop("setLabels");
-
-            size_t nm = ALPHA * numScans[0] + numScans[1];
-            n = numScans[0];
-
-            piercingNode = cs.targetPiercingNodes.begin()->node;
+            piercingNode = cs.sourcePiercingNodes.begin()->node;
             target = cs.targetPiercingNodes.begin()->node;
 
             std::vector<Node>& thisLayer = thisLayer_thread_specific->local();
@@ -383,35 +402,41 @@ namespace whfc {
                 const Hyperedge e = inc_u.e;
                 if (!cs.h.areAllPinsSourceReachable__unsafe__(e)) {
                     const Node e_out = hg.edge_node_out(e);
-                    if (hg.label(e_out) != n) {
-                        Flow residual = hg.flowReceived(inc_iter);
-                        if (residual > 0) {
-                            hg.push_node_to_edgeOut(piercingNode, inc_iter, residual);
-                            nodes_left = true;
-                            if (!inQueue.isSet(e_out)) { assert(hg.excess(e_out) > 0); thisLayer.push_back(e_out); inQueue.set(e_out); }
-                        }
+                    Flow residual = hg.flowReceived(inc_iter);
+                    if (residual > 0) {
+                        hg.push_node_to_edgeOut(piercingNode, inc_iter, residual);
+                        nodes_left = true;
+                        if (inQueue.set(e_out)) { thisLayer.push_back(e_out); }
                     }
 
                     const Node e_in = hg.edge_node_in(e);
-                    if (hg.label(e_in) != n) {
-                        Flow residual = hg.capacity(e);
-                        if (residual > 0) {
-                            hg.push_node_to_edgeIn(piercingNode, inc_iter, residual);
-                            nodes_left = true;
-                            if (!inQueue.isSet(e_in)) { assert(hg.excess(e_in) > 0); thisLayer.push_back(e_in); inQueue.set(e_in); }
-                        }
+                    residual = hg.capacity(e);
+                    if (residual > 0) {
+                        hg.push_node_to_edgeIn(piercingNode, inc_iter, residual);
+                        nodes_left = true;
+                        if (inQueue.set(e_in)) { thisLayer.push_back(e_in); }
                     }
                 }
             }
 
+            timer.start("setLabels", "exhaustFlow");
+            n = hg.numNodes() + 2 * hg.numHyperedges();
+            std::array<size_t, 2> numScans = globalUpdate(cs, n);
+            timer.stop("setLabels");
 
+            size_t nm = ALPHA * numScans[0] + numScans[1];
+            n = numScans[0];
 
             timer.start("mainLoop", "exhaustFlow");
+            hg.nextIteration();
 
             timer.start("phase1", "mainLoop");
             // Phase 1
-            if (nodes_left) pushRelabel(cs, nm, numScans[0], false);
+            if (nodes_left) pushRelabel(cs, nm, false);
             timer.stop("phase1");
+
+            hg.printHypergraph(std::cout);
+            hg.printExcessAndLabel();
 
             timer.start("phase2", "mainLoop");
             timer.start("buildResidualNetwork", "phase2");
@@ -426,6 +451,9 @@ namespace whfc {
             timer.start("writeBackFlow", "exhaustFlow");
             hg.writeBackFlow();
             timer.stop("writeBackFlow");
+
+            hg.printHypergraph(std::cout);
+            hg.printExcessAndLabel();
 
             resetSourcePiercingNodeDistances(cs);
 
@@ -457,7 +485,7 @@ namespace whfc {
             Flow total_augmented_flow = 0;
 
             timer.start("resets", "phase2");
-            std::fill(inQueue.begin(), inQueue.end(), false);
+            inQueue.reset();
 
             std::fill(current_hyperedge.begin(), current_hyperedge.end(), InHeIndex::Invalid());
             std::fill(current_pin_e_in.begin(), current_pin_e_in.end(), PinIterator(0));
@@ -542,21 +570,21 @@ namespace whfc {
 
                 if (found_new_node) {
                     if (stack.top().u == target) {
-                        //std::cout << "Push back from target" << std::endl;
+                        std::cout << "Push back from target" << std::endl;
                         total_augmented_flow += pushBack(maxFlow, source, true);
                     } else if (hg.excess(stack.top().u) > 0) {
-                        //std::cout << "Push back excess to source" << std::endl;
+                        std::cout << "Push back excess to source" << std::endl;
                         const Node top = stack.top().u;
                         Flow flow_pushed_back = pushBack(hg.excess(stack.top().u), source, false);
                         hg.excess(top) -= flow_pushed_back;
-                    } else if (inQueue[stack.top().u]) {
-                        //std::cout << "Push back looped flow" << std::endl;
+                    } else if (inQueue.isSet(stack.top().u)) {
+                        std::cout << "Push back looped flow" << std::endl;
                         pushBack(maxFlow, stack.top().u, false);
                     } else {
-                        inQueue[stack.top().u] = true;
+                        inQueue.set(stack.top().u);
                     }
                 } else {
-                    inQueue[stack.top().u] = false;
+                    inQueue.reset(stack.top().u);
                     stack.pop();
                 }
 
@@ -602,12 +630,12 @@ namespace whfc {
                 if (stack.at(stack_pointer - 1).u == first_node) break;
             }
             assert(bottleneckCapacity > 0);
-            //std::cout << "Push back " << bottleneckCapacity << std::endl;
+            std::cout << "Push back " << bottleneckCapacity << std::endl;
             if (lowest_bottleneck == std::numeric_limits<int64_t>::max()) lowest_bottleneck = 1;
 
             for (int64_t stack_pointer = stack.size() - 1; stack_pointer > 0; --stack_pointer) {
                 const StackFrame& t = stack.at(stack_pointer);
-                //std::cout << t.u << " ";
+                std::cout << t.u << " ";
                 if (hg.isNode(t.u)) {
                     if (hg.is_edge_out(stack.at(stack_pointer-1).u)) {
                         hg.flowOut(t.he_it) -= bottleneckCapacity;
@@ -631,10 +659,10 @@ namespace whfc {
                         hg.flow(hg.edgeFromLawlerNode(t.u)) -= bottleneckCapacity;
                     }
                 }
-                if (stack_pointer >= lowest_bottleneck) inQueue[t.u] = false;
+                if (stack_pointer >= lowest_bottleneck) inQueue.reset(t.u);
                 if (stack.at(stack_pointer - 1).u == first_node) break;
             }
-            //std::cout << std::endl;
+            std::cout << std::endl;
             if (lowest_bottleneck == std::numeric_limits<int64_t>::max()) lowest_bottleneck = 1;
             stack.popDownTo(lowest_bottleneck-1);
             return bottleneckCapacity;
@@ -647,6 +675,12 @@ namespace whfc {
             queue.clear();
 
             hg.equalizeLabels(n);
+
+            for (std::vector<Node>& vector : *thisLayer_thread_specific) {
+                vector.clear();
+            }
+
+            std::vector<Node>& layer_queue = thisLayer_thread_specific->local();
 
             // Source and target of the bfs
             const Node source = *cs.targetPiercingNodes.begin()->node;
@@ -674,11 +708,13 @@ namespace whfc {
                                     hg.label(e_in) = currentLabel;
                                     current_pin_e_in[e] = hg.beginPins(e);
                                     queue.push(e_in);
+                                    if (hg.excess_next_iteration(e_in) > 0) layer_queue.push_back(e_in);
                                 }
                                 if (hg.label(e_out) == n) {
                                     hg.label(e_out) = currentLabel;
                                     current_pin_e_out[e] = hg.beginPins(e);
                                     queue.push(e_out);
+                                    if (hg.excess_next_iteration(e_out) > 0) layer_queue.push_back(e_out);
                                 }
                             }
                         }
@@ -691,6 +727,7 @@ namespace whfc {
                             hg.label(e_in) = currentLabel;
                             current_pin_e_in[e] = hg.beginPins(e);
                             queue.push(e_in);
+                            if (hg.excess_next_iteration(e_in) > 0) layer_queue.push_back(e_in);
                         }
                         for (Pin& pin : hg.pinsOf(e)) {
                             scannedEdges++;
@@ -698,6 +735,7 @@ namespace whfc {
                                 hg.label(pin.pin) = currentLabel;
                                 current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
                                 queue.push(pin.pin);
+                                if (hg.excess_next_iteration(e_in) > 0) layer_queue.push_back(e_in);
                             }
                         }
                     } else {
@@ -709,6 +747,7 @@ namespace whfc {
                             hg.label(e_out) = currentLabel;
                             current_pin_e_out[e] = hg.beginPins(e);
                             queue.push(e_out);
+                            if (hg.excess_next_iteration(e_out) > 0) layer_queue.push_back(e_out);
                         }
                         for (Pin& pin : hg.pinsOf(e)) {
                             scannedEdges++;
@@ -716,6 +755,7 @@ namespace whfc {
                                 hg.label(pin.pin) = currentLabel;
                                 current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
                                 queue.push(pin.pin);
+                                if (hg.excess_next_iteration(pin.pin) > 0) layer_queue.push_back(pin.pin);
                             }
                         }
                     }

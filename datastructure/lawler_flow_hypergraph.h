@@ -55,7 +55,7 @@ namespace whfc {
         inline Flow& excess_next_iteration(Node u) { assert(u < numLawlerNodes()); return vec_excess_next_iteration[u]; }
 
         inline void nextIteration() {
-            std::swap(vec_label_this_iteration, vec_label_next_iteration);
+            //std::swap(vec_label_this_iteration, vec_label_next_iteration);
             std::swap(vec_excess_this_iteration, vec_excess_next_iteration);
         }
 
@@ -105,7 +105,7 @@ namespace whfc {
 
             const InHe& in_he = FlowHypergraph::getInHe(inc);
 
-            __atomic_sub_fetch(&vec_excess_next_iteration[u], f, __ATOMIC_ACQ_REL);
+            __atomic_sub_fetch(&vec_excess_this_iteration[u], f, __ATOMIC_ACQ_REL);
             __atomic_add_fetch(&vec_excess_next_iteration[edge_node_in(in_he.e)], f, __ATOMIC_ACQ_REL);
             flowIn(inc) += f;
         }
@@ -116,7 +116,7 @@ namespace whfc {
 
             const InHe& in_he = FlowHypergraph::getInHe(inc);
 
-            __atomic_sub_fetch(&vec_excess_next_iteration[u], f, __ATOMIC_ACQ_REL);
+            __atomic_sub_fetch(&vec_excess_this_iteration[u], f, __ATOMIC_ACQ_REL);
             __atomic_add_fetch(&vec_excess_next_iteration[edge_node_out(in_he.e)], f, __ATOMIC_ACQ_REL);
             flowOut(inc) -= f;
         }
@@ -129,7 +129,7 @@ namespace whfc {
             const InHe& in_he = FlowHypergraph::getInHe(inc);
 
             __atomic_add_fetch(&vec_excess_next_iteration[u], f, __ATOMIC_ACQ_REL);
-            __atomic_sub_fetch(&vec_excess_next_iteration[edge_node_in(in_he.e)], f, __ATOMIC_ACQ_REL);
+            __atomic_sub_fetch(&vec_excess_this_iteration[edge_node_in(in_he.e)], f, __ATOMIC_ACQ_REL);
             flowIn(inc) -= f;
         }
 
@@ -140,7 +140,7 @@ namespace whfc {
             const InHe& in_he = FlowHypergraph::getInHe(inc);
 
             __atomic_add_fetch(&vec_excess_next_iteration[u], f, __ATOMIC_ACQ_REL);
-            __atomic_sub_fetch(&vec_excess_next_iteration[edge_node_out(in_he.e)], f, __ATOMIC_ACQ_REL);
+            __atomic_sub_fetch(&vec_excess_this_iteration[edge_node_out(in_he.e)], f, __ATOMIC_ACQ_REL);
             flowOut(inc) += f;
         }
 
@@ -149,7 +149,7 @@ namespace whfc {
             assert(f <= excess(e_in));
             assert(is_edge_out(e_out) && is_edge_in(e_in));
 
-            __atomic_sub_fetch(&vec_excess_next_iteration[e_in], f, __ATOMIC_ACQ_REL);
+            __atomic_sub_fetch(&vec_excess_this_iteration[e_in], f, __ATOMIC_ACQ_REL);
             __atomic_add_fetch(&vec_excess_next_iteration[e_out], f, __ATOMIC_ACQ_REL);
 
             flow(edgeFromLawlerNode(e_in)) += f;
@@ -161,7 +161,7 @@ namespace whfc {
             assert(f <= flow(edgeFromLawlerNode(e_in)));
             assert(is_edge_out(e_out) && is_edge_in(e_in));
 
-            __atomic_sub_fetch(&vec_excess_next_iteration[e_out], f, __ATOMIC_ACQ_REL);
+            __atomic_sub_fetch(&vec_excess_this_iteration[e_out], f, __ATOMIC_ACQ_REL);
             __atomic_add_fetch(&vec_excess_next_iteration[e_in], f, __ATOMIC_ACQ_REL);
 
             flow(edgeFromLawlerNode(e_in)) -= f;
@@ -276,26 +276,30 @@ namespace whfc {
             return numNodes() + 2 * numHyperedges();
         }
 
+        void copy_excess_vectors() {
+
+        }
+
         void initialize_for_push_relabel() {
-            vec_excess.clear();
-            vec_label.clear();
+            std::fill(vec_excess_this_iteration.begin(), vec_excess_this_iteration.end(), 0);
+            std::fill(vec_excess_next_iteration.begin(), vec_excess_next_iteration.end(), 0);
         }
 
         void equalizeLabels(size_t n) {
-            vec_label.defaultValue = n;
-            vec_label.clear();
+            std::fill(vec_label_this_iteration.begin(), vec_label_this_iteration.end(), n);
+            std::fill(vec_label_next_iteration.begin(), vec_label_next_iteration.end(), n);
         }
 
         void printExcessAndLabel() {
             std::cout << "Excess: ";
-            for (uint i = 0; i < vec_excess.size(); ++i) {
-                std::cout << vec_excess[i] << " ";
+            for (uint i = 0; i < vec_excess_this_iteration.size(); ++i) {
+                std::cout << vec_excess_this_iteration[i] << " ";
             }
             std::cout << std::endl;
 
             std::cout << "Label: ";
-            for (uint i = 0; i < vec_label.size(); ++i)  {
-                std::cout << vec_label[i] << " ";
+            for (uint i = 0; i < vec_label_this_iteration.size(); ++i)  {
+                std::cout << vec_label_this_iteration[i] << " ";
             }
             std::cout << std::endl;
         }
