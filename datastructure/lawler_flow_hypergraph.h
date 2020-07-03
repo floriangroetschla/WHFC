@@ -13,7 +13,7 @@ namespace whfc {
     public:
         using Base = FlowHypergraphBuilder;
 
-        LawlerFlowHypergraph() : Base(), vec_excess_this_iteration(), vec_label_this_iteration(), vec_excess_next_iteration(), vec_label_next_iteration() {
+        LawlerFlowHypergraph() : Base(), vec_excess(), vec_label_this_iteration(), vec_excess_change(), vec_label_next_iteration() {
             clear();
         }
 
@@ -23,7 +23,7 @@ namespace whfc {
         }*/
 
         LawlerFlowHypergraph(size_t maxNumNodes, size_t maxNumHyperedges) : Base(maxNumNodes, maxNumHyperedges),
-            vec_excess_this_iteration(numLawlerNodes()), vec_label_this_iteration(numLawlerNodes()), vec_excess_next_iteration(numLawlerNodes()), vec_label_next_iteration(numLawlerNodes()), in_flow(), out_flow() {
+            vec_excess(numLawlerNodes()), vec_label_this_iteration(numLawlerNodes()), vec_excess_change(numLawlerNodes()), vec_label_next_iteration(numLawlerNodes()), in_flow(), out_flow() {
 
         }
 
@@ -51,13 +51,8 @@ namespace whfc {
         inline size_t& label(Node u) { assert(u < numLawlerNodes()); return vec_label_this_iteration[u]; }
         inline size_t& label_next_iteration(Node u) { assert(u < numLawlerNodes()); return vec_label_next_iteration[u]; }
 
-        inline Flow& excess(Node u) { assert(u < numLawlerNodes()); return vec_excess_this_iteration[u]; }
-        inline Flow& excess_next_iteration(Node u) { assert(u < numLawlerNodes()); return vec_excess_next_iteration[u]; }
-
-        inline void nextIteration() {
-            //std::swap(vec_label_this_iteration, vec_label_next_iteration);
-            std::swap(vec_excess_this_iteration, vec_excess_next_iteration);
-        }
+        inline Flow& excess(Node u) { assert(u < numLawlerNodes()); return vec_excess[u]; }
+        inline Flow& excess_change(Node u) { assert(u < numLawlerNodes()); return vec_excess_change[u]; }
 
         inline bool isNode(Node u) { return u < numNodes(); }
 
@@ -105,8 +100,8 @@ namespace whfc {
 
             const InHe& in_he = FlowHypergraph::getInHe(inc);
 
-            __atomic_sub_fetch(&vec_excess_this_iteration[u], f, __ATOMIC_ACQ_REL);
-            __atomic_add_fetch(&vec_excess_next_iteration[edge_node_in(in_he.e)], f, __ATOMIC_ACQ_REL);
+            vec_excess[u] -= f;
+            __atomic_add_fetch(&vec_excess_change[edge_node_in(in_he.e)], f, __ATOMIC_ACQ_REL);
             flowIn(inc) += f;
         }
 
@@ -116,8 +111,8 @@ namespace whfc {
 
             const InHe& in_he = FlowHypergraph::getInHe(inc);
 
-            __atomic_sub_fetch(&vec_excess_this_iteration[u], f, __ATOMIC_ACQ_REL);
-            __atomic_add_fetch(&vec_excess_next_iteration[edge_node_out(in_he.e)], f, __ATOMIC_ACQ_REL);
+            vec_excess[u] -= f;
+            __atomic_add_fetch(&vec_excess_change[edge_node_out(in_he.e)], f, __ATOMIC_ACQ_REL);
             flowOut(inc) -= f;
         }
 
@@ -128,8 +123,8 @@ namespace whfc {
 
             const InHe& in_he = FlowHypergraph::getInHe(inc);
 
-            __atomic_add_fetch(&vec_excess_next_iteration[u], f, __ATOMIC_ACQ_REL);
-            __atomic_sub_fetch(&vec_excess_this_iteration[edge_node_in(in_he.e)], f, __ATOMIC_ACQ_REL);
+            vec_excess[edge_node_in(in_he.e)] -= f;
+            __atomic_add_fetch(&vec_excess_change[u], f, __ATOMIC_ACQ_REL);
             flowIn(inc) -= f;
         }
 
@@ -139,8 +134,8 @@ namespace whfc {
 
             const InHe& in_he = FlowHypergraph::getInHe(inc);
 
-            __atomic_add_fetch(&vec_excess_next_iteration[u], f, __ATOMIC_ACQ_REL);
-            __atomic_sub_fetch(&vec_excess_this_iteration[edge_node_out(in_he.e)], f, __ATOMIC_ACQ_REL);
+            vec_excess[edge_node_out(in_he.e)] -= f;
+            __atomic_add_fetch(&vec_excess_change[u], f, __ATOMIC_ACQ_REL);
             flowOut(inc) += f;
         }
 
@@ -149,8 +144,8 @@ namespace whfc {
             assert(f <= excess(e_in));
             assert(is_edge_out(e_out) && is_edge_in(e_in));
 
-            __atomic_sub_fetch(&vec_excess_this_iteration[e_in], f, __ATOMIC_ACQ_REL);
-            __atomic_add_fetch(&vec_excess_next_iteration[e_out], f, __ATOMIC_ACQ_REL);
+            vec_excess[e_in] -= f;
+            __atomic_add_fetch(&vec_excess_change[e_out], f, __ATOMIC_ACQ_REL);
 
             flow(edgeFromLawlerNode(e_in)) += f;
         }
@@ -161,8 +156,8 @@ namespace whfc {
             assert(f <= flow(edgeFromLawlerNode(e_in)));
             assert(is_edge_out(e_out) && is_edge_in(e_in));
 
-            __atomic_sub_fetch(&vec_excess_this_iteration[e_out], f, __ATOMIC_ACQ_REL);
-            __atomic_add_fetch(&vec_excess_next_iteration[e_in], f, __ATOMIC_ACQ_REL);
+            vec_excess[e_out] -= f;
+            __atomic_add_fetch(&vec_excess_change[e_in], f, __ATOMIC_ACQ_REL);
 
             flow(edgeFromLawlerNode(e_in)) -= f;
         }
@@ -281,8 +276,8 @@ namespace whfc {
         }
 
         void initialize_for_push_relabel() {
-            std::fill(vec_excess_this_iteration.begin(), vec_excess_this_iteration.end(), 0);
-            std::fill(vec_excess_next_iteration.begin(), vec_excess_next_iteration.end(), 0);
+            std::fill(vec_excess.begin(), vec_excess.end(), 0);
+            std::fill(vec_excess_change.begin(), vec_excess_change.end(), 0);
         }
 
         void equalizeLabels(size_t n) {
@@ -292,8 +287,8 @@ namespace whfc {
 
         void printExcessAndLabel() {
             std::cout << "Excess: ";
-            for (uint i = 0; i < vec_excess_this_iteration.size(); ++i) {
-                std::cout << vec_excess_this_iteration[i] << " ";
+            for (uint i = 0; i < vec_excess.size(); ++i) {
+                std::cout << vec_excess[i] << " ";
             }
             std::cout << std::endl;
 
@@ -347,21 +342,21 @@ namespace whfc {
             out_flow.resize(numPins(), 0);
             std::fill(in_flow.begin(), in_flow.end(), 0);
             std::fill(out_flow.begin(), out_flow.end(), 0);
-            vec_excess_this_iteration.resize(numLawlerNodes());
+            vec_excess.resize(numLawlerNodes());
             vec_label_this_iteration.resize(numLawlerNodes());
-            vec_excess_next_iteration.resize(numLawlerNodes());
+            vec_excess_change.resize(numLawlerNodes());
             vec_label_next_iteration.resize(numLawlerNodes());
-            std::fill(vec_excess_this_iteration.begin(), vec_excess_this_iteration.end(), 0);
+            //std::fill(vec_excess_this_iteration.begin(), vec_excess_this_iteration.end(), 0);
             std::fill(vec_label_this_iteration.begin(), vec_label_this_iteration.end(), 0);
-            std::fill(vec_excess_next_iteration.begin(), vec_excess_next_iteration.end(), 0);
+            //std::fill(vec_excess_next_iteration.begin(), vec_excess_next_iteration.end(), 0);
             std::fill(vec_label_next_iteration.begin(), vec_label_next_iteration.end(), 0);
         }
 
     private:
-        std::vector<Flow> vec_excess_this_iteration;
+        std::vector<Flow> vec_excess;
         std::vector<size_t> vec_label_this_iteration;
 
-        std::vector<Flow> vec_excess_next_iteration;
+        std::vector<Flow> vec_excess_change;
         std::vector<size_t> vec_label_next_iteration;
 
         std::vector<Flow> in_flow;

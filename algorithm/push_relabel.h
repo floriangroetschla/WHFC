@@ -115,7 +115,7 @@ namespace whfc {
                             assert(pushFlow);
                             numPushes++;
                             hg.push_node_to_edgeOut(u, he, residual);
-                            if (inQueue.set(e_out)) { assert(hg.excess(e_out) > 0); queue.push_back(e_out); }
+                            if (inQueue.set(e_out)) { queue.push_back(e_out); }
                         } else {
                             assert(hg.label(u) <= hg.label(e_out));
                             if (hg.label(e_out) != 0) minLevel = std::min(minLevel, hg.label(e_out));
@@ -268,8 +268,6 @@ namespace whfc {
                 numRelabel++;
                 iterateOverNode<false>(u, cs, queue);
                 if (hg.label_next_iteration(u) < n && inQueue.set(u)) queue.push_back(u);
-            } else {
-                hg.label_next_iteration(u) = n;
             }
         }
 
@@ -277,16 +275,12 @@ namespace whfc {
             assert(hg.excess(e_in) > 0);
             assert(hg.is_edge_in(e_in));
 
-            std::cout << "Test" << std::endl;
             iterateOverEdgeNodeIn<true>(e_in, cs, queue);
             if (hg.excess(e_in) > 0) {
-                std::cout << "Test2" << std::endl;
                 // Relabel
                 numRelabel++;
                 iterateOverEdgeNodeIn<false>(e_in, cs, queue);
                 if (hg.label_next_iteration(e_in) < n && inQueue.set(e_in)) queue.push_back(e_in);
-            } else {
-                hg.label_next_iteration(e_in) = n;
             }
         }
 
@@ -299,8 +293,6 @@ namespace whfc {
                 numRelabel++;
                 iterateOverEdgeNodeOut<false>(e_out, cs, queue);
                 if (hg.label_next_iteration(e_out) < n && inQueue.set(e_out)) queue.push_back(e_out);
-            } else {
-                hg.label_next_iteration(e_out) = n;
             }
         }
 
@@ -312,23 +304,10 @@ namespace whfc {
 
                 tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
-                        for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
-                            const Node u = vector[i];
-                            std::cout << u << std::endl;
-                            hg.excess_next_iteration(u) = hg.excess(u);
-                            hg.label_next_iteration(u) = hg.label(u);
-                        }
-                    });
-                });
-
-                std::cout << "Second phase" << std::endl;
-
-                tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
-                    tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
                         std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
                         for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
                             const Node u = vector[i];
-                            std::cout << u << ", " << hg.label(u) << ", " << n << std::endl;
+                            hg.label_next_iteration(u) = hg.label(u);
                             if (hg.label(u) >= n) continue;
 
                             if (hg.isNode(u)) {
@@ -345,15 +324,27 @@ namespace whfc {
 
                 tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
+                        std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
                         for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
                             const Node u = vector[i];
-                            hg.excess(u) = hg.excess_next_iteration(u);
+                            hg.excess(u) += hg.excess_change(u);
+                            hg.excess_change(u) = 0;
                             hg.label(u) = hg.label_next_iteration(u);
                         }
                     });
                 });
 
                 std::swap(thisLayer_thread_specific, nextLayer_thread_specific);
+
+                tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
+                    tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
+                        for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
+                            const Node u = vector[i];
+                            hg.excess(u) += hg.excess_change(u);
+                            hg.excess_change(u) = 0;
+                        }
+                    });
+                });
 
                 nodes_left = false;
                 for (std::vector<Node>& vector : *thisLayer_thread_specific) {
@@ -371,10 +362,10 @@ namespace whfc {
                     timer.stop("globalUpdate");
                     workSinceLastRelabel = 0;
                 }
-
-                hg.nextIteration();
             }
 
+            hg.excess(target) += hg.excess_change(target);
+            hg.excess_change(target) = 0;
         }
 
         Flow exhaustFlow(CutterState<Type>& cs) {
@@ -394,6 +385,8 @@ namespace whfc {
 
             std::vector<Node>& thisLayer = thisLayer_thread_specific->local();
             thisLayer.clear();
+
+            inQueue.reset();
 
             bool nodes_left = false;
 
@@ -419,6 +412,11 @@ namespace whfc {
                 }
             }
 
+            for (Node u : thisLayer) {
+                hg.excess(u) += hg.excess_change(u);
+                hg.excess_change(u) = 0;
+            }
+
             timer.start("setLabels", "exhaustFlow");
             n = hg.numNodes() + 2 * hg.numHyperedges();
             std::array<size_t, 2> numScans = globalUpdate(cs, n);
@@ -428,15 +426,11 @@ namespace whfc {
             n = numScans[0];
 
             timer.start("mainLoop", "exhaustFlow");
-            hg.nextIteration();
 
             timer.start("phase1", "mainLoop");
             // Phase 1
             if (nodes_left) pushRelabel(cs, nm, false);
             timer.stop("phase1");
-
-            hg.printHypergraph(std::cout);
-            hg.printExcessAndLabel();
 
             timer.start("phase2", "mainLoop");
             timer.start("buildResidualNetwork", "phase2");
@@ -451,9 +445,6 @@ namespace whfc {
             timer.start("writeBackFlow", "exhaustFlow");
             hg.writeBackFlow();
             timer.stop("writeBackFlow");
-
-            hg.printHypergraph(std::cout);
-            hg.printExcessAndLabel();
 
             resetSourcePiercingNodeDistances(cs);
 
@@ -570,15 +561,15 @@ namespace whfc {
 
                 if (found_new_node) {
                     if (stack.top().u == target) {
-                        std::cout << "Push back from target" << std::endl;
+                        //std::cout << "Push back from target" << std::endl;
                         total_augmented_flow += pushBack(maxFlow, source, true);
                     } else if (hg.excess(stack.top().u) > 0) {
-                        std::cout << "Push back excess to source" << std::endl;
+                        //std::cout << "Push back excess to source" << std::endl;
                         const Node top = stack.top().u;
                         Flow flow_pushed_back = pushBack(hg.excess(stack.top().u), source, false);
                         hg.excess(top) -= flow_pushed_back;
                     } else if (inQueue.isSet(stack.top().u)) {
-                        std::cout << "Push back looped flow" << std::endl;
+                        //std::cout << "Push back looped flow" << std::endl;
                         pushBack(maxFlow, stack.top().u, false);
                     } else {
                         inQueue.set(stack.top().u);
@@ -630,12 +621,12 @@ namespace whfc {
                 if (stack.at(stack_pointer - 1).u == first_node) break;
             }
             assert(bottleneckCapacity > 0);
-            std::cout << "Push back " << bottleneckCapacity << std::endl;
+            //std::cout << "Push back " << bottleneckCapacity << std::endl;
             if (lowest_bottleneck == std::numeric_limits<int64_t>::max()) lowest_bottleneck = 1;
 
             for (int64_t stack_pointer = stack.size() - 1; stack_pointer > 0; --stack_pointer) {
                 const StackFrame& t = stack.at(stack_pointer);
-                std::cout << t.u << " ";
+                //std::cout << t.u << " ";
                 if (hg.isNode(t.u)) {
                     if (hg.is_edge_out(stack.at(stack_pointer-1).u)) {
                         hg.flowOut(t.he_it) -= bottleneckCapacity;
@@ -662,7 +653,7 @@ namespace whfc {
                 if (stack_pointer >= lowest_bottleneck) inQueue.reset(t.u);
                 if (stack.at(stack_pointer - 1).u == first_node) break;
             }
-            std::cout << std::endl;
+            //std::cout << std::endl;
             if (lowest_bottleneck == std::numeric_limits<int64_t>::max()) lowest_bottleneck = 1;
             stack.popDownTo(lowest_bottleneck-1);
             return bottleneckCapacity;
@@ -708,13 +699,13 @@ namespace whfc {
                                     hg.label(e_in) = currentLabel;
                                     current_pin_e_in[e] = hg.beginPins(e);
                                     queue.push(e_in);
-                                    if (hg.excess_next_iteration(e_in) > 0) layer_queue.push_back(e_in);
+                                    if (hg.excess(e_in) > 0) layer_queue.push_back(e_in);
                                 }
                                 if (hg.label(e_out) == n) {
                                     hg.label(e_out) = currentLabel;
                                     current_pin_e_out[e] = hg.beginPins(e);
                                     queue.push(e_out);
-                                    if (hg.excess_next_iteration(e_out) > 0) layer_queue.push_back(e_out);
+                                    if (hg.excess(e_out) > 0) layer_queue.push_back(e_out);
                                 }
                             }
                         }
@@ -727,7 +718,7 @@ namespace whfc {
                             hg.label(e_in) = currentLabel;
                             current_pin_e_in[e] = hg.beginPins(e);
                             queue.push(e_in);
-                            if (hg.excess_next_iteration(e_in) > 0) layer_queue.push_back(e_in);
+                            if (hg.excess(e_in) > 0) layer_queue.push_back(e_in);
                         }
                         for (Pin& pin : hg.pinsOf(e)) {
                             scannedEdges++;
@@ -735,7 +726,7 @@ namespace whfc {
                                 hg.label(pin.pin) = currentLabel;
                                 current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
                                 queue.push(pin.pin);
-                                if (hg.excess_next_iteration(e_in) > 0) layer_queue.push_back(e_in);
+                                if (hg.excess(pin.pin) > 0) layer_queue.push_back(pin.pin);
                             }
                         }
                     } else {
@@ -747,7 +738,7 @@ namespace whfc {
                             hg.label(e_out) = currentLabel;
                             current_pin_e_out[e] = hg.beginPins(e);
                             queue.push(e_out);
-                            if (hg.excess_next_iteration(e_out) > 0) layer_queue.push_back(e_out);
+                            if (hg.excess(e_out) > 0) layer_queue.push_back(e_out);
                         }
                         for (Pin& pin : hg.pinsOf(e)) {
                             scannedEdges++;
@@ -755,7 +746,7 @@ namespace whfc {
                                 hg.label(pin.pin) = currentLabel;
                                 current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
                                 queue.push(pin.pin);
-                                if (hg.excess_next_iteration(pin.pin) > 0) layer_queue.push_back(pin.pin);
+                                if (hg.excess(pin.pin) > 0) layer_queue.push_back(pin.pin);
                             }
                         }
                     }
