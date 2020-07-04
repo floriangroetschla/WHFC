@@ -302,6 +302,7 @@ namespace whfc {
             while (nodes_left) {
                 inQueue.reset();
 
+                timer.start("discharge", "phase1");
                 tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
                         std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
@@ -321,7 +322,9 @@ namespace whfc {
                         }
                     });
                 });
+                timer.stop("discharge");
 
+                timer.start("set_excess_and_label", "phase1");
                 tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
                         std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
@@ -333,9 +336,11 @@ namespace whfc {
                         }
                     });
                 });
+                timer.stop("set_excess_and_label");
 
                 std::swap(thisLayer_thread_specific, nextLayer_thread_specific);
 
+                timer.start("set_excess", "phase1");
                 tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
                         for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
@@ -345,6 +350,7 @@ namespace whfc {
                         }
                     });
                 });
+                timer.stop("set_excess");
 
                 nodes_left = false;
                 for (std::vector<Node>& vector : *thisLayer_thread_specific) {
