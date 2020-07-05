@@ -316,7 +316,6 @@ namespace whfc {
                 timer.start("set_excess_and_label", "phase1");
                 tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
-                        std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
                         for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
                             const Node u = vector[i];
                             hg.excess(u) += hg.excess_change(u);
@@ -423,7 +422,7 @@ namespace whfc {
             timer.stop("setLabels");
 
             size_t nm = ALPHA * numScans[0] + numScans[1];
-            //n = numScans[0];
+            n = numScans[0];
 
             timer.start("mainLoop", "exhaustFlow");
 
@@ -437,7 +436,7 @@ namespace whfc {
             hg.buildResidualNetwork();
             timer.stop("buildResidualNetwork");
 
-            Flow augmented_flow = phase2(cs);
+            Flow augmented_flow = flowDecomposition(cs);
 
             timer.stop("phase2");
             timer.stop("mainLoop");
@@ -469,10 +468,7 @@ namespace whfc {
             return f;
         }
 
-        Flow phase2(CutterState<Type>& cs) {
-            auto& n = cs.n;
-            auto& h = cs.h;
-
+        Flow flowDecomposition(CutterState<Type>& cs) {
             Flow total_augmented_flow = 0;
 
             timer.start("resets", "phase2");
@@ -525,7 +521,6 @@ namespace whfc {
                         for ( ; pin_it < hg.endPins(e); ++pin_it) {
                             const Pin pin = *pin_it;
                             const Node v = pin.pin;
-                            const InHe& inc_v = hg.getInHe(pin.he_inc_iter);
                             const Flow residual_to_v = -hg.flowSent(pin.he_inc_iter);
                             if (residual_to_v > 0) {
                                 stack.push( { v, pin.he_inc_iter });
@@ -547,7 +542,6 @@ namespace whfc {
                         for ( ; pin_it < hg.endPins(e); ++pin_it) {
                             const Pin pin = *pin_it;
                             const Node v = pin.pin;
-                            const InHe& inc_v = hg.getInHe(pin.he_inc_iter);
                             const Flow residual_to_v = hg.flowReceived(pin.he_inc_iter);
                             if (residual_to_v > 0) {
                                 stack.push( { v, pin.he_inc_iter });
@@ -680,9 +674,7 @@ namespace whfc {
 
             hg.equalizeLabels(n);
 
-            // Source and target of the bfs
             const Node source = *cs.targetPiercingNodes.begin()->node;
-            const Node target = *cs.sourcePiercingNodes.begin()->node;
 
             local_queue.push_back(source);
             hg.label(source) = 0;
@@ -765,6 +757,7 @@ namespace whfc {
                         std::vector<Node>& localQueue = nextLayer_thread_specific->local();
                         std::vector<Node>& queue_for_push_relabel = thisLayer_thread_specific->local();
                         for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
+                            scannedNodes++;
                             const Node u = vector[i];
                             if (hg.isNode(u)) {
                                 visitNode(u, localQueue, queue_for_push_relabel);
