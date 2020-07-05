@@ -67,9 +67,12 @@ namespace whfc {
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> thisLayer_thread_specific;
         std::unique_ptr<tbb::enumerable_thread_specific<std::vector<Node>>> nextLayer_thread_specific;
 
+        tbb::enumerable_thread_specific<size_t> work_added_thread_specific;
+
         PushRelabel(LawlerFlowHypergraph& hg, TimeReporter& timer, size_t numThreads) : hg(hg), /*nodes(hg.maxNumLawlerNodes()),*/ stack(hg.maxNumLawlerNodes()), timer(timer), inQueue(hg.maxNumLawlerNodes()),
             current_hyperedge(hg.maxNumNodes, InHeIndex::Invalid()), current_pin_e_in(hg.maxNumHyperedges), current_pin_e_out(hg.maxNumHyperedges),
-            thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()), nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>())
+            thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()), nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()),
+            work_added_thread_specific(0)
         {
 
         }
@@ -164,7 +167,7 @@ namespace whfc {
             return minLevel;
         }
 
-        void dischargeNode(const Node u, CutterState<Type>& cs, std::vector<Node>& queue) {
+        void dischargeNode(const Node u, CutterState<Type>& cs, std::vector<Node>& queue, size_t& work_added) {
             assert(u < hg.numNodes());
             assert(hg.excess(u) > 0);
 
@@ -182,13 +185,13 @@ namespace whfc {
                 hg.label_next_iteration(u) = minLevel + 1;
                 if (minLevel + 1 < n && inQueue.set(u)) queue.push_back(u);
                 current_hyperedge[u] = hg.beginIndexHyperedges(u);
-                workSinceLastRelabel += (endIt - hg.beginIndexHyperedges(u)) * 2 + BETA;
+                work_added += (endIt - hg.beginIndexHyperedges(u)) * 2 + BETA;
             } else {
                 current_hyperedge[u] = edgeIt;
             }
         }
 
-        void dischargeEdgeNodeIn(const Node e_in, CutterState<Type>& cs, std::vector<Node>& queue) {
+        void dischargeEdgeNodeIn(const Node e_in, CutterState<Type>& cs, std::vector<Node>& queue, size_t& work_added) {
             assert(hg.excess(e_in) > 0);
             assert(hg.is_edge_in(e_in));
 
@@ -227,14 +230,14 @@ namespace whfc {
                 hg.label_next_iteration(e_in) = minLevel + 1;
                 if (minLevel + 1 < n && inQueue.set(e_in)) queue.push_back(e_in);
                 current_pin_e_in[e] = hg.beginPins(e);
-                workSinceLastRelabel += endIt - hg.beginPins(e) + BETA;
+                work_added += endIt - hg.beginPins(e) + BETA;
             } else {
                 current_pin_e_in[e] = pinIt;
             }
 
         }
 
-        void dischargeEdgeNodeOut(const Node e_out, CutterState<Type>& cs, std::vector<Node>& queue) {
+        void dischargeEdgeNodeOut(const Node e_out, CutterState<Type>& cs, std::vector<Node>& queue, size_t& work_added) {
             assert(hg.excess(e_out) > 0);
             assert(hg.is_edge_out(e_out));
 
@@ -272,7 +275,7 @@ namespace whfc {
                 assert(minLevel + 1 > hg.label(e_out));
                 hg.label_next_iteration(e_out) = minLevel + 1;
                 if (minLevel + 1 < n && inQueue.set(e_out)) queue.push_back(e_out);
-                workSinceLastRelabel += endIt - hg.beginPins(e) + BETA;
+                work_added += endIt - hg.beginPins(e) + BETA;
                 current_pin_e_out[e] = hg.beginPins(e);
             } else {
                 current_pin_e_out[e] = pinIt;
@@ -290,18 +293,19 @@ namespace whfc {
                 tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
                         std::vector<Node>& nextLayer = nextLayer_thread_specific->local();
+                        size_t& work_added = work_added_thread_specific.local();
                         for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
                             const Node u = vector[i];
                             hg.label_next_iteration(u) = hg.label(u);
                             if (hg.label(u) >= n) continue;
 
                             if (hg.isNode(u)) {
-                                dischargeNode(u, cs, nextLayer);
+                                dischargeNode(u, cs, nextLayer, work_added);
                             } else if (hg.is_edge_in(u)) {
-                                dischargeEdgeNodeIn(u, cs, nextLayer);
+                                dischargeEdgeNodeIn(u, cs, nextLayer, work_added);
                             } else {
                                 assert(hg.is_edge_out(u));
-                                dischargeEdgeNodeOut(u, cs, nextLayer);
+                                dischargeEdgeNodeOut(u, cs, nextLayer, work_added);
                             }
                         }
                     });
@@ -343,6 +347,11 @@ namespace whfc {
 
                 for (std::vector<Node>& vector : *nextLayer_thread_specific) {
                     vector.clear();
+                }
+
+                for (size_t& work_added : work_added_thread_specific) {
+                    workSinceLastRelabel += work_added;
+                    work_added = 0;
                 }
 
                 if (!keepNodesWithHighLabel && workSinceLastRelabel * globalUpdateFreq > nm) {
