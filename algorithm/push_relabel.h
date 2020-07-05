@@ -28,7 +28,7 @@ namespace whfc {
 
         static constexpr size_t ALPHA = 6;
         static constexpr size_t BETA = 12;
-        static constexpr float globalUpdateFreq = 1;
+        static constexpr float globalUpdateFreq = 0.5;
 
         LawlerFlowHypergraph& hg;
         LayeredQueue<Node> queue;
@@ -95,24 +95,17 @@ namespace whfc {
             throw std::logic_error("Not implemented");
         }
 
-        template<bool pushFlow>
-        void iterateOverNode(const Node u, CutterState<Type>& cs, std::vector<Node>& queue) {
-            if (!pushFlow) workSinceLastRelabel += BETA;
+        size_t iterateOverEdges(const Node u, CutterState<Type>& cs, std::vector<Node>& queue, InHeIndex& he, const InHeIndex he_end) {
             size_t minLevel = n;
-            assert(pushFlow || hg.excess(u) > 0);
-            InHeIndex he = pushFlow ? current_hyperedge[u] : hg.beginIndexHyperedges(u);
-            if (he == InHeIndex::Invalid()) he = hg.beginIndexHyperedges(u);
             for (; he < hg.endIndexHyperedges(u); ++he) {
                 InHe& inc_u = hg.getInHe(he);
                 const Hyperedge e = inc_u.e;
 
                 if (!cs.h.areAllPinsSourceReachable__unsafe__(e)) {
-                    if (!pushFlow) workSinceLastRelabel += 2;
                     const Node e_out = hg.edge_node_out(e);
                     Flow residual = std::min(hg.excess(u), hg.flowReceived(he));
                     if (residual > 0) {
                         if (hg.label(u) == hg.label(e_out) + 1) {
-                            assert(pushFlow);
                             numPushes++;
                             hg.push_node_to_edgeOut(u, he, residual);
                             if (inQueue.set(e_out)) { queue.push_back(e_out); }
@@ -126,7 +119,6 @@ namespace whfc {
                     residual = hg.excess(u);
                     if (residual > 0) {
                         if (hg.label(u) == hg.label(e_in) + 1) {
-                            assert(pushFlow);
                             numPushes++;
                             hg.push_node_to_edgeIn(u, he, residual);
                             if (inQueue.set(e_in)) { queue.push_back(e_in); }
@@ -139,11 +131,7 @@ namespace whfc {
                     if (hg.excess(u) == 0) break;
                 }
             }
-            current_hyperedge[u] = pushFlow ? he : hg.beginIndexHyperedges(u);
-            if (!pushFlow) {
-                assert(minLevel + 1 > hg.label(u));
-                hg.label_next_iteration(u) = minLevel + 1;
-            }
+            return minLevel;
         }
 
         size_t iterateOverPins(const Node u, CutterState<Type>& cs, std::vector<Node>& queue, PinIterator& pinIt, const PinIterator endIndex) {
@@ -180,12 +168,23 @@ namespace whfc {
             assert(u < hg.numNodes());
             assert(hg.excess(u) > 0);
 
-            iterateOverNode<true>(u, cs, queue);
+            const InHeIndex beginIt = current_hyperedge[u];
+            assert(beginIt >= hg.beginIndexHyperedges(u) && beginIt <= hg.endIndexHyperedges(u));
+            const InHeIndex endIt = hg.endIndexHyperedges(u);
+            InHeIndex edgeIt = beginIt;
+
+            size_t minLevel = iterateOverEdges(u, cs, queue, edgeIt, endIt);
+
             if (hg.excess(u) > 0) {
-                // Relabel
-                numRelabel++;
-                iterateOverNode<false>(u, cs, queue);
-                if (hg.label_next_iteration(u) < n && inQueue.set(u)) queue.push_back(u);
+                edgeIt = hg.beginIndexHyperedges(u);
+                minLevel = std::min(minLevel, iterateOverEdges(u, cs, queue, edgeIt, beginIt));
+                assert(minLevel + 1 > hg.label(u));
+                hg.label_next_iteration(u) = minLevel + 1;
+                if (minLevel + 1 < n && inQueue.set(u)) queue.push_back(u);
+                current_hyperedge[u] = hg.beginIndexHyperedges(u);
+                workSinceLastRelabel += (endIt - hg.beginIndexHyperedges(u)) * 2 + BETA;
+            } else {
+                current_hyperedge[u] = edgeIt;
             }
         }
 
