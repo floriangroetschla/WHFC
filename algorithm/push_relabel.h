@@ -28,7 +28,7 @@ namespace whfc {
 
         static constexpr size_t ALPHA = 6;
         static constexpr size_t BETA = 12;
-        static constexpr float globalUpdateFreq = 0.5;
+        static constexpr float globalUpdateFreq = 1.0;
 
         LawlerFlowHypergraph& hg;
         LayeredQueue<Node> queue;
@@ -463,7 +463,7 @@ namespace whfc {
             timer.stop("growReachable");
             timer.stop("exhaustFlow");
 
-            std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numGlobalUpdate: " << numGlobalUpdate << ", numLawlerNodes: " << hg.numLawlerNodes() << std::endl;
+            //std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numGlobalUpdate: " << numGlobalUpdate << ", numLawlerNodes: " << hg.numLawlerNodes() << std::endl;
 
             return f;
         }
@@ -660,6 +660,8 @@ namespace whfc {
         std::array<size_t, 2> globalUpdate(CutterState<Type>& cs, size_t n) {
             size_t scannedNodes = 0;
             size_t scannedEdges = 0;
+            tbb::enumerable_thread_specific<std::array<size_t, 2>> scanned_nodes_and_edges(std::array<size_t, 2> {0, 0});
+
             for (std::vector<Node>& vector : *nextLayer_thread_specific) {
                 vector.clear();
             }
@@ -681,7 +683,7 @@ namespace whfc {
 
             size_t currentLabel = 1;
 
-            auto visitNode = [&](const Node u, std::vector<Node>& queue, std::vector<Node>& push_relabel_vector) {
+            auto visitNode = [&](const Node u, std::vector<Node>& queue, std::vector<Node>& push_relabel_vector, size_t& scannedEdges) {
                 for (InHe& inc_u : hg.hyperedgesOf(u)) {
                     scannedEdges += 2;
                     const Hyperedge e = inc_u.e;
@@ -705,7 +707,7 @@ namespace whfc {
             };
 
 
-            auto visitEdgeIn = [&](const Node e_in, std::vector<Node>& queue, std::vector<Node>& push_relabel_vector) {
+            auto visitEdgeIn = [&](const Node e_in, std::vector<Node>& queue, std::vector<Node>& push_relabel_vector, size_t& scannedEdges) {
                 const Hyperedge e = hg.edgeFromLawlerNode(e_in);
                 const Node e_out = hg.edge_node_out(e);
 
@@ -727,7 +729,7 @@ namespace whfc {
                 }
             };
 
-            auto visitEdgeOut = [&](const Node e_out, std::vector<Node>& queue, std::vector<Node>& push_relabel_vector) {
+            auto visitEdgeOut = [&](const Node e_out, std::vector<Node>& queue, std::vector<Node>& push_relabel_vector, size_t& scannedEdges) {
                 const Hyperedge e = hg.edgeFromLawlerNode(e_out);
                 const Node e_in = hg.edge_node_in(e);
 
@@ -756,16 +758,17 @@ namespace whfc {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
                         std::vector<Node>& localQueue = nextLayer_thread_specific->local();
                         std::vector<Node>& queue_for_push_relabel = thisLayer_thread_specific->local();
+                        std::array<size_t, 2>& scanned_sizes = scanned_nodes_and_edges.local();
+                        scanned_sizes[0] += nodes.size();
                         for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
-                            scannedNodes++;
                             const Node u = vector[i];
                             if (hg.isNode(u)) {
-                                visitNode(u, localQueue, queue_for_push_relabel);
+                                visitNode(u, localQueue, queue_for_push_relabel, scanned_sizes[1]);
                             } else if (hg.is_edge_in(u)) {
-                                visitEdgeIn(u, localQueue, queue_for_push_relabel);
+                                visitEdgeIn(u, localQueue, queue_for_push_relabel, scanned_sizes[1]);
                             } else {
                                 assert(hg.is_edge_out(u));
-                                visitEdgeOut(u, localQueue, queue_for_push_relabel);
+                                visitEdgeOut(u, localQueue, queue_for_push_relabel, scanned_sizes[1]);
                             }
                         }
                     });
@@ -789,6 +792,11 @@ namespace whfc {
 
             for (std::vector<Node>& vector : *nextLayer_thread_specific) {
                 vector.clear();
+            }
+
+            for (std::array<size_t, 2>& sizes : scanned_nodes_and_edges) {
+                scannedNodes += sizes[0];
+                scannedEdges += sizes[1];
             }
 
             return {scannedNodes, scannedEdges};

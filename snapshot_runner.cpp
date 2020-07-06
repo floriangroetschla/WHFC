@@ -13,9 +13,13 @@
 
 int main(int argc, const char *argv[]) {
 
-    if (argc != 2) {
-        throw std::runtime_error("Usage ./KWayRefinementParallel HypergraphFile");
+    if (argc != 3) {
+        throw std::runtime_error("Usage ./KWayRefinementParallel HypergraphFile numThreads");
     }
+    uint numThreads = std::stoi(argv[2]);
+
+    tbb::task_scheduler_init init(numThreads);
+
     whfc::LawlerFlowHypergraph hg = whfc::HMetisIO::readLawlerHypergraph(argv[1]);
     hg.maxNumHyperedges = hg.numHyperedges();
     hg.maxNumNodes = hg.numNodes();
