@@ -73,7 +73,7 @@ namespace whfc {
 
         inline void push_edgeIn_to_node(const Node u, const InHeIndex inc, const Flow f) {
             assert(f > 0);
-            assert(flowSent(inc) >= f);
+            assert(getPinIn(getInHe(inc)).flow >= f);
             assert(isNode(u));
 
             const InHe& in_he = FlowHypergraph::getInHe(inc);
@@ -244,7 +244,6 @@ namespace whfc {
             std::cout << std::endl;
         }
 
-        /*
         void printHyperedge(Hyperedge e) {
             std::cout << e << " pincount = " << pinCount(e) << " w= " << capacity(e) << " pins (pin,flow,excess,label) = [";
             for (const Pin& u : pinsOf(e)) {
@@ -270,12 +269,12 @@ namespace whfc {
             for (const Hyperedge e: hyperedgeIDs()) {
                 out << e << " pincount = " << pinCount(e) << " w= " << capacity(e) << " pins (pin,flow,flow_in,flow_out) = [";
                 for (const Pin& u : pinsOf(e)) {
-                    out << "(" << u.pin << "," << getInHe(u).flow << "," << flowIn(getInHe(u)) << "," << flowOut(getInHe(u)) << ") ";
+                    out << "(" << u.pin << "," << getInHe(u).flow << "," << getPinIn(getInHe(u)).flow << "," << getPinOut(getInHe(u)).flow << ") ";
                 }
                 out << "]" << "\n";
             }
             out << std::flush;
-        }*/
+        }
 
         void printHypergraph(std::ostream& out) {
             printNodes(out);

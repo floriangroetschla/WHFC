@@ -3,7 +3,7 @@
 #include "../datastructure/queue.h"
 #include "../datastructure/stack.h"
 #include "../datastructure/distance_reachable_sets.h"
-#include "ford_fulkerson.h"
+//#include "ford_fulkerson.h"
 #include "../recursive_bisection/timestamp_set.hpp"
 #include "../datastructure/copyable_atomic.h"
 #include "../datastructure/lawler_flow_hypergraph.h"
@@ -198,7 +198,7 @@ namespace whfc {
 
             const Hyperedge e = hg.edgeFromLawlerNode(e_in);
             const PinIterator beginIt = current_pin_e_in[e];
-            assert(beginIt >= hg.beginPins(e) && beginIt <= hg.endPins(e));
+            assert(beginIt >= hg.beginPinsIn(e) && beginIt <= hg.endPinsIn(e));
             const PinIterator endIt = hg.endPinsIn(e);
             PinIterator pinIt = beginIt;
 
@@ -244,7 +244,7 @@ namespace whfc {
 
             const Hyperedge e = hg.edgeFromLawlerNode(e_out);
             const PinIterator beginIt = current_pin_e_out[e];
-            assert(beginIt >= hg.beginPins(e) && beginIt <= hg.endPins(e));
+            assert(beginIt >= hg.beginPinsIn(e) && beginIt <= hg.endPinsIn(e));
             const PinIterator endIt = hg.endPinsIn(e);
             PinIterator pinIt = beginIt;
 
@@ -379,6 +379,9 @@ namespace whfc {
             hg.initialize_for_push_relabel();
             timer.stop("initialize");
 
+            hg.printHypergraph(std::cout);
+            hg.printExcessAndLabel();
+
             piercingNode = cs.sourcePiercingNodes.begin()->node;
             target = cs.targetPiercingNodes.begin()->node;
 
@@ -394,7 +397,7 @@ namespace whfc {
                 const Hyperedge e = inc_u.e;
                 if (!cs.h.areAllPinsSourceReachable__unsafe__(e)) {
                     const Node e_out = hg.edge_node_out(e);
-                    Flow residual = hg.flowReceived(inc_iter);
+                    Flow residual = hg.getPinOut(hg.getInHe(inc_iter)).flow;
                     if (residual > 0) {
                         hg.push_node_to_edgeOut(piercingNode, inc_iter, residual);
                         nodes_left = true;
@@ -416,10 +419,16 @@ namespace whfc {
                 hg.excess_change(u) = 0;
             }
 
+            hg.printHypergraph(std::cout);
+            hg.printExcessAndLabel();
+
             timer.start("setLabels", "exhaustFlow");
             n = hg.numNodes() + 2 * hg.numHyperedges();
             std::array<size_t, 2> numScans = globalUpdate(cs, n);
             timer.stop("setLabels");
+
+            hg.printHypergraph(std::cout);
+            hg.printExcessAndLabel();
 
             size_t nm = ALPHA * numScans[0] + numScans[1];
             n = numScans[0];
@@ -430,6 +439,9 @@ namespace whfc {
             // Phase 1
             if (nodes_left) pushRelabel(cs, nm, false);
             timer.stop("phase1");
+
+            hg.printHypergraph(std::cout);
+            hg.printExcessAndLabel();
 
             timer.start("phase2", "mainLoop");
             timer.start("buildResidualNetwork", "phase2");
@@ -454,6 +466,9 @@ namespace whfc {
             }
             cs.flowValue += f;
             assert(f == augmented_flow);
+
+            hg.printHypergraph(std::cout);
+            hg.printExcessAndLabel();
 
             cs.verifyFlowConstraints();
 
@@ -495,8 +510,8 @@ namespace whfc {
                     for (; he_it < hg.endIndexHyperedges(u); ++he_it) {
                         InHe& inc_u = hg.getInHe(he_it);
                         const Hyperedge e = inc_u.e;
-                        const Flow residual_to_edge_in = hg.flowSent(he_it);
-                        const Flow residual_to_edge_out = -hg.flowReceived(he_it);
+                        const Flow residual_to_edge_in = hg.getPinIn(inc_u).flow;
+                        const Flow residual_to_edge_out = -hg.getPinOut(inc_u).flow;
 
                         if (residual_to_edge_in > 0) {
                             stack.push({ hg.edge_node_in(e), he_it });
@@ -521,7 +536,7 @@ namespace whfc {
                         for ( ; pin_it < hg.endPinsIn(e); ++pin_it) {
                             const Pin pin = *pin_it;
                             const Node v = pin.pin;
-                            const Flow residual_to_v = -hg.flowSent(pin.he_inc_iter);
+                            const Flow residual_to_v = -hg.getPinIn(hg.getInHe(pin.he_inc_iter)).flow;
                             if (residual_to_v > 0) {
                                 stack.push( { v, pin.he_inc_iter });
                                 found_new_node = true;
@@ -542,7 +557,7 @@ namespace whfc {
                         for ( ; pin_it < hg.endPinsIn(e); ++pin_it) {
                             const Pin pin = *pin_it;
                             const Node v = pin.pin;
-                            const Flow residual_to_v = hg.flowReceived(pin.he_inc_iter);
+                            const Flow residual_to_v = hg.getPinOut(hg.getInHe(pin.he_inc_iter)).flow;
                             if (residual_to_v > 0) {
                                 stack.push( { v, pin.he_inc_iter });
                                 found_new_node = true;
@@ -585,15 +600,15 @@ namespace whfc {
                 Flow residual = 0;
                 if (hg.isNode(t.u)) {
                     if (hg.is_edge_out(stack.at(stack_pointer-1).u)) {
-                        residual = hg.flowReceived(t.he_it);
+                        residual = hg.getPinOut(hg.getInHe(t.he_it)).flow;
                         assert(residual > 0);
                     } else {
-                        residual = -hg.flowSent(t.he_it);
+                        residual = -hg.getPinIn(hg.getInHe(t.he_it)).flow;
                         assert(residual > 0);
                     }
                 } else if (hg.is_edge_in(t.u)) {
                     if (t.he_it != InHeIndex::Invalid()) {
-                        residual = hg.flowSent(t.he_it);
+                        residual = hg.getPinIn(hg.getInHe(t.he_it)).flow;
                         assert(residual > 0);
                     } else {
                         residual = -hg.flow(hg.edgeFromLawlerNode(t.u));
@@ -601,7 +616,7 @@ namespace whfc {
                     }
                 } else {
                     if (t.he_it != InHeIndex::Invalid()) {
-                        residual = -hg.flowReceived(t.he_it);
+                        residual = -hg.getPinOut(hg.getInHe(t.he_it)).flow;
                         assert(residual > 0);
                     } else {
                         residual = hg.flow(hg.edgeFromLawlerNode(t.u));
@@ -690,7 +705,7 @@ namespace whfc {
                     const Node e_in = hg.edge_node_in(e);
                     const Node e_out = hg.edge_node_out(e);
                     if (!cs.h.areAllPinsSourceReachable__unsafe__(e)) {
-                        if (hg.flowSent(inc_u) > 0 && tryToGetNode(e_in, currentLabel, n)) {
+                        if (hg.getPinIn(inc_u).flow > 0 && tryToGetNode(e_in, currentLabel, n)) {
                             hg.label(e_in) = currentLabel;
                             current_pin_e_in[e] = hg.beginPinsIn(e);
                             queue.push_back(e_in);
@@ -742,7 +757,7 @@ namespace whfc {
                 }
                 for (Pin& pin : hg.pinsInOf(e)) {
                     scannedEdges++;
-                    if ((hg.flowReceived(pin.he_inc_iter) > 0) && (!cs.n.isSourceReachable__unsafe__(pin.pin)) && tryToGetNode(pin.pin, currentLabel, n)) {
+                    if ((hg.getPinOut(hg.getInHe(pin.he_inc_iter)).flow > 0) && (!cs.n.isSourceReachable__unsafe__(pin.pin)) && tryToGetNode(pin.pin, currentLabel, n)) {
                         hg.label(pin.pin) = currentLabel;
                         current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
                         queue.push_back(pin.pin);
@@ -851,9 +866,9 @@ namespace whfc {
 
                             if (scanFlowSending || scanAllPins) {
                                 for (const Pin& pv : hg.pinsInOf(e)) {
-                                    if (hg.flowSent(pv.he_inc_iter) > 0 && scanFlowSending) {
+                                    if (hg.flowSent(pv) > 0 && scanFlowSending) {
                                         visit(pv, true);
-                                    } else if (hg.flowSent(pv.he_inc_iter) == 0 && scanAllPins) {
+                                    } else if (hg.flowSent(pv) <= 0 && scanAllPins) {
                                         visit(pv, false);
                                     }
                                 }
@@ -869,6 +884,7 @@ namespace whfc {
             h.compareDistances(n);
 
             resetSourcePiercingNodeDistances(cs);
+            cs.verifySetInvariants();
             return found_target;
         }
 

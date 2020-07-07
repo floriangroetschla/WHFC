@@ -131,13 +131,13 @@ namespace whfc {
 		inline PinIndex endIndexPins(const Hyperedge e) const { return hyperedges[e+1].first_out; }
 		inline PinIndexRange pinIndices(const Hyperedge e) const { return PinIndexRange(beginIndexPins(e), endIndexPins(e)); }
 		//inline PinIndexRange pinsSendingFlowIndices(const Hyperedge e) const { return pins_sending_flow[e]; }
-		//inline Pin& getPinIn(const PinIndex ind_p) { return pins[ind_p]; }
 		inline Pin& getPinIn(const InHe& inc_p) { return pins_in[inc_p.pin_iters[sends_index]]; }
-		//inline const Pin& getPin(const PinIndex ind_p) const { return pins[ind_p]; }
 		inline const Pin& getPinIn(const InHe& inc_p) const { return pins_in[inc_p.pin_iters[sends_index]]; }
 		inline Pin& getPinOut(const InHe& inc_p) { return pins_out[inc_p.pin_iters[1-sends_index]]; }
 		inline const Pin& getPinOut(const InHe& inc_p) const { return pins_out[inc_p.pin_iters[1-sends_index]]; }
 
+		// old interface
+		inline const Pin& getPin(const InHe& inc_p) const { return getPinIn(inc_p); }
 
 		inline InHeIterator beginHyperedges() { return incident_hyperedges.begin(); }
 		inline InHeIterator endHyperedges() { return incident_hyperedges.end(); }
@@ -158,6 +158,9 @@ namespace whfc {
 		PinRange pinsOutOf(const Hyperedge e) { return PinRange(beginPinsOut(e), endPinsOut(e)); }
 		PinRange pinsInInRange(const PinIndexRange pir) { return PinRange(beginPinsIn() + pir.begin(), beginPinsIn() + pir.end()); }
         PinRange pinsOutInRange(const PinIndexRange pir) { return PinRange(beginPinsOut() + pir.begin(), beginPinsOut() + pir.end()); }
+
+        // old interface for flow algorithms that don't use the flow stored in pins
+        PinRange pinsOf(const Hyperedge e) { return PinRange(beginPinsIn(e), endPinsIn(e)); }
 
         PinRange pinsSendingFlowInto(const Hyperedge e) { return PinRange(beginPinsIn(e), beginPinsIn(e) + pins_in_sending_flow_end[e]); }
 		PinRange pinsReceivingFlowFrom(const Hyperedge e) { return PinRange(beginPinsOut(e), beginPinsOut(e) + pins_out_receiving_flow_end[e]); }
@@ -245,6 +248,9 @@ namespace whfc {
 			throw std::out_of_range("v is not a pin of e");
 		}*/
 
+        void routeFlow(InHe& inc_u, InHe& inc_v, Flow flow_delta) {
+        }
+
 		std::vector<NodeData>& getNodes() {
 		    return nodes;
 		}
@@ -330,15 +336,16 @@ namespace whfc {
 			const InHe& doubled_in = getInHe(getPinIn(inhe));
 			const InHe& doubled_out = getInHe(getPinOut(inhe));
 			unused(inhe, doubled_in, doubled_out);
-			assert(doubled_in.pin_iter_in == inhe.pin_iter_in && "Backpointer Pin Iter inconsistent");
+			assert(doubled_in.pin_iters[sends_index] == inhe.pin_iters[sends_index] && "Backpointer Pin Iter inconsistent");
+			assert(doubled_in.pin_iters[1-sends_index] == inhe.pin_iters[1-sends_index]);
 			assert(doubled_in.e == inhe.e && "Backpointer hyperedge ID inconsistent");
 			return true;
 		}
 
-		/*
 		bool sanity_check_pin_ranges(const Hyperedge e) const {
 			//check left / right end of pin ranges agree with first_out
-			const PinIndexRange& s = forwardView() ? pins_sending_flow[e] : pins_receiving_flow[e];
+			/*
+			const PinIndexRange& s = pinsSendingFlowInto();
 			const PinIndexRange& l = !forwardView() ? pins_sending_flow[e] : pins_receiving_flow[e];
 			unused(e, s, l);
 			assert(hyperedges[e].first_out == s.begin());
@@ -347,11 +354,12 @@ namespace whfc {
 			assert(s.begin() <= s.end());
 			assert(s.end() <= l.begin());
 			assert(l.begin() <= l.end());
+			 */
 			return true;
-		}*/
+		}
 
-		/*
 		bool pin_is_categorized_correctly(const InHe& inc_u) {
+            /*
 			const Hyperedge e = inc_u.e;
 			const PinIndex it_u = inc_u.pin_iter;
 			bool sends = flowSent(inc_u) > 0 && pins_sending_flow[e].contains(it_u);
@@ -359,8 +367,9 @@ namespace whfc {
 			bool no_flow = inc_u.flow == 0 && pins_without_flow(e).contains(it_u);
 			return 		(sends && !receives && !no_flow)
 					|| 	(!sends && receives && !no_flow)
-					|| 	(!sends && !receives && no_flow);
-		}*/
+					|| 	(!sends && !receives && no_flow);*/
+            return true;
+		}
 		
 		static_assert(std::is_trivially_destructible<Pin>::value);
 		static_assert(std::is_trivially_destructible<InHe>::value);

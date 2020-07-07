@@ -2,7 +2,7 @@
 
 #include "fhgb_extraction.h"
 #include "../algorithm/hyperflowcutter.h"
-#include "../algorithm/dinic.h"
+//#include "../algorithm/dinic.h"
 #include "../io/whfc_io.h"
 #include <random>
 #include "two_way_refiner_interface.h"
