@@ -389,9 +389,10 @@ namespace whfc_rb {
 
             if (hyperedges.size() == 0) return;
             fhgb.hyperedges.resize(hyperedges.size() + 1);
-            fhgb.pins_sending_flow.resize(hyperedges.size());
-            fhgb.pins_receiving_flow.resize(hyperedges.size());
-            fhgb.pins.resize(hyperedges[hyperedges.size() - 1].pin_count);
+            fhgb.pins_in_sending_flow_end.resize(hyperedges.size());
+            fhgb.pins_out_receiving_flow_end.resize(hyperedges.size());
+            fhgb.pins_in.resize(hyperedges[hyperedges.size() - 1].pin_count);
+            fhgb.pins_out.resize(hyperedges[hyperedges.size() - 1].pin_count);
 
             fhgb.hyperedges.back().first_out = whfc::PinIndex(hyperedges[hyperedges.size() - 1].pin_count);
             fhgb.numPinsAtHyperedgeStart = hyperedges[hyperedges.size() - 1].pin_count;
@@ -407,15 +408,16 @@ namespace whfc_rb {
                     size_t& sourceOcc = sourceOccurrences.local();
                     size_t& targetOcc = targetOccurrences.local();
 
-                    fhgb.pins_sending_flow[i] = PinIndexRange(whfc::PinIndex(nextPinPosition), whfc::PinIndex(nextPinPosition));
+                    fhgb.pins_in_sending_flow_end[i] = whfc::PinIndex(nextPinPosition);
+                    fhgb.pins_out_receiving_flow_end[i] = whfc::PinIndex(nextPinPosition);
                     fhgb.hyperedges[i] = {whfc::PinIndex(nextPinPosition), whfc::Flow(0), whfc::Flow(hg.hyperedgeWeight(e))};
-                    fhgb.pins_receiving_flow[i] = PinIndexRange(whfc::PinIndex(hyperedges[i].pin_count), whfc::PinIndex(hyperedges[i].pin_count));
 
                     if (partition.pinsInPart(part0, e) > 0 && partition.pinsInPart(part1, e) > 0) {
                         // Cut hyperedge
                         for (NodeID v : hg.pinsOf(e)) {
                             if (visitedNode.isSet(v)) {
-                                fhgb.pins[nextPinPosition++] = {globalToLocalID[v], whfc::InHeIndex::Invalid()};
+                                fhgb.pins_in[nextPinPosition] = {globalToLocalID[v], whfc::InHeIndex::Invalid()};
+                                fhgb.pins_out[nextPinPosition++] = {globalToLocalID[v], whfc::InHeIndex::Invalid()};
                                 __atomic_fetch_add(&fhgb.nodes[globalToLocalID[v]+1].first_out.value(), 1, __ATOMIC_RELAXED);
                             } else {
                                 connectToSource |= (partition[v] == part0);
@@ -429,7 +431,8 @@ namespace whfc_rb {
                         for (NodeID v : hg.pinsOf(e)) {
                             if (partition[v] == partID) {
                                 if (visitedNode.isSet(v)) {
-                                    fhgb.pins[nextPinPosition++] = {globalToLocalID[v], whfc::InHeIndex::Invalid()};
+                                    fhgb.pins_in[nextPinPosition] = {globalToLocalID[v], whfc::InHeIndex::Invalid()};
+                                    fhgb.pins_out[nextPinPosition++] = {globalToLocalID[v], whfc::InHeIndex::Invalid()};
                                     __atomic_fetch_add(&fhgb.nodes[globalToLocalID[v]+1].first_out.value(), 1, __ATOMIC_RELAXED);
                                 } else {
                                     if (terminal == result.source) {
@@ -443,11 +446,13 @@ namespace whfc_rb {
                     }
 
                     if (connectToSource) {
-                        fhgb.pins[nextPinPosition++] = {result.source, whfc::InHeIndex::Invalid()};
+                        fhgb.pins_in[nextPinPosition] = {result.source, whfc::InHeIndex::Invalid()};
+                        fhgb.pins_out[nextPinPosition++] = {result.source, whfc::InHeIndex::Invalid()};
                         sourceOcc++;
                     }
                     if (connectToTarget) {
-                        fhgb.pins[nextPinPosition++] = {result.target, whfc::InHeIndex::Invalid()};
+                        fhgb.pins_in[nextPinPosition] = {result.target, whfc::InHeIndex::Invalid()};
+                        fhgb.pins_out[nextPinPosition++] = {result.target, whfc::InHeIndex::Invalid()};
                         targetOcc++;
                     }
                     assert(nextPinPosition == hyperedges[i].pin_count);

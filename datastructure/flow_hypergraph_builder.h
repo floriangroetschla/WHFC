@@ -36,10 +36,11 @@ namespace whfc {
 			
 			nodes.clear();
 			hyperedges.clear();
-			pins.clear();
+			pins_in.clear();
+			pins_out.clear();
 			incident_hyperedges.clear();
-			pins_sending_flow.clear();
-			pins_receiving_flow.clear();
+			pins_in_sending_flow_end.clear();
+			pins_out_receiving_flow_end.clear();
 			total_node_weight = NodeWeight(0);
 			sends_multiplier = 1;
 			receives_multiplier = -1;
@@ -68,7 +69,8 @@ namespace whfc {
 		
 		void addPin(const Node u) {
 			assert(u < numNodes());
-			pins.push_back({u, InHeIndex::Invalid()});
+			pins_in.push_back({u, InHeIndex::Invalid()});
+			pins_out.push_back({u, InHeIndex::Invalid()});
 			nodes[u+1].first_out++;
 		}
 		
@@ -81,106 +83,6 @@ namespace whfc {
 				removeLastPin();
 		}
 
-		void addMockBuildersParallel(tbb::enumerable_thread_specific<MockBuilder>& mockBuilder_thread_specific) {
-		    struct WorkElement {
-		        MockBuilder& builder;
-		        size_t hyperedgeStartIndex;
-		        size_t pinStartIndex;
-		    };
-
-		    std::vector<WorkElement> workElements;
-
-            finishHyperedge();
-
-		    size_t numberOfHyperedges = numHyperedges();
-		    size_t numberOfPins = numPins();
-
-
-		    // resize datastructures
-		    for (MockBuilder& builder : mockBuilder_thread_specific) {
-                builder.finishHyperedge();
-                builder.addTerminalOccurences();
-                workElements.push_back({builder, numberOfHyperedges, numberOfPins});
-		        numberOfHyperedges += builder.numHyperedges();
-		        numberOfPins += builder.numPins();
-		    }
-
-		    hyperedges.resize(numberOfHyperedges + 1);
-		    pins_sending_flow.resize(numberOfHyperedges);
-		    pins_receiving_flow.resize(numberOfHyperedges);
-		    pins.resize(numberOfPins);
-
-		    tbb::parallel_for_each(workElements, [&](WorkElement& workElement) {
-                size_t pinCounter = workElement.pinStartIndex;
-                size_t pinOffset = pinCounter;
-
-                MockBuilder& builder = workElement.builder;
-
-                for (size_t i = 0; i < builder.pins.size(); ++i) {
-                    pins[pinCounter++] = {builder.pins[i], InHeIndex::Invalid()};
-                }
-
-                for (size_t i = 0; i < builder.numHyperedges(); ++i) {
-                    pins_sending_flow[workElement.hyperedgeStartIndex + i] = PinIndexRange(PinIndex(pinOffset) + builder.hyperedges[i].first_out, PinIndex(pinOffset) + builder.hyperedges[i].first_out);
-                    hyperedges[workElement.hyperedgeStartIndex + i] = {PinIndex(pinOffset) + builder.hyperedges[i].first_out, Flow(0), builder.hyperedges[i].capacity};
-                    pins_receiving_flow[workElement.hyperedgeStartIndex + i] = PinIndexRange(PinIndex(pinOffset) + builder.hyperedges[i+1].first_out, PinIndex(pinOffset) + builder.hyperedges[i+1].first_out);
-                    maxHyperedgeCapacity = std::max(maxHyperedgeCapacity, builder.hyperedges[i].capacity);
-                }
-
-		    });
-		    hyperedges.back().first_out = PinIndex(numPins());
-            numPinsAtHyperedgeStart = numPins();
-		}
-
-		void addMockBuilder(MockBuilder& builder, bool add_nodes) {
-		    if ( !builder.finishHyperedge() ) {
-		        builder.hyperedges.back().capacity = 0;
-		    }
-		    if ( !finishHyperedge() ) {
-		        hyperedges.back().capacity = 0;
-		    }
-
-		    size_t numNodesBefore = numNodes();
-
-		    if (add_nodes) {
-		        // remove sentinel
-		        NodeData node_data = nodes.back();
-		        nodes.pop_back();
-		        builder.nodes[0].first_out = node_data.first_out;
-
-                for (NodeData u : builder.nodes) {
-                    nodes.push_back(u);
-                }
-		    }
-
-            PinIndex first_out = hyperedges.back().first_out;
-            hyperedges.pop_back();
-
-            if (pins_receiving_flow.size() > 0) {
-                pins_receiving_flow.back() = PinIndexRange(first_out + builder.hyperedges[0].first_out, first_out + builder.hyperedges[0].first_out);
-            }
-
-            hyperedges.push_back({first_out + builder.hyperedges[0].first_out, Flow(0), builder.hyperedges[0].capacity});
-            maxHyperedgeCapacity = std::max(maxHyperedgeCapacity, builder.hyperedges[0].capacity);
-
-            for (size_t i = 1; i < builder.hyperedges.size(); ++i) {
-                pins_sending_flow.emplace_back(hyperedges.back().first_out, hyperedges.back().first_out);
-                hyperedges.push_back({first_out + builder.hyperedges[i].first_out, Flow(0), builder.hyperedges[i].capacity});
-                pins_receiving_flow.emplace_back(hyperedges.back().first_out, hyperedges.back().first_out);
-                maxHyperedgeCapacity = std::max(maxHyperedgeCapacity, builder.hyperedges[i].capacity);
-            }
-
-            for (Node u : builder.pins) {
-                if (add_nodes) {
-                    pins.push_back({u + Node(numNodesBefore), InHeIndex::Invalid()});
-                } else {
-                    pins.push_back({u, InHeIndex::Invalid()});
-                }
-            }
-
-            numPinsAtHyperedgeStart = numPins();
-            assert(hyperedges.back().first_out == numPins());
-		}
 		
 		void finalize() {
 			if( !finishHyperedge() )	//finish last open hyperedge
@@ -198,10 +100,12 @@ namespace whfc {
 			        const Hyperedge e = static_cast<Hyperedge>(i);
                     assert(beginIndexPins(e) < endIndexPins(e));
                     for (auto pin_it = beginIndexPins(e); pin_it != endIndexPins(e); pin_it++) {
-                        Pin& p = pins[pin_it];
-                        InHeIndex ind_he = static_cast<InHeIndex>(__sync_fetch_and_add(&nodes[p.pin].first_out.value(), 1));	//destroy first_out temporarily and reset later
-                        incident_hyperedges[ind_he] = { e, Flow(0), pin_it };
-                        p.he_inc_iter = ind_he;					//set iterator for incident hyperedge -> its position in incident_hyperedges of the node
+                        Pin& p_in = pins_in[pin_it];
+                        Pin& p_out = pins_out[pin_it];
+                        InHeIndex ind_he = static_cast<InHeIndex>(__sync_fetch_and_add(&nodes[p_in.pin].first_out.value(), 1));	//destroy first_out temporarily and reset later
+                        incident_hyperedges[ind_he] = { e, pin_it, pin_it };
+                        p_in.he_inc_iter = ind_he;					//set iterator for incident hyperedge -> its position in incident_hyperedges of the node
+                        p_out.he_inc_iter = ind_he;
                     }
 			    }
 			});
@@ -216,10 +120,11 @@ namespace whfc {
 		void shrink_to_fit() {
 			nodes.shrink_to_fit();
 			hyperedges.shrink_to_fit();
-			pins.shrink_to_fit();
+			pins_in.shrink_to_fit();
+			pins_out.shrink_to_fit();
 			incident_hyperedges.shrink_to_fit();
-			pins_sending_flow.shrink_to_fit();
-			pins_receiving_flow.shrink_to_fit();
+			pins_in_sending_flow_end.shrink_to_fit();
+			pins_out_receiving_flow_end.shrink_to_fit();
 		}
 
         size_t numPinsAtHyperedgeStart = 0;
@@ -227,8 +132,9 @@ namespace whfc {
 	private:
 		
 		void removeLastPin() {
-			nodes[ pins.back().pin + 1 ].first_out--;
-			pins.pop_back();
+			nodes[ pins_in.back().pin + 1 ].first_out--;
+			pins_in.pop_back();
+			pins_out.pop_back();
 		}
 		
 		bool finishHyperedge() {
@@ -237,9 +143,9 @@ namespace whfc {
 			}
 			
 			if (currentHyperedgeSize() > 0) {
-				pins_sending_flow.emplace_back(hyperedges.back().first_out, hyperedges.back().first_out);
+				pins_in_sending_flow_end.emplace_back(hyperedges.back().first_out);
+				pins_out_receiving_flow_end.emplace_back(hyperedges.back().first_out);
 				hyperedges.push_back({PinIndex::fromOtherValueType(numPins()), Flow(0), Flow(0)});//sentinel
-				pins_receiving_flow.emplace_back(hyperedges.back().first_out, hyperedges.back().first_out);
 				return true;
 			}
 			return false;

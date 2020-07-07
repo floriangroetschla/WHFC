@@ -19,8 +19,7 @@ namespace whfc {
 
 		struct InHe {	//Hyperedge Incidence
 			Hyperedge e = invalidHyperedge;
-			PinIndex pin_iter_in;
-			PinIndex pin_iter_out;
+			std::array<PinIndex, 2> pin_iters;
 		};
 
 		struct HyperedgeData {
@@ -60,8 +59,8 @@ namespace whfc {
 				pins_in(_pins.size()),
 				pins_out(_pins.size()),
 				incident_hyperedges(_pins.size()),
-				pins_sending_flow(hyperedge_weights.size()),
-				pins_receiving_flow(hyperedge_weights.size()),
+				pins_in_sending_flow_end(hyperedge_weights.size()),
+				pins_out_receiving_flow_end(hyperedge_weights.size()),
 				total_node_weight(boost::accumulate(node_weights, NodeWeight(0)))
 		{
 			size_t i = 0;
@@ -85,8 +84,7 @@ namespace whfc {
 					InHeIndex ind_he = nodes[p_in.pin].first_out++;							//destroy first_out temporarily and reset later
 					InHe& inc_he = incident_hyperedges[ind_he];
 					inc_he.e = e;
-					inc_he.pin_iter_in = pin_it;				//set iterator for pin -> its position in the pins of the hyperedge
-					inc_he.pin_iter_out = pin_it;
+					inc_he.pin_iters = { pin_it, pin_it };
 					p_in.he_inc_iter = ind_he;					//set iterator for incident hyperedge -> its position in incident_hyperedges of the node
 					p_out.he_inc_iter = ind_he;
 				}
@@ -99,9 +97,9 @@ namespace whfc {
 			
 			PinIndex x = PinIndex(0);
 			for (Hyperedge e : hyperedgeIDs()) {
-				pins_sending_flow[e] = PinIndexRange(x,x);	//empty range starting at the first pin of e
+				pins_in_sending_flow_end[e] = x;
 				x += pinCount(e);
-				pins_receiving_flow[e] = PinIndexRange(x, x);	//empty range starting at one past the last pin of e
+				pins_out_receiving_flow_end[e] = x;
 			}
 		}
 		
@@ -131,13 +129,13 @@ namespace whfc {
 		inline PinIndex beginIndexPins(const Hyperedge e) const { return hyperedges[e].first_out; }
 		inline PinIndex endIndexPins(const Hyperedge e) const { return hyperedges[e+1].first_out; }
 		inline PinIndexRange pinIndices(const Hyperedge e) const { return PinIndexRange(beginIndexPins(e), endIndexPins(e)); }
-		inline PinIndexRange pinsSendingFlowIndices(const Hyperedge e) const { return pins_sending_flow[e]; }
+		//inline PinIndexRange pinsSendingFlowIndices(const Hyperedge e) const { return pins_sending_flow[e]; }
 		//inline Pin& getPinIn(const PinIndex ind_p) { return pins[ind_p]; }
-		inline Pin& getPinIn(const InHe& inc_p) { return forwardView() ? pins_in[inc_p.pin_iter_in] : pins_out[inc_p.pin_iter_out]; }
+		inline Pin& getPinIn(const InHe& inc_p) { return pins_in[inc_p.pin_iters[sends_index]]; }
 		//inline const Pin& getPin(const PinIndex ind_p) const { return pins[ind_p]; }
-		inline const Pin& getPinIn(const InHe& inc_p) const { return forwardView() ? pins_in[inc_p.pin_iter_in] : pins_out[inc_p.pin_iter_out]; }
-		inline Pin& getPinOut(const InHe& inc_p) { return forwardView() ? pins_out[inc_p.pin_iter_out] : pins_in[inc_p.pin_iter_in]; }
-		inline const Pin& getPinOut(const InHe& inc_p) const { return forwardView() ? pins_out[inc_p.pin_iter_out] : pins_in[inc_p.pin_iter_in]; }
+		inline const Pin& getPinIn(const InHe& inc_p) const { return pins_in[inc_p.pin_iters[sends_index]]; }
+		inline Pin& getPinOut(const InHe& inc_p) { return pins_out[inc_p.pin_iters[1-sends_index]]; }
+		inline const Pin& getPinOut(const InHe& inc_p) const { return pins_out[inc_p.pin_iters[1-sends_index]]; }
 
 
 		inline InHeIterator beginHyperedges() { return incident_hyperedges.begin(); }
@@ -147,22 +145,23 @@ namespace whfc {
 		InHeRange hyperedgesOf(const Node u) { return InHeRange(beginHyperedges(u), endHyperedges(u)); }
 		InHeRange hyperedgesInRange(const InHeIndexRange hir) { return InHeRange(beginHyperedges() + hir.begin(), beginHyperedges() + hir.end()); }
 
-		inline PinIterator beginPinsIn() { return forwardView() ? pins_in.begin() : pins_out.begin(); }
-		inline PinIterator endPinsIn() { return forwardView() ? pins_in.end() : pins_out.end(); }
-		inline PinIterator beginPinsOut() { return forwardView() ? pins_out.begin() : pins_in.begin(); }
-		inline PinIterator endPinsOut() { return forwardView() ? pins_out.end() : pins_in.end(); }
-		inline PinIterator beginPinsIn(const Hyperedge e) { return forwardView() ? pins_in.begin() + hyperedges[e].first_out : pins_out.begin() + hyperedges[e].first_out; }
-		inline PinIterator endPinsIn(const Hyperedge e) { return forwardView() ? pins_in.begin() + hyperedges[e+1].first_out : pins_out.begin() + hyperedges[e+1].first_out; }
-        inline PinIterator beginPinsOut(const Hyperedge e) { return forwardView() ? pins_out.begin() + hyperedges[e].first_out : pins_in.begin() + hyperedges[e].first_out; }
-        inline PinIterator endPinsOut(const Hyperedge e) { return forwardView() ? pins_out.begin() + hyperedges[e+1].first_out : pins_in.begin() + hyperedges[e+1].first_out; }
+		inline PinIterator beginPinsIn() { return pins_in.begin(); }
+		inline PinIterator endPinsIn() { return pins_in.end(); }
+		inline PinIterator beginPinsOut() { return pins_out.begin(); }
+		inline PinIterator endPinsOut() { return pins_out.end(); }
+		inline PinIterator beginPinsIn(const Hyperedge e) { return pins_in.begin() + hyperedges[e].first_out; }
+		inline PinIterator endPinsIn(const Hyperedge e) { return pins_in.begin() + hyperedges[e+1].first_out; }
+        inline PinIterator beginPinsOut(const Hyperedge e) { return pins_out.begin() + hyperedges[e].first_out; }
+        inline PinIterator endPinsOut(const Hyperedge e) { return pins_out.begin() + hyperedges[e+1].first_out; }
 		PinRange pinsInOf(const Hyperedge e) { return PinRange(beginPinsIn(e), endPinsIn(e)); }
 		PinRange pinsOutOf(const Hyperedge e) { return PinRange(beginPinsOut(e), endPinsOut(e)); }
 		PinRange pinsInInRange(const PinIndexRange pir) { return PinRange(beginPinsIn() + pir.begin(), beginPinsIn() + pir.end()); }
         PinRange pinsOutInRange(const PinIndexRange pir) { return PinRange(beginPinsOut() + pir.begin(), beginPinsOut() + pir.end()); }
 
-        PinRange pinsSendingFlowInto(const Hyperedge e) { return pinsInInRange(pins_sending_flow[e]); } // reconsider this
-		PinRange pinsReceivingFlowFrom(const Hyperedge e) { return pinsOutInRange(pins_receiving_flow[e]); }
-		
+        PinRange pinsSendingFlowInto(const Hyperedge e) { return PinRange(beginPinsIn(e), beginPinsIn(e) + pins_in_sending_flow_end[e]); }
+		PinRange pinsReceivingFlowFrom(const Hyperedge e) { return PinRange(beginPinsOut(e), beginPinsOut(e) + pins_out_receiving_flow_end[e]); }
+
+		/*
 		PinIndexRange pinsNotSendingFlowIndices(const Hyperedge e) const {
 			if (forwardView()) {
 				return PinIndexRange(pins_sending_flow[e].end(), endIndexPins(e));
@@ -170,18 +169,25 @@ namespace whfc {
 			else {
 				return PinIndexRange(beginIndexPins(e), pins_sending_flow[e].begin());
 			}
-		}
-		
+		}*/
+
+		/*
 		PinRange pinsNotSendingFlowInto(const Hyperedge e) {
 			return pinsInRange(pinsNotSendingFlowIndices(e));
-		}
-		
-		PinRange pinsWithoutFlow(const Hyperedge e) {
+		}*/
+
+		/*
+		PinRange pinsInWithoutFlow(const Hyperedge e) {
 			return pinsInRange(pins_without_flow(e));
-		}
+		}*/
 
 		inline bool forwardView() const { return sends_multiplier == 1; }
-		void flipViewDirection() { std::swap(pins_sending_flow, pins_receiving_flow); std::swap(sends_multiplier, receives_multiplier); }
+		void flipViewDirection() {
+		    std::swap(pins_in_sending_flow_end, pins_out_receiving_flow_end);
+		    std::swap(pins_in, pins_out),
+		    std::swap(sends_multiplier, receives_multiplier);
+		    sends_index = 1 - sends_index;
+		}
 		
 		
 		inline Flow capacity(const Hyperedge e) const { return hyperedges[e].capacity; }
@@ -191,30 +197,34 @@ namespace whfc {
 		inline Flow residualCapacity(const Hyperedge e) const { return capacity(e) - flow(e); }
 		inline bool isSaturated(const Hyperedge e) const { assert(flow(e) <= capacity(e)); return flow(e) == capacity(e); }
 
-		inline Flow flowSent(const Flow f) const { return f * sends_multiplier; }
+		//inline Flow flowSent(const Flow f) const { return f * sends_multiplier; }
 		//flow sent from u = getPin(inc_u.pin_iter).pin into e = inc_u.e
-		inline Flow flowSent(const InHe& inc_u) const { return flowSent(inc_u.flow); }
-		inline Flow absoluteFlowSent(const InHe& inc_u) const { return std::max(0, flowSent(inc_u)); }
-		inline Flow flowSent(const Pin& pin) const { return flowSent(getInHe(pin)); }
-		inline Flow absoluteFlowSent(const Pin& pin) const { return std::max(0, flowSent(pin)); }
-		
+		//inline Flow flowSent(const InHe& inc_u) const { return flowSent(inc_u.flow); }
+		inline Flow absoluteFlowSent(const InHe& inc_u) const { return getPinIn(inc_u).flow; }
+		//inline Flow flowSent(const Pin& pin) const { return flowSent(getInHe(pin)); }
+		//inline Flow absoluteFlowSent(const Pin& pin) const { return pin.flow; }
+
+		inline Flow pinFlow(const Pin& pin) const { return pin.flow; }
+
 		//for testing only
+		/*
 		inline Flow flowSent(const Node u) {
 			Flow f = 0;
 			for (const InHe& inc_u : hyperedgesOf(u))
 				f += flowSent(inc_u.flow);
 			return f;
-		}
-		
+		}*/
+
+		/*
 		inline Flow flowReceived(const Node u) {
 			return -flowSent(u);
-		}
+		}*/
 
-		inline Flow flowReceived(const Flow f) const { return f * receives_multiplier; }
+		//inline Flow flowReceived(const Flow f) const { return f * receives_multiplier; }
 		//flow that u = getPin(inc_u.pin_iter).pin receives from e = inc_u.e
-		inline Flow flowReceived(const InHe& inc_u) const { return flowReceived(inc_u.flow); }
-		inline Flow flowReceived(const Pin& pin) const { return flowReceived(getInHe(pin)); }
-		inline Flow absoluteFlowReceived(const InHe& inc_u) const { return std::max(0, flowReceived(inc_u)); }
+		//inline Flow flowReceived(const InHe& inc_u) const { return flowReceived(inc_u.flow); }
+		//inline Flow flowReceived(const Pin& pin) const { return flowReceived(getInHe(pin)); }
+		inline Flow absoluteFlowReceived(const InHe& inc_u) const { return getPinOut(inc_u).flow; }
 		//inline Flow flowReceived(const Pin& pin) const { return flowReceived(getInHe(pin)); }
 
 		inline Flow residualCapacity(const InHe& inc_u, InHe& inc_v) const {
@@ -230,13 +240,15 @@ namespace whfc {
 		}
 		
 		//for testing only
+		/*
 		Pin& findPin(const Hyperedge e, const Node v) {
 			for (Pin& x : pinsOf(e))
 				if (x.pin == v)
 					return x;
 			throw std::out_of_range("v is not a pin of e");
-		}
+		}*/
 
+		/*
 		void routeFlow(InHe& inc_u, InHe& inc_v, Flow flow_delta) {
 			const Hyperedge e = inc_u.e;
 			assert(inc_u.e == inc_v.e && "Routing flow but incident hyperedges are not the same");
@@ -291,6 +303,7 @@ namespace whfc {
 			assert(pin_is_categorized_correctly(inc_u) && "Pin categorized incorrectly");
 			assert(pin_is_categorized_correctly(inc_v) && "Pin categorized incorrectly");
 		}
+		 */
 
 		std::vector<NodeData>& getNodes() {
 		    return nodes;
@@ -309,16 +322,18 @@ namespace whfc {
 		std::vector<InHe> incident_hyperedges;
 
 		//TODO get rid of the range and just store one index, if this turns out to be cache inefficient later on
-		std::vector<PinIndexRange> pins_sending_flow;	//indexed by hyperedge id. gives range of pin ids/iterators sending flow to that hyperedge. grows right if forwardView = true
-		std::vector<PinIndexRange> pins_receiving_flow;	//indexed by hyperedge id. gives range of pin ids/iterators receiving flow from that hyperedge. grows left if forwardView = true
+		std::vector<PinIndex> pins_in_sending_flow_end;	//indexed by hyperedge id. gives range of pin ids/iterators sending flow to that hyperedge. grows right if forwardView = true
+		std::vector<PinIndex> pins_out_receiving_flow_end;	//indexed by hyperedge id. gives range of pin ids/iterators receiving flow from that hyperedge. grows left if forwardView = true
 		
 		NodeWeight total_node_weight = NodeWeight(0);
 		int sends_multiplier = 1;						//if forwardView = true, flow entering hyperedge e should be positive and flow exiting e should be negative. reverse, if forwardView = false.
 		int receives_multiplier = -1;
+		uint sends_index = 0;
 
-		PinIndexRange pins_without_flow(const Hyperedge e) const {
-			return forwardView() ? PinIndexRange(pins_sending_flow[e].end(), pins_receiving_flow[e].begin()) : PinIndexRange(pins_receiving_flow[e].end(), pins_sending_flow[e].begin());
-		}
+		/*PinIndexRange pinsIn_without_flow(const Hyperedge e) const {
+			return PinIndexRange();
+		}*/
+
 
 		PinIndex removePinFromFlowPins(InHe& inc_u, bool flow_receiving_pins) {
 			const Hyperedge e = inc_u.e;
@@ -358,26 +373,31 @@ namespace whfc {
 		}
 		
 		bool check_flow_conservation_locally(const Hyperedge e) {
-			Flow f = 0, f_in = 0;
-			for (Pin& p : pinsOf(e)) {
-				f += flowSent(p);
-				f_in += absoluteFlowSent(p);
-				assert(std::abs(flowSent(p)) <= capacity(e));
+			Flow f_in = 0, f_out = 0;
+			for (Pin& p : pinsInOf(e)) {
+				f_in += pinFlow(p);
+				assert(pinFlow(p) <= capacity(e));
 			}
+			for (Pin& p : pinsOutOf(e)) {
+			    f_out += pinFlow(p);
+			    assert(pinFlow(p) <= capacity(e));
+			}
+			Flow f = f_in - f_out;
 			assert(f == 0);
 			assert(f_in == flow(e));
 			return true;
 		}
 
 		bool assert_backpointers_correct(const InHe& inhe) const {
-			const InHe& doubled = getInHe(getPin(inhe));
-			unused(inhe, doubled);
-			assert(doubled.pin_iter == inhe.pin_iter && "Backpointer Pin Iter inconsistent");
-			assert(doubled.e == inhe.e && "Backpointer hyperedge ID inconsistent");
-			assert(doubled.flow == inhe.flow && "Backpointer Pin Iter inconsistent");
+			const InHe& doubled_in = getInHe(getPinIn(inhe));
+			const InHe& doubled_out = getInHe(getPinOut(inhe));
+			unused(inhe, doubled_in, doubled_out);
+			assert(doubled_in.pin_iter_in == inhe.pin_iter_in && "Backpointer Pin Iter inconsistent");
+			assert(doubled_in.e == inhe.e && "Backpointer hyperedge ID inconsistent");
 			return true;
 		}
 
+		/*
 		bool sanity_check_pin_ranges(const Hyperedge e) const {
 			//check left / right end of pin ranges agree with first_out
 			const PinIndexRange& s = forwardView() ? pins_sending_flow[e] : pins_receiving_flow[e];
@@ -390,7 +410,7 @@ namespace whfc {
 			assert(s.end() <= l.begin());
 			assert(l.begin() <= l.end());
 			return true;
-		}
+		}*/
 
 		bool pin_is_categorized_correctly(const InHe& inc_u) {
 			const Hyperedge e = inc_u.e;
