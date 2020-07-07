@@ -103,7 +103,7 @@ namespace whfc {
                         Pin& p_in = pins_in[pin_it];
                         Pin& p_out = pins_out[pin_it];
                         InHeIndex ind_he = static_cast<InHeIndex>(__sync_fetch_and_add(&nodes[p_in.pin].first_out.value(), 1));	//destroy first_out temporarily and reset later
-                        incident_hyperedges[ind_he] = { e, pin_it, pin_it };
+                        incident_hyperedges[ind_he] = { e, 0, {pin_it, pin_it} };
                         p_in.he_inc_iter = ind_he;					//set iterator for incident hyperedge -> its position in incident_hyperedges of the node
                         p_out.he_inc_iter = ind_he;
                     }

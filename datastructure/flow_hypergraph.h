@@ -13,12 +13,13 @@ namespace whfc {
 		struct Pin {
 			Node pin = invalidNode;
 			InHeIndex he_inc_iter;
-			Flow flow = Flow(0);
+			Flow flow = Flow(0); // only used for push relabel
 			bool operator==(const Pin& o) const { return o.pin == pin && o.he_inc_iter == he_inc_iter; }
 		};
 
 		struct InHe {	//Hyperedge Incidence
 			Hyperedge e = invalidHyperedge;
+			Flow flow = Flow(0); // used for flow that gets routed
 			std::array<PinIndex, 2> pin_iters;
 		};
 
@@ -197,35 +198,31 @@ namespace whfc {
 		inline Flow residualCapacity(const Hyperedge e) const { return capacity(e) - flow(e); }
 		inline bool isSaturated(const Hyperedge e) const { assert(flow(e) <= capacity(e)); return flow(e) == capacity(e); }
 
-		//inline Flow flowSent(const Flow f) const { return f * sends_multiplier; }
-		//flow sent from u = getPin(inc_u.pin_iter).pin into e = inc_u.e
-		//inline Flow flowSent(const InHe& inc_u) const { return flowSent(inc_u.flow); }
-		inline Flow absoluteFlowSent(const InHe& inc_u) const { return getPinIn(inc_u).flow; }
-		//inline Flow flowSent(const Pin& pin) const { return flowSent(getInHe(pin)); }
-		//inline Flow absoluteFlowSent(const Pin& pin) const { return pin.flow; }
+        inline Flow flowSent(const Flow f) const { return f * sends_multiplier; }
+        //flow sent from u = getPin(inc_u.pin_iter).pin into e = inc_u.e
+        inline Flow flowSent(const InHe& inc_u) const { return flowSent(inc_u.flow); }
+        inline Flow absoluteFlowSent(const InHe& inc_u) const { return std::max(0, flowSent(inc_u)); }
+        inline Flow flowSent(const Pin& pin) const { return flowSent(getInHe(pin)); }
+        inline Flow absoluteFlowSent(const Pin& pin) const { return std::max(0, flowSent(pin)); }
 
-		inline Flow pinFlow(const Pin& pin) const { return pin.flow; }
+        //for testing only
+        inline Flow flowSent(const Node u) {
+            Flow f = 0;
+            for (const InHe& inc_u : hyperedgesOf(u))
+                f += flowSent(inc_u.flow);
+            return f;
+        }
 
-		//for testing only
-		/*
-		inline Flow flowSent(const Node u) {
-			Flow f = 0;
-			for (const InHe& inc_u : hyperedgesOf(u))
-				f += flowSent(inc_u.flow);
-			return f;
-		}*/
+        inline Flow flowReceived(const Node u) {
+            return -flowSent(u);
+        }
 
-		/*
-		inline Flow flowReceived(const Node u) {
-			return -flowSent(u);
-		}*/
-
-		//inline Flow flowReceived(const Flow f) const { return f * receives_multiplier; }
-		//flow that u = getPin(inc_u.pin_iter).pin receives from e = inc_u.e
-		//inline Flow flowReceived(const InHe& inc_u) const { return flowReceived(inc_u.flow); }
-		//inline Flow flowReceived(const Pin& pin) const { return flowReceived(getInHe(pin)); }
-		inline Flow absoluteFlowReceived(const InHe& inc_u) const { return getPinOut(inc_u).flow; }
-		//inline Flow flowReceived(const Pin& pin) const { return flowReceived(getInHe(pin)); }
+        inline Flow flowReceived(const Flow f) const { return f * receives_multiplier; }
+        //flow that u = getPin(inc_u.pin_iter).pin receives from e = inc_u.e
+        inline Flow flowReceived(const InHe& inc_u) const { return flowReceived(inc_u.flow); }
+        inline Flow flowReceived(const Pin& pin) const { return flowReceived(getInHe(pin)); }
+        inline Flow absoluteFlowReceived(const InHe& inc_u) const { return std::max(0, flowReceived(inc_u)); }
+        //inline Flow flowReceived(const Pin& pin) const { return flowReceived(getInHe(pin)); }
 
 		inline Flow residualCapacity(const InHe& inc_u, InHe& inc_v) const {
 			return absoluteFlowReceived(inc_u) + absoluteFlowSent(inc_v) + residualCapacity(inc_u.e);
@@ -247,63 +244,6 @@ namespace whfc {
 					return x;
 			throw std::out_of_range("v is not a pin of e");
 		}*/
-
-		/*
-		void routeFlow(InHe& inc_u, InHe& inc_v, Flow flow_delta) {
-			const Hyperedge e = inc_u.e;
-			assert(inc_u.e == inc_v.e && "Routing flow but incident hyperedges are not the same");
-			assert(flow_delta > 0 && "Routing <= 0 flow.");
-			assert(flow_delta <= residualCapacity(inc_u, inc_v) && "Routing more flow than residual capacity");
-			assert(flow(e) <= capacity(e) && "Capacity on e already exceeded");
-			assert(std::abs(inc_u.flow) <= capacity(e) && "Pin capacity already violated (u)");
-			assert(std::abs(inc_v.flow) <= capacity(e) && "Pin capacity already violated (v)");
-
-			const Flow prevFlowU = inc_u.flow;
-			const Flow prevFlowV = inc_v.flow;
-			
-			Flow flow_delta_on_v_eOut_eIn_u = std::min({ absoluteFlowSent(inc_v), absoluteFlowReceived(inc_u), flow_delta });
-			inc_u.flow += flowSent(flow_delta_on_v_eOut_eIn_u);
-			inc_v.flow += flowReceived(flow_delta_on_v_eOut_eIn_u);
-			flow(e) -= flow_delta_on_v_eOut_eIn_u;
-			flow_delta -= flow_delta_on_v_eOut_eIn_u;
-			
-			Flow flow_delta_on_v_eOut_u = std::min(flow_delta, absoluteFlowReceived(inc_u));
-			inc_u.flow += flowSent(flow_delta_on_v_eOut_u);
-			inc_v.flow += flowReceived(flow_delta_on_v_eOut_u);
-			//does not influence flow(e)
-			flow_delta -= flow_delta_on_v_eOut_u;
-			
-			Flow flow_delta_on_v_eIn_u = std::min(flow_delta, absoluteFlowSent(inc_v));
-			inc_u.flow += flowSent(flow_delta_on_v_eIn_u);
-			inc_v.flow += flowReceived(flow_delta_on_v_eIn_u);
-			//does not influence flow(e)
-			flow_delta -= flow_delta_on_v_eIn_u;
-			
-			Flow flow_delta_on_v_eIn_eOut_u = flow_delta;
-			assert(flow_delta_on_v_eIn_eOut_u <= residualCapacity(e));
-			inc_u.flow += flowSent(flow_delta_on_v_eIn_eOut_u);
-			inc_v.flow += flowReceived(flow_delta_on_v_eIn_eOut_u);
-			flow(e) += flow_delta_on_v_eIn_eOut_u;
-
-			
-			if (flowReceived(prevFlowU) > 0 && flowSent(inc_u.flow) >= 0)	//u previously received flow and now either has none, or sends flow.
-				removePinFromFlowPins(inc_u, true);
-			if (flowSent(inc_u.flow) > 0 && flowSent(prevFlowU) <= 0) //u now sends flow and did not previously, thus must be inserted into pins_sending_flow
-				insertPinIntoFlowPins(inc_u, false);
-
-			if (flowSent(prevFlowV) > 0 && flowReceived(inc_v.flow) >= 0) //v previously sent flow and now either has none, or receives flow.
-				removePinFromFlowPins(inc_v, false);
-			if (flowReceived(inc_v.flow) > 0 && flowReceived(prevFlowV) <= 0)  //v now receives flow and did not previously, thus must be inserted into pins_receiving_flow
-				insertPinIntoFlowPins(inc_v, true);
-			
-			assert(check_flow_conservation_locally(e));
-			assert(sanity_check_pin_ranges(e));
-			assert(assert_backpointers_correct(inc_u));
-			assert(assert_backpointers_correct(inc_v));
-			assert(pin_is_categorized_correctly(inc_u) && "Pin categorized incorrectly");
-			assert(pin_is_categorized_correctly(inc_v) && "Pin categorized incorrectly");
-		}
-		 */
 
 		std::vector<NodeData>& getNodes() {
 		    return nodes;
@@ -335,6 +275,7 @@ namespace whfc {
 		}*/
 
 
+		/*
 		PinIndex removePinFromFlowPins(InHe& inc_u, bool flow_receiving_pins) {
 			const Hyperedge e = inc_u.e;
 			PinIndex it_u = inc_u.pin_iter;
@@ -371,22 +312,19 @@ namespace whfc {
 			assert(flow_pins.contains(it_o));
 			return it_o;
 		}
-		
-		bool check_flow_conservation_locally(const Hyperedge e) {
-			Flow f_in = 0, f_out = 0;
-			for (Pin& p : pinsInOf(e)) {
-				f_in += pinFlow(p);
-				assert(pinFlow(p) <= capacity(e));
-			}
-			for (Pin& p : pinsOutOf(e)) {
-			    f_out += pinFlow(p);
-			    assert(pinFlow(p) <= capacity(e));
-			}
-			Flow f = f_in - f_out;
-			assert(f == 0);
-			assert(f_in == flow(e));
-			return true;
-		}
+		 */
+
+        bool check_flow_conservation_locally(const Hyperedge e) {
+            Flow f = 0, f_in = 0;
+            for (Pin& p : pinsInOf(e)) {
+                f += flowSent(p);
+                f_in += absoluteFlowSent(p);
+                assert(std::abs(flowSent(p)) <= capacity(e));
+            }
+            assert(f == 0);
+            assert(f_in == flow(e));
+            return true;
+        }
 
 		bool assert_backpointers_correct(const InHe& inhe) const {
 			const InHe& doubled_in = getInHe(getPinIn(inhe));
@@ -412,6 +350,7 @@ namespace whfc {
 			return true;
 		}*/
 
+		/*
 		bool pin_is_categorized_correctly(const InHe& inc_u) {
 			const Hyperedge e = inc_u.e;
 			const PinIndex it_u = inc_u.pin_iter;
@@ -421,7 +360,7 @@ namespace whfc {
 			return 		(sends && !receives && !no_flow)
 					|| 	(!sends && receives && !no_flow)
 					|| 	(!sends && !receives && no_flow);
-		}
+		}*/
 		
 		static_assert(std::is_trivially_destructible<Pin>::value);
 		static_assert(std::is_trivially_destructible<InHe>::value);
@@ -446,7 +385,7 @@ namespace whfc {
 			out << "---Hyperedges---\n";
 			for (const Hyperedge e: hyperedgeIDs()) {
 				out << e << " pincount = " << pinCount(e) << " w= " << capacity(e) << " pins (pin,flow) = [";
-				for (const Pin& u : pinsOf(e)) {
+				for (const Pin& u : pinsInOf(e)) {
 					assert(pin_is_categorized_correctly(getInHe(u)));
 					out << "(" << u.pin << "," << getInHe(u).flow << ") ";
 				}
