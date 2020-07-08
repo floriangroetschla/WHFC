@@ -280,45 +280,43 @@ namespace whfc {
 			return PinIndexRange();
 		}*/
 
+		void removePinFromFlowPins(InHe& inc_u, bool flow_sending_pin) {
+		    const Hyperedge e = inc_u.e;
+		    PinIndex it_u = flow_sending_pin ? inc_u.pin_iters[sends_index] : inc_u.pin_iters[1-sends_index];
+		    PinIndex end_index = flow_sending_pin ? pins_in_sending_flow_end[e] : pins_out_receiving_flow_end[e];
+		    PinIndex it_v = PinIndex(end_index - 1); // last pin with flow
+		    assert(it_u < end_index);
 
-		/*
-		PinIndex removePinFromFlowPins(InHe& inc_u, bool flow_receiving_pins) {
-			const Hyperedge e = inc_u.e;
-			PinIndex it_u = inc_u.pin_iter;
-			PinIndexRange& flow_pins = flow_receiving_pins ? pins_receiving_flow[e] : pins_sending_flow[e];
-			assert(!flow_pins.empty());
-			assert(flow_pins.contains(it_u));
-
-			PinIndex it_o = (forwardView() == flow_receiving_pins) ? flow_pins.begin() : PinIndex(flow_pins.end() - 1);
-			InHe& inc_o = getInHe(getPin(it_o));
-			assert(it_o == it_u || (flow_receiving_pins ? flowReceived(inc_o) > 0 : flowSent(inc_o) > 0));	//ensure it_o, taken from flow_pins, actually receives or sends flow, as appropriate
-			if (forwardView() == flow_receiving_pins)
-				flow_pins.advance_begin();
-			else
-				flow_pins.retreat_end();
-			std::swap(inc_u.pin_iter, inc_o.pin_iter);
-			std::swap(pins[it_u], pins[it_o]);
-			assert(pins_without_flow(e).contains(it_o));
-			return it_o;
+		    InHe& inc_v = flow_sending_pin ? getInHe(pins_in[it_v]) : getInHe(pins_out[it_v]);
+		    if (flow_sending_pin) {
+		        std::swap(inc_u.pin_iters[sends_index], inc_v.pin_iters[sends_index]);
+		        std::swap(pins_in[it_u], pins_in[it_v]);
+		        pins_in_sending_flow_end[e]--;
+		    } else {
+		        std::swap(inc_u.pin_iters[1-sends_index], inc_v.pin_iters[1-sends_index]);
+		        std::swap(pins_out[it_u], pins_out[it_v]);
+		        pins_out_receiving_flow_end[e]--;
+		    }
 		}
 
-		PinIndex insertPinIntoFlowPins(InHe& inc_u, bool flow_receiving_pins) {
-			const Hyperedge e = inc_u.e;
-			PinIndex it_u = inc_u.pin_iter;
-			PinIndexRange& flow_pins = flow_receiving_pins ? pins_receiving_flow[e] : pins_sending_flow[e];
-			assert(pins_without_flow(e).contains(it_u));
-			PinIndex it_o = (forwardView() == flow_receiving_pins) ? PinIndex(flow_pins.begin() - 1) : flow_pins.end();
-			InHe& inc_o = getInHe(getPin(it_o));
-			if (forwardView() == flow_receiving_pins)
-				flow_pins.retreat_begin();
-			else
-				flow_pins.advance_end();
-			std::swap(inc_u.pin_iter, inc_o.pin_iter);
-			std::swap(pins[it_u], pins[it_o]);
-			assert(flow_pins.contains(it_o));
-			return it_o;
+		void insertPinIntoFlowPins(InHe& inc_u, bool flow_sending_pin) {
+		    const Hyperedge e = inc_u.e;
+		    PinIndex it_u = flow_sending_pin ? inc_u.pin_iters[sends_index] : inc_u.pin_iters[1-sends_index];
+		    PinIndex end_index = flow_sending_pin ? pins_in_sending_flow_end[e] : pins_out_receiving_flow_end[e];
+		    PinIndex it_v = PinIndex(end_index);
+		    assert(it_u >= end_index);
+
+		    InHe& inc_v = flow_sending_pin ? getInHe(pins_in[it_v]) : getInHe(pins_out[it_v]);
+            if (flow_sending_pin) {
+                std::swap(inc_u.pin_iters[sends_index], inc_v.pin_iters[sends_index]);
+                std::swap(pins_in[it_u], pins_in[it_v]);
+                pins_in_sending_flow_end[e]++;
+            } else {
+                std::swap(inc_u.pin_iters[1-sends_index], inc_v.pin_iters[1-sends_index]);
+                std::swap(pins_out[it_u], pins_out[it_v]);
+                pins_out_receiving_flow_end[e]++;
+            }
 		}
-		 */
 
         bool check_flow_conservation_locally(const Hyperedge e) {
             Flow f = 0, f_in = 0;
