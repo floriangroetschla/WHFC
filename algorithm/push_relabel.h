@@ -379,9 +379,6 @@ namespace whfc {
             hg.initialize_for_push_relabel();
             timer.stop("initialize");
 
-            hg.printHypergraph(std::cout);
-            hg.printExcessAndLabel();
-
             piercingNode = cs.sourcePiercingNodes.begin()->node;
             target = cs.targetPiercingNodes.begin()->node;
 
@@ -419,16 +416,10 @@ namespace whfc {
                 hg.excess_change(u) = 0;
             }
 
-            hg.printHypergraph(std::cout);
-            hg.printExcessAndLabel();
-
             timer.start("setLabels", "exhaustFlow");
             n = hg.numNodes() + 2 * hg.numHyperedges();
             std::array<size_t, 2> numScans = globalUpdate(cs, n);
             timer.stop("setLabels");
-
-            hg.printHypergraph(std::cout);
-            hg.printExcessAndLabel();
 
             size_t nm = ALPHA * numScans[0] + numScans[1];
             n = numScans[0];
@@ -439,9 +430,6 @@ namespace whfc {
             // Phase 1
             if (nodes_left) pushRelabel(cs, nm, false);
             timer.stop("phase1");
-
-            hg.printHypergraph(std::cout);
-            hg.printExcessAndLabel();
 
             timer.start("phase2", "mainLoop");
             timer.start("buildResidualNetwork", "phase2");
@@ -467,8 +455,6 @@ namespace whfc {
             cs.flowValue += f;
             assert(f == augmented_flow);
 
-            hg.printHypergraph(std::cout);
-            hg.printExcessAndLabel();
 
             cs.verifyFlowConstraints();
 
@@ -478,7 +464,7 @@ namespace whfc {
             timer.stop("growReachable");
             timer.stop("exhaustFlow");
 
-            //std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numGlobalUpdate: " << numGlobalUpdate << ", numLawlerNodes: " << hg.numLawlerNodes() << std::endl;
+            std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numGlobalUpdate: " << numGlobalUpdate << ", numLawlerNodes: " << hg.numLawlerNodes() << std::endl;
 
             return f;
         }
