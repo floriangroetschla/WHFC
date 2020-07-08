@@ -389,6 +389,9 @@ namespace whfc {
 
             bool nodes_left = false;
 
+            hg.printHypergraph(std::cout);
+            hg.printExcessAndLabel();
+
             for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(piercingNode)) {
                 InHe& inc_u = hg.getInHe(inc_iter);
                 const Hyperedge e = inc_u.e;
@@ -411,6 +414,9 @@ namespace whfc {
                 }
             }
 
+            hg.printHypergraph(std::cout);
+            hg.printExcessAndLabel();
+
             for (Node u : thisLayer) {
                 hg.excess(u) += hg.excess_change(u);
                 hg.excess_change(u) = 0;
@@ -430,6 +436,9 @@ namespace whfc {
             // Phase 1
             if (nodes_left) pushRelabel(cs, nm, false);
             timer.stop("phase1");
+
+            hg.printHypergraph(std::cout);
+            hg.printExcessAndLabel();
 
             timer.start("phase2", "mainLoop");
             timer.start("buildResidualNetwork", "phase2");
