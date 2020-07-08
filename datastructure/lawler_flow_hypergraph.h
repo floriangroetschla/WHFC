@@ -57,7 +57,7 @@ namespace whfc {
 
             vec_excess[u] -= f;
             __atomic_add_fetch(&vec_excess_change[edge_node_in(in_he.e)], f, __ATOMIC_ACQ_REL);
-            if (getPinIn(in_he).flow == 0) insertPinIntoFlowPins(in_he, true);
+            //if (getPinIn(in_he).flow == 0) insertPinIntoFlowPins(in_he, true);
             getPinIn(in_he).flow += f;
         }
 
@@ -70,7 +70,7 @@ namespace whfc {
             vec_excess[u] -= f;
             __atomic_add_fetch(&vec_excess_change[edge_node_out(in_he.e)], f, __ATOMIC_ACQ_REL);
             getPinOut(in_he).flow -= f;
-            if (getPinOut(in_he).flow == 0) removePinFromFlowPins(in_he, false);
+            //if (getPinOut(in_he).flow == 0) removePinFromFlowPins(in_he, false);
         }
 
         inline void push_edgeIn_to_node(const Node u, const InHeIndex inc, const Flow f) {
@@ -83,7 +83,7 @@ namespace whfc {
             vec_excess[edge_node_in(in_he.e)] -= f;
             __atomic_add_fetch(&vec_excess_change[u], f, __ATOMIC_ACQ_REL);
             getPinIn(in_he).flow -= f;
-            if (getPinIn(in_he).flow == 0) removePinFromFlowPins(in_he, true);
+            //if (getPinIn(in_he).flow == 0) removePinFromFlowPins(in_he, true);
         }
 
         inline void push_edgeOut_to_node(const Node u, const InHeIndex inc, const Flow f) {
@@ -95,7 +95,7 @@ namespace whfc {
             vec_excess[edge_node_out(in_he.e)] -= f;
             __atomic_add_fetch(&vec_excess_change[u], f, __ATOMIC_ACQ_REL);
             getPinOut(in_he).flow += f;
-            if (getPinOut(in_he).flow == f) insertPinIntoFlowPins(in_he, false);
+            //if (getPinOut(in_he).flow == f) insertPinIntoFlowPins(in_he, false);
         }
 
         inline void push_edgeIn_to_edgeOut(const Node e_in, const Node e_out, const Flow f) {
@@ -205,33 +205,39 @@ namespace whfc {
         }
 
         void writeBackFlow() {
-            for (Hyperedge e : hyperedgeIDs()) {
-                Flow flow_on_edge = 0;
-                for (Pin& p : pinsInOf(e)) {
-                    const InHeIndex inc = p.he_inc_iter;
-                    InHe& inc_he = getInHe(p);
-                    flow_on_edge += absoluteFlowSent(inc_he);
+            tbb::parallel_for(tbb::blocked_range<uint32_t>(0, numHyperedges()), [&](const tbb::blocked_range<uint32_t>& edges) {
+                for (uint32_t edge_id = edges.begin(); edge_id < edges.end(); ++edge_id) {
+                    const Hyperedge e(edge_id);
+                    Flow flow_on_edge = 0;
+                    for (Pin& p : pinsInOf(e)) {
+                        const InHeIndex inc = p.he_inc_iter;
+                        InHe& inc_he = getInHe(p);
+                        flow_on_edge += absoluteFlowSent(inc_he);
 
-                    getPinIn(inc_he).flow = absoluteFlowSent(inc_he);
-                    getPinOut(inc_he).flow = absoluteFlowReceived(inc_he);
+                        getPinIn(inc_he).flow = absoluteFlowSent(inc_he);
+                        getPinOut(inc_he).flow = absoluteFlowReceived(inc_he);
+                    }
+                    flow(e) = flow_on_edge;
                 }
-                flow(e) = flow_on_edge;
-            }
+            });
         }
 
         void buildResidualNetwork() {
-            for (Hyperedge e : hyperedgeIDs()) {
-                Flow previous_flow_on_edge = 0;
-                for (Pin& p : pinsInOf(e)) {
-                    const InHeIndex inc = p.he_inc_iter;
-                    InHe& inc_he = getInHe(p);
-                    previous_flow_on_edge += absoluteFlowSent(inc_he);
+            tbb::parallel_for(tbb::blocked_range<uint32_t>(0, numHyperedges()), [&](const tbb::blocked_range<uint32_t>& edges) {
+                for (uint32_t edge_id = edges.begin(); edge_id < edges.end(); ++edge_id) {
+                    const Hyperedge e(edge_id);
+                    Flow previous_flow_on_edge = 0;
+                    for (Pin& p : pinsInOf(e)) {
+                        const InHeIndex inc = p.he_inc_iter;
+                        InHe& inc_he = getInHe(p);
+                        previous_flow_on_edge += absoluteFlowSent(inc_he);
 
-                    getPinIn(inc_he).flow -= absoluteFlowSent(inc_he);
-                    getPinOut(inc_he).flow -= absoluteFlowReceived(inc_he);
+                        getPinIn(inc_he).flow -= absoluteFlowSent(inc_he);
+                        getPinOut(inc_he).flow -= absoluteFlowReceived(inc_he);
+                    }
+                    flow(e) -= previous_flow_on_edge;
                 }
-                flow(e) -= previous_flow_on_edge;
-            }
+            });
         }
 
         void printExcessAndLabel() {
