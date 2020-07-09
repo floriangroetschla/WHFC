@@ -28,7 +28,7 @@ namespace whfc {
 
         static constexpr size_t ALPHA = 6;
         static constexpr size_t BETA = 12;
-        static constexpr float globalUpdateFreq = 1.0;
+        static constexpr float globalUpdateFreq = 10.0;
 
         LawlerFlowHypergraph& hg;
         LayeredQueue<Node> queue;
@@ -101,6 +101,30 @@ namespace whfc {
 
         size_t iterateOverEdges(const Node u, CutterState<Type>& cs, std::vector<Node>& queue, InHeIndex& he, const InHeIndex he_end) {
             size_t minLevel = n;
+            InHeIndex start = he;
+            for (; he < hg.endIndexHyperedges(u); ++he) {
+                InHe& inc_u = hg.getInHe(he);
+                const Hyperedge e = inc_u.e;
+
+                if (!cs.h.areAllPinsSourceReachable__unsafe__(e)) {
+                    const Node e_in = hg.edge_node_in(e);
+                    Flow residual = hg.excess(u);
+                    if (residual > 0) {
+                        if (hg.label(u) == hg.label(e_in) + 1) {
+                            numPushes++;
+                            hg.push_node_to_edgeIn(u, he, residual);
+                            if (inQueue.set(e_in)) { queue.push_back(e_in); }
+                        } else {
+                            assert(hg.label(u) <= hg.label(e_in));
+                            if (hg.label(e_in) != 0) minLevel = std::min(minLevel, hg.label(e_in));
+                        }
+                    }
+                    assert(hg.excess(u) >= 0);
+                    if (hg.excess(u) == 0) break;
+                }
+            }
+
+            he = start;
             for (; he < hg.endIndexHyperedges(u); ++he) {
                 InHe& inc_u = hg.getInHe(he);
                 const Hyperedge e = inc_u.e;
@@ -118,19 +142,6 @@ namespace whfc {
                             if (hg.label(e_out) != 0) minLevel = std::min(minLevel, hg.label(e_out));
                         }
                     }
-
-                    const Node e_in = hg.edge_node_in(e);
-                    residual = hg.excess(u);
-                    if (residual > 0) {
-                        if (hg.label(u) == hg.label(e_in) + 1) {
-                            numPushes++;
-                            hg.push_node_to_edgeIn(u, he, residual);
-                            if (inQueue.set(e_in)) { queue.push_back(e_in); }
-                        } else {
-                            assert(hg.label(u) <= hg.label(e_in));
-                            if (hg.label(e_in) != 0) minLevel = std::min(minLevel, hg.label(e_in));
-                        }
-                    }
                     assert(hg.excess(u) >= 0);
                     if (hg.excess(u) == 0) break;
                 }
@@ -138,6 +149,62 @@ namespace whfc {
             return minLevel;
         }
 
+        size_t iterateOverPinsIn(const Node e_in, CutterState<Type>& cs, std::vector<Node>& queue) {
+            size_t minLevel = n;
+            const Hyperedge e = hg.edgeFromLawlerNode(e_in);
+
+            PinIterator first_non_sending = hg.endPinsInSending(e);
+            for (PinIterator pin_it = hg.beginPinsIn(e); pin_it < first_non_sending; ++pin_it) {
+                const Pin pin = *pin_it;
+                const Node v = pin.pin;
+                if (!cs.n.isSourceReachable(v) || v == target) {
+                    Flow residual = std::min(pin.flow, hg.excess(e_in));
+                    if (residual > 0) {
+                        if (hg.label(e_in) == hg.label(v) + 1) {
+                            numPushes++;
+                            hg.push_edgeIn_to_node(v, pin.he_inc_iter, residual);
+                            if (hg.getPinIn(hg.getInHe(pin.he_inc_iter)).flow == 0) {
+                                first_non_sending--;
+                                pin_it--;
+                            }
+                            if (!(v == target) && inQueue.set(v)) { queue.push_back(v); }
+                        } else {
+                            assert(hg.label(e_in) <= hg.label(v));
+                            minLevel = std::min(minLevel, hg.label(v));
+                        }
+                    }
+                }
+                if (hg.excess(e_in) == 0) break;
+            }
+            return minLevel;
+        }
+
+        size_t iterateOverPinsOut(const Node e_out, CutterState<Type>& cs, std::vector<Node>& queue) {
+            size_t minLevel = n;
+            const Hyperedge e = hg.edgeFromLawlerNode(e_out);
+
+            for (PinIterator pinIt = hg.beginPinsOut(e); pinIt < hg.endPinsOut(e); ++pinIt) {
+                const Pin pin = *pinIt;
+                const Node v = pin.pin;
+                if (!cs.n.isSourceReachable(v) || v == target) {
+                    Flow residual = hg.excess(e_out);
+                    if (residual > 0) {
+                        if (hg.label(e_out) == hg.label(v) + 1) {
+                            numPushes++;
+                            hg.push_edgeOut_to_node(v, pin.he_inc_iter, residual);
+                            if (!(v == target) && inQueue.set(v)) { queue.push_back(v); }
+                        } else {
+                            assert(hg.label(e_out) <= hg.label(v));
+                            minLevel = std::min(minLevel, hg.label(v));
+                        }
+                    }
+                }
+                if (hg.excess(e_out) == 0) break;
+            }
+            return minLevel;
+        }
+
+        /*
         size_t iterateOverPins(const Node u, CutterState<Type>& cs, std::vector<Node>& queue, PinIterator& pinIt, const PinIterator endIndex) {
             const bool is_edge_in = hg.is_edge_in(u);
 
@@ -166,7 +233,7 @@ namespace whfc {
                 if (hg.excess(u) == 0) break;
             }
             return minLevel;
-        }
+        }*/
 
         void dischargeNode(const Node u, CutterState<Type>& cs, std::vector<Node>& queue, size_t& work_added) {
             assert(u < hg.numNodes());
@@ -175,13 +242,14 @@ namespace whfc {
             const InHeIndex beginIt = current_hyperedge[u];
             assert(beginIt >= hg.beginIndexHyperedges(u) && beginIt <= hg.endIndexHyperedges(u));
             const InHeIndex endIt = hg.endIndexHyperedges(u);
-            InHeIndex edgeIt = beginIt;
+            //InHeIndex edgeIt = beginIt;
+            InHeIndex edgeIt = hg.beginIndexHyperedges(u);
 
             size_t minLevel = iterateOverEdges(u, cs, queue, edgeIt, endIt);
 
             if (hg.excess(u) > 0) {
                 edgeIt = hg.beginIndexHyperedges(u);
-                minLevel = std::min(minLevel, iterateOverEdges(u, cs, queue, edgeIt, beginIt));
+                //minLevel = std::min(minLevel, iterateOverEdges(u, cs, queue, edgeIt, beginIt));
                 assert(minLevel + 1 > hg.label(u));
                 hg.label_next_iteration(u) = minLevel + 1;
                 if (minLevel + 1 < n && inQueue.set(u)) queue.push_back(u);
@@ -200,7 +268,8 @@ namespace whfc {
             const PinIterator beginIt = current_pin_e_in[e];
             assert(beginIt >= hg.beginPinsIn(e) && beginIt <= hg.endPinsIn(e));
             const PinIterator endIt = hg.endPinsIn(e);
-            PinIterator pinIt = beginIt;
+            //PinIterator pinIt = beginIt;
+            PinIterator pinIt = hg.beginPinsIn(e);
 
             size_t minLevel = n;
 
@@ -219,13 +288,13 @@ namespace whfc {
 
             // Scan pins
             if (hg.excess(e_in) > 0) {
-                minLevel = std::min(iterateOverPins(e_in, cs, queue, pinIt, endIt), minLevel);
+                minLevel = std::min(iterateOverPinsIn(e_in, cs, queue), minLevel);
             }
 
             if (hg.excess(e_in) > 0) {
                 // relabel
                 pinIt = hg.beginPinsIn(e);
-                minLevel = std::min(minLevel, iterateOverPins(e_in, cs, queue, pinIt, beginIt));
+                //minLevel = std::min(minLevel, iterateOverPins(e_in, cs, queue, pinIt, beginIt));
                 numRelabel++;
                 assert(minLevel + 1 > hg.label(e_in));
                 hg.label_next_iteration(e_in) = minLevel + 1;
@@ -246,10 +315,11 @@ namespace whfc {
             const PinIterator beginIt = current_pin_e_out[e];
             assert(beginIt >= hg.beginPinsIn(e) && beginIt <= hg.endPinsIn(e));
             const PinIterator endIt = hg.endPinsIn(e);
-            PinIterator pinIt = beginIt;
+            //PinIterator pinIt = beginIt;
+            PinIterator pinIt = hg.beginPinsIn(e);
 
             // Scan pins
-            size_t minLevel = iterateOverPins(e_out, cs, queue, pinIt, endIt);
+            size_t minLevel = iterateOverPinsOut(e_out, cs, queue);
 
             if (hg.excess(e_out) > 0) {
                 const Node e_in = hg.edge_node_in(e);
@@ -271,7 +341,7 @@ namespace whfc {
             if (hg.excess(e_out) > 0) {
                 // relabel
                 pinIt = hg.beginPinsIn(e);
-                minLevel = std::min(minLevel, iterateOverPins(e_out, cs, queue, pinIt, beginIt));
+                //minLevel = std::min(minLevel, iterateOverPins(e_out, cs, queue, pinIt, beginIt));
                 numRelabel++;
                 assert(minLevel + 1 > hg.label(e_out));
                 hg.label_next_iteration(e_out) = minLevel + 1;
@@ -308,6 +378,7 @@ namespace whfc {
                                 assert(hg.is_edge_out(u));
                                 dischargeEdgeNodeOut(u, cs, nextLayer, work_added);
                             }
+                            //hg.all_pins_are_categorized_correctly();
                         }
                     });
                 });
@@ -361,6 +432,7 @@ namespace whfc {
                     timer.stop("globalUpdate");
                     workSinceLastRelabel = 0;
                 }
+
             }
 
             hg.excess(target) += hg.excess_change(target);
@@ -389,9 +461,6 @@ namespace whfc {
 
             bool nodes_left = false;
 
-            hg.printHypergraph(std::cout);
-            hg.printExcessAndLabel();
-
             for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(piercingNode)) {
                 InHe& inc_u = hg.getInHe(inc_iter);
                 const Hyperedge e = inc_u.e;
@@ -414,8 +483,6 @@ namespace whfc {
                 }
             }
 
-            hg.printHypergraph(std::cout);
-            hg.printExcessAndLabel();
 
             for (Node u : thisLayer) {
                 hg.excess(u) += hg.excess_change(u);
@@ -432,13 +499,12 @@ namespace whfc {
 
             timer.start("mainLoop", "exhaustFlow");
 
+
             timer.start("phase1", "mainLoop");
             // Phase 1
             if (nodes_left) pushRelabel(cs, nm, false);
             timer.stop("phase1");
 
-            hg.printHypergraph(std::cout);
-            hg.printExcessAndLabel();
 
             timer.start("phase2", "mainLoop");
             timer.start("buildResidualNetwork", "phase2");
@@ -477,6 +543,7 @@ namespace whfc {
 
             return f;
         }
+
 
         Flow flowDecomposition(CutterState<Type>& cs) {
             Flow total_augmented_flow = 0;

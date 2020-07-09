@@ -57,7 +57,7 @@ namespace whfc {
 
             vec_excess[u] -= f;
             __atomic_add_fetch(&vec_excess_change[edge_node_in(in_he.e)], f, __ATOMIC_ACQ_REL);
-            //if (getPinIn(in_he).flow == 0) insertPinIntoFlowPins(in_he, true);
+            if (getPinIn(in_he).flow == 0) insertPinIntoFlowPins(in_he, true);
             getPinIn(in_he).flow += f;
         }
 
@@ -70,7 +70,7 @@ namespace whfc {
             vec_excess[u] -= f;
             __atomic_add_fetch(&vec_excess_change[edge_node_out(in_he.e)], f, __ATOMIC_ACQ_REL);
             getPinOut(in_he).flow -= f;
-            //if (getPinOut(in_he).flow == 0) removePinFromFlowPins(in_he, false);
+            if (getPinOut(in_he).flow == 0) removePinFromFlowPins(in_he, false);
         }
 
         inline void push_edgeIn_to_node(const Node u, const InHeIndex inc, const Flow f) {
@@ -83,7 +83,7 @@ namespace whfc {
             vec_excess[edge_node_in(in_he.e)] -= f;
             __atomic_add_fetch(&vec_excess_change[u], f, __ATOMIC_ACQ_REL);
             getPinIn(in_he).flow -= f;
-            //if (getPinIn(in_he).flow == 0) removePinFromFlowPins(in_he, true);
+            if (getPinIn(in_he).flow == 0) removePinFromFlowPins(in_he, true);
         }
 
         inline void push_edgeOut_to_node(const Node u, const InHeIndex inc, const Flow f) {
@@ -95,7 +95,7 @@ namespace whfc {
             vec_excess[edge_node_out(in_he.e)] -= f;
             __atomic_add_fetch(&vec_excess_change[u], f, __ATOMIC_ACQ_REL);
             getPinOut(in_he).flow += f;
-            //if (getPinOut(in_he).flow == f) insertPinIntoFlowPins(in_he, false);
+            if (getPinOut(in_he).flow == f) insertPinIntoFlowPins(in_he, false);
         }
 
         inline void push_edgeIn_to_edgeOut(const Node e_in, const Node e_out, const Flow f) {

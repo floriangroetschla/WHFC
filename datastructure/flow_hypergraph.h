@@ -165,6 +165,8 @@ namespace whfc {
         PinRange pinsSendingFlowInto(const Hyperedge e) { return PinRange(beginPinsIn(e), beginPinsIn(e) + pins_in_sending_flow_end[e]); }
 		PinRange pinsReceivingFlowFrom(const Hyperedge e) { return PinRange(beginPinsOut(e), beginPinsOut(e) + pins_out_receiving_flow_end[e]); }
 
+        inline PinIterator endPinsInSending(const Hyperedge e) { return beginPinsIn() + pins_in_sending_flow_end[e]; }
+        inline PinIterator endPinsOutReceiving(const Hyperedge e) { return beginPinsOut() + pins_out_receiving_flow_end[e]; }
 		/*
 		PinIndexRange pinsNotSendingFlowIndices(const Hyperedge e) const {
 			if (forwardView()) {
@@ -354,6 +356,17 @@ namespace whfc {
 			assert(l.begin() <= l.end());
 			 */
 			return true;
+		}
+
+		bool all_pins_are_categorized_correctly() {
+		    for (Hyperedge e : hyperedgeIDs()) {
+		        for (PinIterator pin_it = beginPinsIn(e); pin_it < endPinsIn(e); ++pin_it) {
+		            assert((*pin_it).flow == 0 || pin_it < endPinsInSending(e));
+		        }
+		        for (PinIterator pin_it = beginPinsOut(e); pin_it < endPinsOut(e); ++pin_it) {
+		            assert((*pin_it).flow == 0 || pin_it < endPinsOutReceiving(e));
+		        }
+		    }
 		}
 
 		bool pin_is_categorized_correctly(const InHe& inc_u) {
