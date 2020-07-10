@@ -17,11 +17,6 @@ namespace whfc {
             clear();
         }
 
-        /*
-        explicit LawlerFlowHypergraph(size_t nNodes) {
-            reinitialize(nNodes);
-        }*/
-
         LawlerFlowHypergraph(size_t maxNumNodes, size_t maxNumHyperedges) : Base(maxNumNodes, maxNumHyperedges),
             vec_excess(numLawlerNodes()), vec_label_this_iteration(numLawlerNodes()), vec_excess_change(numLawlerNodes()), vec_label_next_iteration(numLawlerNodes()) {
 
@@ -30,13 +25,6 @@ namespace whfc {
         void clear() {
             Base::clear();
         }
-
-        /*
-        void reinitialize(size_t numNodes) {
-            clear();
-            nodes.resize(numNodes + 1);
-        }*/
-
 
         void shrink_to_fit() {
             Base::shrink_to_fit();
@@ -117,59 +105,10 @@ namespace whfc {
             flow(edgeFromLawlerNode(e_in)) -= f;
         }
 
-        /*
-        void sortPins() {
-            for (Hyperedge e : hyperedgeIDs()) {
-                PinIndex begin = beginIndexPins(e);
-                PinIndex end = PinIndex(endIndexPins(e) - 1);
-
-                for (PinIndex i = begin; i <= end;) {
-                    Pin& p = pins[i];
-                    const InHeIndex inc = p.he_inc_iter;
-                    InHe& inc_he = getInHe(p);
-
-                    if (flowIn(inc) && flowOut(inc)) {
-                        Flow loopedFlow = std::min(flowIn(inc), flowOut(inc));
-                        flowIn(inc) -= loopedFlow;
-                        flowOut(inc) -= loopedFlow;
-
-                        flow(inc_he.e) -= loopedFlow;
-                    }
-
-                    assert(!flowIn(inc) || !flowOut(inc));
-                    inc_he.flow = flowSent(flowIn(inc) - flowOut(inc));
-
-                    if (inc_he.flow > 0) {
-                        InHe& inc_begin = getInHe(pins[begin]);
-                        std::swap(inc_he.pin_iter, inc_begin.pin_iter);
-                        std::swap(pins[i++], pins[begin++]);
-                    } else if (inc_he.flow < 0) {
-                        InHe& inc_end = getInHe(pins[end]);
-                        std::swap(inc_he.pin_iter, inc_end.pin_iter);
-                        std::swap(pins[i], pins[end--]);
-                    } else {
-                        i++;
-                    }
-                }
-
-                if (forward) {
-                    pins_sending_flow[e] = PinIndexRange(beginIndexPins(e), begin);
-                    pins_receiving_flow[e] = PinIndexRange(PinIndex(end + 1), endIndexPins(e));
-                } else {
-                    pins_receiving_flow[e] = PinIndexRange(beginIndexPins(e), begin);
-                    pins_sending_flow[e] = PinIndexRange(PinIndex(end + 1), endIndexPins(e));
-                }
-
-            }
-        }
-         */
 
         inline bool is_node(Node u) { return u < numNodes(); }
         inline bool is_edge_in(Node u) { return u >= numNodes() && u < numNodes() + numHyperedges(); }
         inline bool is_edge_out(Node u) { return u >= numNodes() + numHyperedges() && u < numLawlerNodes(); }
-
-        //inline Flow& excess_node(Node u) { assert(u < numNodes()); return vec_excess[u]; }
-        //inline Flow& excess_edge(Hyperedge e) { assert(e < numHyperedges()); return vec_excess[numNodes() + e]; }
 
         inline Node edge_node_in(Hyperedge e) { assert(e < numHyperedges()); return Node(numNodes() + e); }
         inline Node edge_node_out(Hyperedge e) { assert(e < numHyperedges()); return Node(numNodes() + numHyperedges() + e); }
