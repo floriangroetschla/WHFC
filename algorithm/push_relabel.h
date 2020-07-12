@@ -290,21 +290,23 @@ namespace whfc {
 
                 should_relabel = should_relabel && iterateOverPins(e_out, cs, queue, minLevel);
 
+                bool skipped = false;
                 bool admissible = hg.label_next_iteration(e_out) == hg.label(e_in) + 1;
                 if (hg.excess(e_in)) {
                     bool win = (hg.label(e_out) == hg.label(e_in) + 1) || (hg.label(e_out) < hg.label(e_in) - 1);
                     if (admissible && !win) {
+                        skipped = true;
                         should_relabel = false;
                     }
                 }
                 Flow residual = std::min(hg.flow(e), hg.excess(e_out));
-                if (should_relabel && admissible && residual > 0) {
+                if (!skipped && admissible && residual > 0) {
                     numPushes++;
                     hg.push_edgeOut_to_edgeIn(e_out, e_in, residual);
                     if (inQueue.set(e_in)) queue.push_back(e_in);
                 }
                 residual = std::min(hg.flow(e), hg.excess(e_out));
-                if (should_relabel && residual > 0 && hg.label(e_in) >= hg.label_next_iteration(e_out)) {
+                if (!skipped && residual > 0 && hg.label(e_in) >= hg.label_next_iteration(e_out)) {
                     minLevel = std::min(minLevel, hg.label(e_in));
                 }
 
