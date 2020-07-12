@@ -252,6 +252,7 @@ namespace whfc {
                 if (should_relabel && admissible && residual > 0) {
                     numPushes++;
                     hg.push_edgeIn_to_edgeOut(e_in, e_out, residual);
+                    if (hg.excess(e_in) == 0) should_relabel = false;
                     if (inQueue.set(e_out)) { queue.push_back(e_out); }
                 }
                 residual = std::min(hg.capacity(e) - hg.flow(e), hg.excess(e_in));
@@ -303,6 +304,7 @@ namespace whfc {
                 if (!skipped && admissible && residual > 0) {
                     numPushes++;
                     hg.push_edgeOut_to_edgeIn(e_out, e_in, residual);
+                    if (hg.excess(e_out) == 0) should_relabel = false;
                     if (inQueue.set(e_in)) queue.push_back(e_in);
                 }
                 residual = std::min(hg.flow(e), hg.excess(e_out));
