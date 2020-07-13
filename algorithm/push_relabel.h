@@ -620,7 +620,7 @@ namespace whfc {
                             const Node e_in = hg.edge_node_in(e);
                             const Node e_out = hg.edge_node_out(e);
                             if (!cs.h.areAllPinsSourceReachable__unsafe__(e)) {
-                                if (hg.flowSent(inc_u) > 0 && hg.label(e_in) == n) {
+                                if (hg.getPinIn(inc_u).flow  > 0 && hg.label(e_in) == n) {
                                     hg.label(e_in) = currentLabel;
                                     current_pin_e_in[e] = hg.beginPinsIn(e);
                                     queue.push(e_in);
@@ -642,9 +642,9 @@ namespace whfc {
                             current_pin_e_in[e] = hg.beginPinsIn(e);
                             queue.push(e_in);
                         }
-                        for (Pin& pin : hg.pinsOf(e)) {
+                        for (Pin& pin : hg.pinsOutOf(e)) {
                             scannedEdges++;
-                            if (hg.label(pin.pin) == n && (hg.flowReceived(pin.he_inc_iter) > 0) && (!cs.n.isSourceReachable__unsafe__(pin.pin))) {
+                            if (hg.label(pin.pin) == n && (pin.flow > 0) && (!cs.n.isSourceReachable__unsafe__(pin.pin))) {
                                 hg.label(pin.pin) = currentLabel;
                                 current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
                                 queue.push(pin.pin);
