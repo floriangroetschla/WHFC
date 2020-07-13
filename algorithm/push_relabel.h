@@ -75,7 +75,7 @@ namespace whfc {
             thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()), nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()),
             queue_for_global_update(new tbb::enumerable_thread_specific<std::vector<Node>>()), work_added_thread_specific(0)
         {
-
+            reset();
         }
 
         void reset() {
@@ -99,6 +99,10 @@ namespace whfc {
             throw std::logic_error("Not implemented");
         }
 
+        inline bool win_edge(const Node u, const Node v) {
+            return (hg.label(u) == hg.label(v) + 1) || (hg.label(u) < hg.label(v) - 1) || ((hg.label(u) == hg.label(v)) && u < v);
+        }
+
         bool iterateOverEdges(const Node u, CutterState<Type>& cs, std::vector<Node>& queue, size_t& minLevel) {
             bool skipped = false;
             for (InHeIndex he = hg.beginIndexHyperedges(u); he < hg.endIndexHyperedges(u); ++he) {
@@ -109,7 +113,8 @@ namespace whfc {
                     if (hg.excess(u) == 0) break;
                     bool admissible = hg.label_next_iteration(u) == hg.label(e_in) + 1;
                     if (hg.excess(e_in)) {
-                        bool win = (hg.label(u) == hg.label(e_in) + 1) || (hg.label(u) < hg.label(e_in) - 1) || (hg.label(u) == hg.label(e_in));
+                        bool win = win_edge(u, e_in);
+                        assert(!win || !win_edge(e_in, u));
                         if (admissible && !win) {
                             skipped = true;
                             continue;
@@ -140,7 +145,8 @@ namespace whfc {
                     if (hg.excess(u) == 0) break;
                     bool admissible = hg.label_next_iteration(u) == hg.label(e_out) + 1;
                     if (hg.excess(e_out)) {
-                        bool win = (hg.label(u) == hg.label(e_out) + 1) || (hg.label(u) < hg.label(e_out) - 1) || (hg.label(u) == hg.label(e_out));
+                        bool win = win_edge(u, e_out);
+                        assert(!win || !win_edge(e_out, u));
                         if (admissible && !win) {
                             skipped = true;
                             continue;
@@ -178,7 +184,8 @@ namespace whfc {
                     if (hg.excess(u) == 0) break;
                     bool admissible = hg.label_next_iteration(u) == hg.label(v) + 1;
                     if (hg.excess(v)) {
-                        bool win = (hg.label(u) == hg.label(v) + 1) || (hg.label(u) < hg.label(v) - 1);
+                        bool win = win_edge(u, v);
+                        assert(!win || !win_edge(v, u));
                         if (admissible && !win) {
                             skipped = true;
                             continue;
@@ -242,8 +249,9 @@ namespace whfc {
                 size_t minLevel = n;
 
                 bool admissible = hg.label_next_iteration(e_in) == hg.label(e_out) + 1;
-                if (hg.excess(e_out)) {
-                    bool win = (hg.label(e_in) == hg.label(e_out) + 1) || (hg.label(e_in) < hg.label(e_out) - 1) || (hg.label(e_in) == hg.label(e_out));
+                if (hg.excess(e_out) > 0) {
+                    bool win = win_edge(e_in, e_out);
+                    assert(!win || !win_edge(e_out, e_in));
                     if (admissible && !win) {
                         should_relabel = false;
                     }
@@ -263,7 +271,7 @@ namespace whfc {
                 should_relabel = should_relabel && iterateOverPins(e_in, cs, queue, minLevel);
 
                 if (should_relabel) {
-                    assert(minLevel + 1 > hg.label(e_in));
+                    assert(minLevel + 1 > hg.label_next_iteration(e_in));
                     hg.label_next_iteration(e_in) = minLevel + 1;
                     work_added += (hg.endPinsIn(e) - hg.beginPinsIn(e)) + BETA;
                 } else {
@@ -293,8 +301,9 @@ namespace whfc {
 
                 bool skipped = false;
                 bool admissible = hg.label_next_iteration(e_out) == hg.label(e_in) + 1;
-                if (hg.excess(e_in)) {
-                    bool win = (hg.label(e_out) == hg.label(e_in) + 1) || (hg.label(e_out) < hg.label(e_in) - 1);
+                if (hg.excess(e_in) > 0) {
+                    bool win = win_edge(e_out, e_in);
+                    assert(!win || !win_edge(e_in, e_out));
                     if (admissible && !win) {
                         skipped = true;
                         should_relabel = false;
@@ -313,7 +322,7 @@ namespace whfc {
                 }
 
                 if (should_relabel) {
-                    assert(minLevel + 1 > hg.label(e_out));
+                    assert(minLevel + 1 > hg.label_next_iteration(e_out));
                     hg.label_next_iteration(e_out) = minLevel + 1;
                     work_added += (hg.endPinsIn(e) - hg.beginPinsIn(e)) + BETA;
                 } else {
@@ -334,6 +343,14 @@ namespace whfc {
             while (nodes_left) {
                 inQueue.reset();
 
+                if (workSinceLastRelabel * globalUpdateFreq > nm) {
+                    timer.start("globalUpdate", "phase1");
+                    globalUpdate(cs, n);
+                    numGlobalUpdate++;
+                    timer.stop("globalUpdate");
+                    workSinceLastRelabel = 0;
+                }
+
                 timer.start("discharge", "phase1");
                 tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
@@ -341,6 +358,7 @@ namespace whfc {
                         size_t& work_added = work_added_thread_specific.local();
                         for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
                             const Node u = vector[i];
+                            assert(hg.excess(u) > 0);
                             hg.label_next_iteration(u) = hg.label(u);
                             if (hg.label(u) >= n) continue;
 
@@ -398,13 +416,6 @@ namespace whfc {
                     work_added = 0;
                 }
 
-                if (!keepNodesWithHighLabel && workSinceLastRelabel * globalUpdateFreq > nm) {
-                    timer.start("globalUpdate", "phase1");
-                    globalUpdate(cs, n);
-                    numGlobalUpdate++;
-                    timer.stop("globalUpdate");
-                    workSinceLastRelabel = 0;
-                }
             }
 
             hg.excess(target) += hg.excess_change(target);
@@ -475,6 +486,8 @@ namespace whfc {
             if (nodes_left) pushRelabel(cs, nm, false);
             timer.stop("phase1");
 
+            assert(hg.excess_sums_to_zero());
+
             timer.start("phase2", "mainLoop");
             timer.start("buildResidualNetwork", "phase2");
             hg.buildResidualNetwork();
@@ -508,7 +521,7 @@ namespace whfc {
             timer.stop("growReachable");
             timer.stop("exhaustFlow");
 
-            std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numGlobalUpdate: " << numGlobalUpdate << ", numLawlerNodes: " << hg.numLawlerNodes() << std::endl;
+            std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numGlobalUpdate: " << numGlobalUpdate << ", numLawlerNodes: " << hg.numLawlerNodes() << ", workSinceLastUpdate: " << workSinceLastRelabel << std::endl;
 
             return f;
         }
@@ -624,7 +637,7 @@ namespace whfc {
         }
 
         Flow pushBack(Flow bottleneckCapacity, Node first_node, bool writeFlowToResult) {
-            int64_t lowest_bottleneck = std::numeric_limits<int64_t>::max();
+            int64_t lowest_bottleneck = stack.size() - 1;
             for (int64_t stack_pointer = stack.size() - 1; stack_pointer > 0; --stack_pointer) {
                 const StackFrame& t = stack.at(stack_pointer);
                 Flow residual = 0;
@@ -661,7 +674,6 @@ namespace whfc {
             }
             assert(bottleneckCapacity > 0);
             //std::cout << "Push back " << bottleneckCapacity << std::endl;
-            if (lowest_bottleneck == std::numeric_limits<int64_t>::max()) lowest_bottleneck = 1;
 
             for (int64_t stack_pointer = stack.size() - 1; stack_pointer > 0; --stack_pointer) {
                 const StackFrame& t = stack.at(stack_pointer);
@@ -693,7 +705,6 @@ namespace whfc {
                 if (stack.at(stack_pointer - 1).u == first_node) break;
             }
             //std::cout << std::endl;
-            if (lowest_bottleneck == std::numeric_limits<int64_t>::max()) lowest_bottleneck = 1;
             stack.popDownTo(lowest_bottleneck-1);
             return bottleneckCapacity;
         }
