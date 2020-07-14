@@ -10,6 +10,7 @@
 #include "../algorithm/push_relabel.h"
 
 namespace whfc_rb {
+    template<class PartitionImpl, class HypergraphImpl, class FlowAlgo>
     class WHFCRefinerTwoWay : public TwoWayRefinerInterface {
     public:
         using PartitionID = PartitionBase::PartitionID;
@@ -20,7 +21,6 @@ namespace whfc_rb {
         {
         }
 
-        template<class PartitionImpl>
         bool refine(PartitionImpl &partition, PartitionID part0, PartitionID part1, NodeWeight maxBlockWeight0,
                     NodeWeight maxBlockWeight1, whfc::TimeReporter& timer) {
 
@@ -31,7 +31,7 @@ namespace whfc_rb {
                                               partition.partWeight(part1) / maxBlockWeight1);
 
             timer.start("Extraction", "WHFCRefinerTwoWay");
-            ExtractorType::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1, hfc.cs.borderNodes.distance, timer);
+            typename ExtractorType::ExtractorInfo extractor_info = extractor.run(partition, part0, part1, maxW0, maxW1, hfc.cs.borderNodes.distance, timer);
             timer.stop("Extraction");
 
             // call WHFC to improve the bisection
@@ -80,16 +80,15 @@ namespace whfc_rb {
         }
 
     private:
-        using ExtractorType = FlowHypergraphBuilderExtractor<whfc::LawlerFlowHypergraph>;
+        using ExtractorType = FlowHypergraphBuilderExtractor<HypergraphImpl>;
         ExtractorType extractor;
-        whfc::HyperFlowCutter<whfc::PushRelabel, whfc::LawlerFlowHypergraph> hfc;
+        whfc::HyperFlowCutter<FlowAlgo, HypergraphImpl> hfc;
         whfc::TimeReporter timer;
         const PartitionConfig& config;
 
         size_t instance_counter = 0;
 
-        template<class PartitionImpl>
-        void reassign(PartitionImpl &partition, ExtractorType::ExtractorInfo &info, PartitionID part0,
+        void reassign(PartitionImpl &partition, typename ExtractorType::ExtractorInfo &info, PartitionID part0,
                       PartitionID part1) {
             for (whfc::Node localID : extractor.localNodeIDs()) {
                 assert(localID < extractor.fhgb.numNodes());
@@ -101,7 +100,7 @@ namespace whfc_rb {
             }
         }
 
-        void writeSnapshot(ExtractorType::ExtractorInfo &extractor_info) {
+        void writeSnapshot(typename ExtractorType::ExtractorInfo &extractor_info) {
             whfc::WHFC_IO::WHFCInformation i = {
                     {hfc.cs.maxBlockWeight(0), hfc.cs.maxBlockWeight(1)},
                     extractor_info.cutAtStake - extractor_info.baseCut,

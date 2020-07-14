@@ -351,6 +351,12 @@ namespace whfc {
                     workSinceLastRelabel = 0;
                 }
 
+                size_t num_nodes = 0;
+                for (std::vector<Node>& vector : *thisLayer_thread_specific) {
+                    num_nodes += vector.size();
+                }
+                std::cout << num_nodes << std::endl;
+
                 timer.start("discharge", "phase1");
                 tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {

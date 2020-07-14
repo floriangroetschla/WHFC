@@ -8,6 +8,10 @@
 #include "config.h"
 #include "partition_threadsafe.h"
 #include <tbb/scalable_allocator.h>
+#include <mutex>
+#include <tbb/parallel_invoke.h>
+#include <tbb/parallel_sort.h>
+#include <tbb/parallel_scan.h>
 
 namespace whfc_rb {
     template<class Hypergraph>

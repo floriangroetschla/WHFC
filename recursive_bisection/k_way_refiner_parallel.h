@@ -8,11 +8,12 @@
 #include "partition_threadsafe.h"
 
 namespace whfc_rb {
+    template<class PartitionImpl, class HypergraphImpl, class FlowAlgo>
     class KWayRefinerParallel {
     public:
         using PartitionID = PartitionBase::PartitionID;
 
-        explicit KWayRefinerParallel(PartitionThreadsafe &partition, whfc::TimeReporter &timer, std::mt19937 &mt, const PartitionConfig& config) :
+        explicit KWayRefinerParallel(PartitionImpl &partition, whfc::TimeReporter &timer, std::mt19937 &mt, const PartitionConfig& config) :
                 partition(partition), partActive(partition.numParts()), partActiveNextRound(partition.numParts()),
                 improvement_history(partition.numParts() * (partition.numParts() -1) / 2, 0),
                 block_pair_status(partition.numParts() * (partition.numParts() - 1) / 2),
@@ -40,7 +41,7 @@ namespace whfc_rb {
                     assert(partScheduled[element.part1]);
 
                     if (iterationCounter.fetch_add(1) < maxIterations) {
-                        WHFCRefinerTwoWay& refiner = refiners_thread_specific.local();
+                        WHFCRefinerTwoWay<PartitionImpl, HypergraphImpl, FlowAlgo>& refiner = refiners_thread_specific.local();
                         whfc::TimeReporter& timer = timers_thread_specific.local();
                         timer.start("WHFCRefinerTwoWay");
                         bool refinementResult;
@@ -177,7 +178,7 @@ namespace whfc_rb {
         std::mt19937 &mt;
         std::atomic<uint> iterationCounter = 0;
         const PartitionConfig& config;
-        tbb::enumerable_thread_specific<WHFCRefinerTwoWay> refiners_thread_specific;
+        tbb::enumerable_thread_specific<WHFCRefinerTwoWay<PartitionImpl, HypergraphImpl, FlowAlgo>> refiners_thread_specific;
         tbb::enumerable_thread_specific<whfc::TimeReporter> timers_thread_specific;
         BucketPriorityQueue<WorkElement> bucketPQ;
 

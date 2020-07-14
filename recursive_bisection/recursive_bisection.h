@@ -8,30 +8,31 @@
 #include "config.h"
 
 namespace whfc_rb {
+    template<class PartitionImpl, class HypergraphImpl, class FlowAlgo>
     class RecursiveBisector {
     public:
 
         RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937 &mt,
                           whfc::TimeReporter& timer, const PartitionConfig &config) :
-                refiner(maxNumNodes, maxNumEdges, maxNumPins, mt, &timer), mt(mt), timer(timer), config(config) {
+                refiner(maxNumNodes, maxNumEdges, maxNumPins, mt(), config), mt(mt), timer(timer), config(config) {
 
         }
 
-        PartitionBase run(CSRHypergraph &hg, double epsilon, uint k) {
-            PartitionBase partition(k, hg);
+        PartitionImpl run(CSRHypergraph &hg, double epsilon, uint k) {
+            PartitionImpl partition(k, hg);
             partition_recursively(partition, epsilon, k, true);
             partition.initialize();
             return partition;
         }
 
+
     private:
-        WHFCRefinerTwoWay refiner;
+        WHFCRefinerTwoWay<PartitionImpl, HypergraphImpl, FlowAlgo> refiner;
         std::mt19937 &mt;
         whfc::TimeReporter &timer;
         const PartitionConfig &config;
 
-        void partition_recursively(PartitionBase &partition, double epsilon, uint k, bool alloc) {
-            // insert assertions here
+        void partition_recursively(PartitionImpl &partition, double epsilon, uint k, bool alloc) {
             if (k == 1) {
                 return;
             }
@@ -62,7 +63,7 @@ namespace whfc_rb {
                 NodeWeight maxWeight1 = (1.0 + epsilon_for_patoh) * static_cast<double>(numParts[1]) /
                                         static_cast<double>(k) * partition.totalWeight();
                 timer.start("Refinement", "Total");
-                refiner.refine(partition, 0, 1, maxWeight0, maxWeight1, config);
+                refiner.refine(partition, 0, 1, maxWeight0, maxWeight1, timer);
                 timer.stop("Refinement");
             }
 
@@ -115,7 +116,7 @@ namespace whfc_rb {
                         partHg.computeVertexIncidences();
                     }
 
-                    PartitionBase subPartition(numParts[partID], partHg);
+                    PartitionImpl subPartition(numParts[partID], partHg);
                     timer.stop("GraphAndPartitionBuilding");
                     partition_recursively(subPartition, newEpsilon, numParts[partID], false);
                     timer.start("GraphAndPartitionBuilding", "Total");
