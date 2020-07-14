@@ -43,10 +43,9 @@ namespace whfc {
 
             const InHe& in_he = FlowHypergraph::getInHe(inc);
 
-            //assert(vec_excess[u] >= f);
+            getPinIn(in_he).flow += f;
             vec_excess[u] -= f;
             __atomic_add_fetch(&vec_excess_change[edge_node_in(in_he.e)], f, __ATOMIC_ACQ_REL);
-            getPinIn(in_he).flow += f;
         }
 
         inline void push_node_to_edgeOut(const Node u, const InHeIndex inc, const Flow f) {
@@ -55,10 +54,9 @@ namespace whfc {
 
             const InHe& in_he = FlowHypergraph::getInHe(inc);
 
-            assert(vec_excess[u] >= f);
+            getPinOut(in_he).flow -= f;
             vec_excess[u] -= f;
             __atomic_add_fetch(&vec_excess_change[edge_node_out(in_he.e)], f, __ATOMIC_ACQ_REL);
-            getPinOut(in_he).flow -= f;
         }
 
         inline void push_edgeIn_to_node(const Node u, const InHeIndex inc, const Flow f) {
@@ -68,10 +66,10 @@ namespace whfc {
 
             const InHe& in_he = FlowHypergraph::getInHe(inc);
 
+            getPinIn(in_he).flow -= f;
             assert(vec_excess[edge_node_in(in_he.e)] >= f);
             vec_excess[edge_node_in(in_he.e)] -= f;
             __atomic_add_fetch(&vec_excess_change[u], f, __ATOMIC_ACQ_REL);
-            getPinIn(in_he).flow -= f;
         }
 
         inline void push_edgeOut_to_node(const Node u, const InHeIndex inc, const Flow f) {
@@ -80,10 +78,10 @@ namespace whfc {
 
             const InHe& in_he = FlowHypergraph::getInHe(inc);
 
+            getPinOut(in_he).flow += f;
             assert(vec_excess[edge_node_out(in_he.e)] >= f);
             vec_excess[edge_node_out(in_he.e)] -= f;
             __atomic_add_fetch(&vec_excess_change[u], f, __ATOMIC_ACQ_REL);
-            getPinOut(in_he).flow += f;
         }
 
         inline void push_edgeIn_to_edgeOut(const Node e_in, const Node e_out, const Flow f) {
@@ -91,11 +89,10 @@ namespace whfc {
             assert(f <= excess(e_in));
             assert(is_edge_out(e_out) && is_edge_in(e_in));
 
+            flow(edgeFromLawlerNode(e_in)) += f;
             assert(vec_excess[e_in] >= f);
             vec_excess[e_in] -= f;
             __atomic_add_fetch(&vec_excess_change[e_out], f, __ATOMIC_ACQ_REL);
-
-            flow(edgeFromLawlerNode(e_in)) += f;
         }
 
         inline void push_edgeOut_to_edgeIn(const Node e_out, const Node e_in, const Flow f) {
@@ -104,11 +101,10 @@ namespace whfc {
             assert(f <= flow(edgeFromLawlerNode(e_in)));
             assert(is_edge_out(e_out) && is_edge_in(e_in));
 
+            flow(edgeFromLawlerNode(e_in)) -= f;
             assert(vec_excess[e_out] >= f);
             vec_excess[e_out] -= f;
             __atomic_add_fetch(&vec_excess_change[e_in], f, __ATOMIC_ACQ_REL);
-
-            flow(edgeFromLawlerNode(e_in)) -= f;
         }
 
 

@@ -183,7 +183,7 @@ namespace whfc {
                 if (!cs.n.isSourceReachable(v) || v == target) {
                     if (hg.excess(u) == 0) break;
                     bool admissible = hg.label_next_iteration(u) == hg.label(v) + 1;
-                    if (hg.excess(v)) {
+                    if (hg.excess(v) > 0) {
                         bool win = win_edge(u, v);
                         assert(!win || !win_edge(v, u));
                         if (admissible && !win) {
@@ -680,24 +680,30 @@ namespace whfc {
                 //std::cout << t.u << " ";
                 if (hg.isNode(t.u)) {
                     if (hg.is_edge_out(stack.at(stack_pointer-1).u)) {
+                        assert(hg.getPinOut(hg.getInHe(t.he_it)).flow >= bottleneckCapacity);
                         hg.getPinOut(hg.getInHe(t.he_it)).flow -= bottleneckCapacity;
                         if (writeFlowToResult) hg.getInHe(t.he_it).flow -= hg.flowSent(bottleneckCapacity);
                     } else {
+                        assert(hg.getPinIn(hg.getInHe(t.he_it)).flow <= -bottleneckCapacity);
                         hg.getPinIn(hg.getInHe(t.he_it)).flow += bottleneckCapacity;
                         if (writeFlowToResult) hg.getInHe(t.he_it).flow -= hg.flowSent(bottleneckCapacity);
                     }
                 } else if (hg.is_edge_in(t.u)) {
                     if (t.he_it != InHeIndex::Invalid()) {
+                        assert(hg.getPinIn(hg.getInHe(t.he_it)).flow >= bottleneckCapacity);
                         hg.getPinIn(hg.getInHe(t.he_it)).flow -= bottleneckCapacity;
                         if (writeFlowToResult) hg.getInHe(t.he_it).flow += hg.flowSent(bottleneckCapacity);
                     } else {
+                        assert(hg.flow(hg.edgeFromLawlerNode(t.u)) <= -bottleneckCapacity);
                         hg.flow(hg.edgeFromLawlerNode(t.u)) += bottleneckCapacity;
                     }
                 } else {
                     if (t.he_it != InHeIndex::Invalid()) {
+                        assert(hg.getPinOut(hg.getInHe(t.he_it)).flow <= -bottleneckCapacity);
                         hg.getPinOut(hg.getInHe(t.he_it)).flow += bottleneckCapacity;
                         if (writeFlowToResult) hg.getInHe(t.he_it).flow += hg.flowSent(bottleneckCapacity);
                     } else {
+                        assert(hg.flow(hg.edgeFromLawlerNode(t.u)) >= bottleneckCapacity);
                         hg.flow(hg.edgeFromLawlerNode(t.u)) -= bottleneckCapacity;
                     }
                 }
