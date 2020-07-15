@@ -20,12 +20,12 @@ int main(int argc, const char *argv[]) {
 
     tbb::task_scheduler_init init(numThreads);
 
-    whfc::LawlerFlowHypergraph hg = whfc::HMetisIO::readLawlerHypergraph(argv[1]);
+    whfc_pr::LawlerFlowHypergraph hg = whfc::HMetisIO::readLawlerHypergraph(argv[1]);
     hg.maxNumHyperedges = hg.numHyperedges();
     hg.maxNumNodes = hg.numNodes();
 
     const whfc_rb::PartitionConfig config = {true, "D", true, true, 1, argv[1], 2};
-    whfc::HyperFlowCutter<whfc::PushRelabel, whfc::LawlerFlowHypergraph> hfc(hg, 0, config);
+    whfc::HyperFlowCutter<whfc_pr::PushRelabel, whfc_pr::LawlerFlowHypergraph> hfc(hg, 0, config);
     whfc::TimeReporter timer("Total");
 
     whfc::WHFC_IO::WHFCInformation i = whfc::WHFC_IO::readAdditionalInformation(argv[1]);
