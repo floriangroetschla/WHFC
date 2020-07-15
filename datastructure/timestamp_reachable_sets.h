@@ -7,14 +7,14 @@
 #include "reachable_sets_base.h"
 
 namespace whfc {
-	template<typename Timestamp>
-	class TimestampReachableNodes : public ReachableNodesBase {
+	template<typename Timestamp, class Hypergraph>
+	class TimestampReachableNodes : public ReachableNodesBase<Hypergraph> {
 	public:
-		using Base = ReachableNodesBase;
-		using Type = TimestampReachableNodes<Timestamp>;
+		using Base = ReachableNodesBase<Hypergraph>;
+		using Type = TimestampReachableNodes<Timestamp, Hypergraph>;
 		static constexpr bool log = false;
 		
-		TimestampReachableNodes(const FlowHypergraph& hg) : Base(hg), timestamps(hg.numNodes(), unreachableTS) { }
+		TimestampReachableNodes(const Hypergraph& hg) : Base(hg), timestamps(hg.numNodes(), unreachableTS) { }
 
 		inline size_t capacity() const { return timestamps.size(); }
 		inline bool isSource(const Node u) const { assert(u < capacity()); return timestamps[u] == sourceSettledTS; }
@@ -39,7 +39,7 @@ namespace whfc {
 		}
 		
 		void fullReset() {
-			std::fill_n(timestamps.begin(), hg.numNodes(), unreachableTS);
+			std::fill_n(timestamps.begin(), this->hg.numNodes(), unreachableTS);
 			generation = initialTS;
 			sourceSettledTS = 1;
 			targetSettledTS = 2;
@@ -53,7 +53,7 @@ namespace whfc {
 				return;
 			
 			if (generation == std::numeric_limits<Timestamp>::max()) {
-				for (const Node u : hg.nodeIDs()) {
+				for (const Node u : this->hg.nodeIDs()) {
 					auto& ts = timestamps[u];
 					if (ts == targetReachableTS && ts != targetSettledTS)
 						ts = initialTS;
@@ -79,7 +79,7 @@ namespace whfc {
 			tr << "TR = [ ";
 			s << "S = [";
 			t << "T = [";
-			for (const Node u : hg.nodeIDs()) {
+			for (const Node u : this->hg.nodeIDs()) {
 				if (isSource(u))
 					s << u << " ";
 				if (isTarget(u))

@@ -76,8 +76,8 @@ namespace whfc {
 		//using ReachableNodes = BitsetReachableNodes;
 		//using ReachableHyperedges = BitsetReachableHyperedges;
 		
-		using ReachableNodes = ReachableNodesChecker;
-		using ReachableHyperedges = ReachableHyperedgesChecker;
+		using ReachableNodes = ReachableNodesChecker<FlowHypergraph>;
+		using ReachableHyperedges = ReachableHyperedgesChecker<FlowHypergraph>;
 		
 		using Timestamp = uint8_t;
 		//using ReachableNodes = TimestampReachableNodes<Timestamp>;
@@ -314,8 +314,8 @@ namespace whfc {
 		static constexpr bool log = false;
 		using Type = DepthFirstFordFulkerson<use_scaling>;
 		
-		using ReachableNodes = ReachableNodesChecker;
-		using ReachableHyperedges = ReachableHyperedgesChecker;
+		using ReachableNodes = ReachableNodesChecker<FlowHypergraph>;
+		using ReachableHyperedges = ReachableHyperedgesChecker<FlowHypergraph>;
 
 		using Pin = FlowHypergraph::Pin;
 		using PinIndexRange = FlowHypergraph::PinIndexRange;

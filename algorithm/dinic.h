@@ -1,4 +1,5 @@
 
+#include <tbb/parallel_sort.h>
 #include "cutter_state.h"
 #include "../datastructure/queue.h"
 #include "../datastructure/stack.h"
@@ -13,14 +14,15 @@ namespace whfc {
 	public:
 		using ScanList = LayeredQueue<Node>;
 		
-		using ReachableNodes = DistanceReachableNodes;
-		using ReachableHyperedges = DistanceReachableHyperedges;
+		using ReachableNodes = DistanceReachableNodes<FlowHypergraph>;
+		using ReachableHyperedges = DistanceReachableHyperedges<FlowHypergraph>;
 		using Hypergraph = FlowHypergraph;
+		using BaseHypergraph = FlowHypergraph;
 		
 		using Pin = FlowHypergraph::Pin;
 		using InHe = FlowHypergraph::InHe;
 		using PinIndexRange = FlowHypergraph::PinIndexRange;
-		using DistanceT = DistanceReachableNodes::DistanceT;
+		using DistanceT = DistanceReachableNodes<FlowHypergraph>::DistanceT;
 
 		
 		FlowHypergraph& hg;

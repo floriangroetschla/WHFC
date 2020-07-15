@@ -5,10 +5,11 @@
 
 namespace whfc {
 
-	class ReachableNodesChecker : public ReachableNodesBase {
+    template<class Hypergraph>
+	class ReachableNodesChecker : public ReachableNodesBase<Hypergraph> {
 	public:
-		using Base = ReachableNodesBase;
-		explicit ReachableNodesChecker(const FlowHypergraph& hg) : Base(hg), bits(hg), timestamps(hg) { }
+		using Base = ReachableNodesBase<Hypergraph>;
+		explicit ReachableNodesChecker(const Hypergraph& hg) : Base(hg), bits(hg), timestamps(hg) { }
 		
 		inline size_t capacity() const {
 			assert(bits.capacity() == timestamps.capacity());
@@ -108,14 +109,14 @@ namespace whfc {
 		}
 		
 	private:
-		BitsetReachableNodes bits;
-		TimestampReachableNodes<uint8_t> timestamps;
+		BitsetReachableNodes<Hypergraph> bits;
+		TimestampReachableNodes<uint8_t, Hypergraph> timestamps;
 	};
 	
-	
+	template<class Hypergraph>
 	class ReachableHyperedgesChecker {
 	public:
-		explicit ReachableHyperedgesChecker(const FlowHypergraph& hg) : bits(hg), timestamps(hg) { }
+		explicit ReachableHyperedgesChecker(const Hypergraph& hg) : bits(hg), timestamps(hg) { }
 		
 		inline size_t capacity() const {
 			assert(bits.capacity() == timestamps.capacity());
