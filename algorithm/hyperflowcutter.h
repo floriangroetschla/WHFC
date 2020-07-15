@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../datastructure/flow_hypergraph.h"
+#include "../push_relabel/flow_hypergraph.h"
 #include "cutter_state.h"
 #include "grow_assimilated.h"
 #include "piercing.h"

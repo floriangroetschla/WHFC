@@ -1,30 +1,36 @@
+#pragma once
 
-#include "cutter_state.h"
+#include "../algorithm/cutter_state.h"
 #include "../datastructure/queue.h"
 #include "../datastructure/stack.h"
 #include "../datastructure/distance_reachable_sets.h"
-//#include "ford_fulkerson.h"
 #include "../recursive_bisection/timestamp_set.hpp"
 #include "../datastructure/copyable_atomic.h"
-#include "../datastructure/lawler_flow_hypergraph.h"
+#include "flow_hypergraph.h"
+#include "lawler_flow_hypergraph.h"
 #include <boost/circular_buffer.hpp>
 
 
-namespace whfc {
+namespace whfc_pr {
     class PushRelabel {
     public:
         using Type = PushRelabel;
+        using Node = whfc::Node;
+        using InHeIndex = whfc::InHeIndex;
+        using Flow = whfc::Flow;
         using ScanList = LayeredQueue<Node>;
+        using TimeReporter = whfc::TimeReporter;
 
-        using ReachableNodes = DistanceReachableNodes;
-        using ReachableHyperedges = DistanceReachableHyperedges;
+        using ReachableNodes = whfc::DistanceReachableNodes<FlowHypergraph>;
+        using ReachableHyperedges = whfc::DistanceReachableHyperedges<FlowHypergraph>;
         using Hypergraph = LawlerFlowHypergraph;
+        using BaseHypergraph = FlowHypergraph;
 
         using Pin = FlowHypergraph::Pin;
         using InHe = FlowHypergraph::InHe;
         using PinIndexRange = FlowHypergraph::PinIndexRange;
         using PinIterator = FlowHypergraph::PinIterator;
-        using DistanceT = DistanceReachableNodes::DistanceT;
+        using DistanceT = whfc::DistanceReachableNodes<FlowHypergraph>::DistanceT;
 
         static constexpr size_t ALPHA = 6;
         static constexpr size_t BETA = 12;
@@ -91,11 +97,11 @@ namespace whfc {
             return queue;
         }
 
-        Flow recycleDatastructuresFromGrowReachablePhase(CutterState<Type> &cs) {
+        Flow recycleDatastructuresFromGrowReachablePhase(whfc::CutterState<Type> &cs) {
             throw std::logic_error("Not implemented");
         }
 
-        Flow growFlowOrSourceReachable(CutterState<Type>& cs) {
+        Flow growFlowOrSourceReachable(whfc::CutterState<Type>& cs) {
             throw std::logic_error("Not implemented");
         }
 
@@ -103,7 +109,7 @@ namespace whfc {
             return (hg.label(u) == hg.label(v) + 1) || (hg.label(u) < hg.label(v) - 1) || ((hg.label(u) == hg.label(v)) && u < v);
         }
 
-        bool iterateOverEdges(const Node u, CutterState<Type>& cs, std::vector<Node>& queue, size_t& minLevel) {
+        bool iterateOverEdges(const Node u, whfc::CutterState<Type>& cs, std::vector<Node>& queue, size_t& minLevel) {
             bool skipped = false;
             for (InHeIndex he = hg.beginIndexHyperedges(u); he < hg.endIndexHyperedges(u); ++he) {
                 InHe& inc_u = hg.getInHe(he);
@@ -171,7 +177,7 @@ namespace whfc {
             return true;
         }
 
-        bool iterateOverPins(const Node u, CutterState<Type>& cs, std::vector<Node>& queue, size_t& minLevel) {
+        bool iterateOverPins(const Node u, whfc::CutterState<Type>& cs, std::vector<Node>& queue, size_t& minLevel) {
             const bool is_edge_in = hg.is_edge_in(u);
 
             bool skipped = false;
@@ -214,7 +220,7 @@ namespace whfc {
             return true;
         }
 
-        void dischargeNode(const Node u, CutterState<Type>& cs, std::vector<Node>& queue, size_t& work_added) {
+        void dischargeNode(const Node u, whfc::CutterState<Type>& cs, std::vector<Node>& queue, size_t& work_added) {
             assert(u < hg.numNodes());
             assert(hg.excess(u) > 0);
 
@@ -237,7 +243,7 @@ namespace whfc {
 
         }
 
-        void dischargeEdgeNodeIn(const Node e_in, CutterState<Type>& cs, std::vector<Node>& queue, size_t& work_added) {
+        void dischargeEdgeNodeIn(const Node e_in, whfc::CutterState<Type>& cs, std::vector<Node>& queue, size_t& work_added) {
             assert(hg.excess(e_in) > 0);
             assert(hg.is_edge_in(e_in));
 
@@ -286,7 +292,7 @@ namespace whfc {
 
         }
 
-        void dischargeEdgeNodeOut(const Node e_out, CutterState<Type>& cs, std::vector<Node>& queue, size_t& work_added) {
+        void dischargeEdgeNodeOut(const Node e_out, whfc::CutterState<Type>& cs, std::vector<Node>& queue, size_t& work_added) {
             assert(hg.excess(e_out) > 0);
             assert(hg.is_edge_out(e_out));
 
@@ -337,7 +343,7 @@ namespace whfc {
 
         }
 
-        void pushRelabel(CutterState<Type>& cs, const size_t nm, const bool keepNodesWithHighLabel) {
+        void pushRelabel(whfc::CutterState<Type>& cs, const size_t nm, const bool keepNodesWithHighLabel) {
             bool nodes_left = true;
 
             while (nodes_left) {
@@ -428,7 +434,7 @@ namespace whfc {
             hg.excess_change(target) = 0;
         }
 
-        Flow exhaustFlow(CutterState<Type>& cs) {
+        Flow exhaustFlow(whfc::CutterState<Type>& cs) {
             assert(cs.sourcePiercingNodes.size() == 1);
             timer.start("exhaustFlow");
 
@@ -532,7 +538,7 @@ namespace whfc {
             return f;
         }
 
-        Flow flowDecomposition(CutterState<Type>& cs) {
+        Flow flowDecomposition(whfc::CutterState<Type>& cs) {
             Flow total_augmented_flow = 0;
 
             timer.start("resets", "phase2");
@@ -725,7 +731,7 @@ namespace whfc {
             return hg.label(u) > currentLabel && __atomic_exchange_n(&hg.label(u), currentLabel, __ATOMIC_ACQ_REL) == n;
         }
 
-        std::array<size_t, 2> globalUpdate(CutterState<Type>& cs, size_t n) {
+        std::array<size_t, 2> globalUpdate(whfc::CutterState<Type>& cs, size_t n) {
             size_t scannedNodes = 0;
             size_t scannedEdges = 0;
             tbb::enumerable_thread_specific<std::array<size_t, 2>> scanned_nodes_and_edges(std::array<size_t, 2> {0, 0});
@@ -870,7 +876,7 @@ namespace whfc {
             return {scannedNodes, scannedEdges};
         }
 
-        bool growReachable(CutterState<Type>& cs) {
+        bool growReachable(whfc::CutterState<Type>& cs) {
             hg.alignViewDirection();
             cs.clearForSearch();
             auto& n = cs.n;
@@ -941,7 +947,7 @@ namespace whfc {
             return found_target;
         }
 
-        void resetSourcePiercingNodeDistances(CutterState<Type>& cs, bool reset = true) {
+        void resetSourcePiercingNodeDistances(whfc::CutterState<Type>& cs, bool reset = true) {
             for (auto& sp: cs.sourcePiercingNodes)
                 cs.n.setPiercingNodeDistance(sp.node, reset);
         }

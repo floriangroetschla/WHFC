@@ -1,13 +1,14 @@
 #pragma once
 
 #include "../definitions.h"
-#include "flow_hypergraph.h"
+#include "../push_relabel/flow_hypergraph.h"
 #include "../datastructure/bitvector.h"
 
 namespace whfc {
+    template<class Hypergraph>
 	class IsolatedNodes {
 	private:
-		FlowHypergraph& hg;
+		Hypergraph& hg;
 		bool useIsolatedNodes = true;
 	public:
 		NodeWeight weight = NodeWeight(0);
@@ -121,7 +122,7 @@ namespace whfc {
 		}
 
 	public:
-		explicit IsolatedNodes(FlowHypergraph& hg, bool useIsolatedNodes, NodeWeight maxBlockWeight = NodeWeight(0)) :
+		explicit IsolatedNodes(Hypergraph& hg, bool useIsolatedNodes, NodeWeight maxBlockWeight = NodeWeight(0)) :
 				hg(hg),
 				useIsolatedNodes(useIsolatedNodes),
 				mixedIncidentHyperedges(useIsolatedNodes ? hg.numNodes() : 0, InHeIndex(0)),

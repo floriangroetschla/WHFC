@@ -1,13 +1,14 @@
 #pragma once
 
 #include "../definitions.h"
-#include "flow_hypergraph.h"
+#include "../push_relabel/flow_hypergraph.h"
 #include "../datastructure/copyable_atomic.h"
 
 namespace whfc {
+    template<class Hypergraph>
 	class ReachableNodesBase {
 	public:
-		explicit ReachableNodesBase(const FlowHypergraph& _hg) : hg(_hg) { }
+		explicit ReachableNodesBase(const Hypergraph& _hg) : hg(_hg) { }
 		
 		// boilerplatey constructor and assignment operator stuff because of the const ref flow_hg. which we don't want to ever change.
 		
@@ -81,7 +82,7 @@ namespace whfc {
 		size_t numSettledNodes = 0;
 		
 	protected:
-		const FlowHypergraph& hg;
+		const Hypergraph& hg;
 		
 		void copy_const_ref(const ReachableNodesBase& o) {
 			sourceReachableWeight = o.sourceReachableWeight;

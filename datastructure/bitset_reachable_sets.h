@@ -4,11 +4,11 @@
 #include "bitvector.h"
 
 namespace whfc {
-
-	class BitsetReachableNodes : public ReachableNodesBase {
+    template<class Hypergraph>
+	class BitsetReachableNodes : public ReachableNodesBase<Hypergraph> {
 	public:
-		using Base = ReachableNodesBase;
-		using Type = BitsetReachableNodes;
+		using Base = ReachableNodesBase<Hypergraph>;
+		using Type = BitsetReachableNodes<Hypergraph>;
 		explicit BitsetReachableNodes(const FlowHypergraph& hg) : Base(hg), hg(hg), S(hg.numNodes()), SR(hg.numNodes()), T(hg.numNodes()), TR(hg.numNodes()) { }
 
 		inline size_t capacity() const { return S.size(); }

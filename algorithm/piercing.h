@@ -9,7 +9,7 @@ namespace whfc {
 	class Piercer {
 	public:
 		
-		explicit Piercer(FlowHypergraph& hg, CutterState<FlowAlgorithm>& cs, TimeReporter& timer) : hg(hg), cs(cs), timer(timer) { }
+		explicit Piercer(typename FlowAlgorithm::BaseHypergraph& hg, CutterState<FlowAlgorithm>& cs, TimeReporter& timer) : hg(hg), cs(cs), timer(timer) { }
 
 		const Node findPiercingNode() {
 			assert(cs.hasCut);
@@ -87,7 +87,7 @@ namespace whfc {
 			return cs.canBeSettled(u) && cs.n.sourceWeight + hg.nodeWeight(u) <= cs.maxBlockWeight();
 		}
 		
-		FlowHypergraph& hg;
+		typename FlowAlgorithm::BaseHypergraph& hg;
 		CutterState<FlowAlgorithm>& cs;
 		TimeReporter& timer;
 		

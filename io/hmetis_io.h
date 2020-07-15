@@ -5,7 +5,7 @@
 #include "../datastructure/flow_hypergraph_builder.h"
 
 #include "../recursive_bisection/hypergraph.h"
-#include "../datastructure/lawler_flow_hypergraph.h"
+#include "../push_relabel/lawler_flow_hypergraph.h"
 
 namespace whfc {
 	class HMetisIO {
@@ -97,9 +97,9 @@ namespace whfc {
 			return readFlowHypergraphWithBuilder(hgb, filename);
 		}
 
-		static LawlerFlowHypergraph readLawlerHypergraph(const std::string& filename) {
-		    LawlerFlowHypergraph hgb;
-		    return readFlowHypergraphWithBuilder<LawlerFlowHypergraph>(hgb, filename);
+		static whfc_pr::LawlerFlowHypergraph readLawlerHypergraph(const std::string& filename) {
+		    whfc_pr::LawlerFlowHypergraph hgb;
+		    return readFlowHypergraphWithBuilder<whfc_pr::LawlerFlowHypergraph>(hgb, filename);
 		}
 
 		template<class Builder=FlowHypergraphBuilder>

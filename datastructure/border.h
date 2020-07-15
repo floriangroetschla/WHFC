@@ -3,7 +3,7 @@
 #include "bitvector.h"
 #include "../definitions.h"
 #include "../util/filter.h"
-#include "flow_hypergraph.h"
+#include "../push_relabel/flow_hypergraph.h"
 
 #include "../util/range.h"
 #include "../util/concatenated_range.h"

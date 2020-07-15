@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../datastructure/flow_hypergraph_builder.h"
+#include "../push_relabel/flow_hypergraph_builder.h"
 #include "hypergraph.h"
 #include "../datastructure/queue.h"
 #include "partition_ca.h"

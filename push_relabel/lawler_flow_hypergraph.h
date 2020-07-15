@@ -8,7 +8,7 @@
 #include "../recursive_bisection/mock_builder.h"
 #include "../recursive_bisection/timestamp_set.hpp"
 
-namespace whfc {
+namespace whfc_pr {
     class LawlerFlowHypergraph : public FlowHypergraphBuilder {
     public:
         using Base = FlowHypergraphBuilder;

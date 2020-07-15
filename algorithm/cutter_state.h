@@ -4,7 +4,7 @@
 #include "../definitions.h"
 #include "../datastructure/border.h"
 #include "../datastructure/node_border.h"
-#include "../datastructure/flow_hypergraph.h"
+#include "../push_relabel/flow_hypergraph.h"
 #include "../datastructure/isolated_nodes.h"
 #include "../datastructure/bitset_reachable_sets.h"
 #include "../util/math.h"
@@ -64,10 +64,10 @@ namespace whfc {
 		
 		static constexpr bool useIsolatedNodes = false;
 		
-		using Pin = FlowHypergraph::Pin;
+		using Pin = typename FlowAlgorithm::BaseHypergraph::Pin;
 		
 		int viewDirection = 0;
-		using Hypergraph = FlowHypergraph;
+		using Hypergraph = typename FlowAlgorithm::BaseHypergraph;
 		Hypergraph& hg;
 		Flow flowValue = 0;
 
@@ -84,7 +84,7 @@ namespace whfc {
 		HyperedgeCuts cuts;
 		NodeBorders borderNodes;
 		std::array<NodeWeight, 2> maxBlockWeightPerSide;
-		IsolatedNodes isolatedNodes;
+		IsolatedNodes<Hypergraph> isolatedNodes;
 		bool partitionWrittenToNodeSet = false;
 		TimeReporter& timer;
 		Randomizer rng;
@@ -308,7 +308,7 @@ namespace whfc {
 				bool balanced = false;
 				
 				//sides: (S + U, T) + <ISO> and (S, T + U) + <ISO>
-				for (const IsolatedNodes::SummableRange& sr : isolatedNodes.getSumRanges()) {
+				for (const typename IsolatedNodes<typename FlowAlgorithm::BaseHypergraph>::SummableRange& sr : isolatedNodes.getSumRanges()) {
 					if (suwRem != invalidWeight) {
 						//S+U not overloaded. Therefore, try (S + U, T) + <ISO>
 						
@@ -371,7 +371,7 @@ namespace whfc {
 		 */
 		static void isolatedWeightAssignmentToFirstMinimizingImbalance(NodeWeight a, NodeWeight max_a,
 																	   NodeWeight b, NodeWeight max_b,
-																	   const IsolatedNodes::SummableRange& sr,
+																	   const typename IsolatedNodes<typename FlowAlgorithm::BaseHypergraph>::SummableRange& sr,
 																	   SimulatedNodeAssignment& assignment) {
 			
 			auto ddiv = [](const NodeWeight num, const NodeWeight den) -> double {
@@ -433,7 +433,7 @@ namespace whfc {
 			SimulatedNodeAssignment sol, sim;
 			
 			// extracted as lambda to allow using it manually for unweighted nodes or in case the iso DP table is not used
-			auto check_combinations = [&](const IsolatedNodes::SummableRange& sr) {
+			auto check_combinations = [&](const typename IsolatedNodes<typename FlowAlgorithm::BaseHypergraph>::SummableRange& sr) {
 				
 				sim.assignUnclaimedToSource = true;
 				sim.assignTrackedIsolatedWeightToSource = true;
@@ -469,13 +469,13 @@ namespace whfc {
 			if constexpr (useIsolatedNodes) {
 				timer.start("Assign Isolated Nodes");
 				isolatedNodes.updateDPTable();
-				for (const IsolatedNodes::SummableRange& sr : isolatedNodes.getSumRanges()) {
+				for (const typename IsolatedNodes<typename FlowAlgorithm::BaseHypergraph>::SummableRange& sr : isolatedNodes.getSumRanges()) {
 					check_combinations(sr);
 				}
 				timer.stop("Assign Isolated Nodes");
 			}
 			else {
-				check_combinations(IsolatedNodes::SummableRange(NodeWeight(0), NodeWeight(0)));
+				check_combinations(typename IsolatedNodes<typename FlowAlgorithm::BaseHypergraph>::SummableRange(NodeWeight(0), NodeWeight(0)));
 			}
 			
 			sol.numberOfTrackedMoves = trackedMoves.size();

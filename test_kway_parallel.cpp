@@ -58,7 +58,7 @@ int main(int argc, const char *argv[]) {
     //printStatistics(partition, timer);
 
     timer.start("Refinement", "Total");
-    whfc_rb::KWayRefinerParallel<whfc_rb::PartitionThreadsafe, whfc::LawlerFlowHypergraph, whfc::PushRelabel> refiner(partition, timer, mt, config);
+    whfc_rb::KWayRefinerParallel<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraph, whfc_pr::PushRelabel> refiner(partition, timer, mt, config);
     uint iterations = refiner.refine(epsilon, maxNumIterations);
     timer.stop("Refinement");
     timer.stop("Total");
