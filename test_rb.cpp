@@ -44,7 +44,7 @@ int main(int argc, const char *argv[]) {
         throw std::runtime_error("Mode must be one of: RBONlY, RBWHFC");
     }
 
-    whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::PartitionThreadsafe, whfc::LawlerFlowHypergraph, whfc::PushRelabel>(hg.numNodes(), hg.numHyperedges(),
+    whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraph, whfc_pr::PushRelabel>(hg.numNodes(), hg.numHyperedges(),
                                                                                hg.numPins(), mt, timer, config);
     timer.start("Total");
     whfc_rb::PartitionBase partition = recursive_bisector.run(hg, epsilon, numParts);
