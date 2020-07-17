@@ -7,7 +7,7 @@
 #include <random>
 #include "two_way_refiner_interface.h"
 #include "config.h"
-#include "../push_relabel/push_relabel.h"
+#include "../push_relabel/push_relabel_parallel.h"
 
 namespace whfc_rb {
     template<class PartitionImpl, class HypergraphImpl, class FlowAlgo>

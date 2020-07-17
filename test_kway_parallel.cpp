@@ -10,6 +10,7 @@
 #include "recursive_bisection/tbb_thread_pinning.h"
 #include "recursive_bisection/config.h"
 #include "algorithm/dinic.h"
+#include "push_relabel/push_relabel.h"
 #include <filesystem>
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
