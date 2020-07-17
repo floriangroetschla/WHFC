@@ -56,6 +56,8 @@ public:
         p.use_target_weights = false;
         p.k = numPartitions;
         p.epsilon = epsilon;
+        p.alloc = true;
+        p.free = true;
         runPatoh(partition, seed, p, preset);
     }
 
