@@ -9,6 +9,7 @@
 #include "recursive_bisection/partition_threadsafe.h"
 #include "recursive_bisection/tbb_thread_pinning.h"
 #include "recursive_bisection/config.h"
+#include "algorithm/dinic.h"
 #include <filesystem>
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {

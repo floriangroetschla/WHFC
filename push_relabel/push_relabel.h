@@ -38,7 +38,6 @@ namespace whfc_pr {
 
         LawlerFlowHypergraph& hg;
         LayeredQueue<Node> queue;
-        //boost::circular_buffer<Node> nodes;
         struct StackFrame {
             Node u;
             InHeIndex he_it;
@@ -76,7 +75,7 @@ namespace whfc_pr {
 
         tbb::enumerable_thread_specific<size_t> work_added_thread_specific;
 
-        PushRelabel(LawlerFlowHypergraph& hg, TimeReporter& timer, size_t numThreads) : hg(hg), /*nodes(hg.maxNumLawlerNodes()),*/ stack(hg.maxNumLawlerNodes()), timer(timer), inQueue(hg.maxNumLawlerNodes()),
+        PushRelabel(LawlerFlowHypergraph& hg, TimeReporter& timer, size_t numThreads) : hg(hg), stack(hg.maxNumLawlerNodes()), timer(timer), inQueue(hg.maxNumLawlerNodes()),
             current_hyperedge(hg.maxNumNodes, InHeIndex::Invalid()), current_pin_e_in(hg.maxNumHyperedges), current_pin_e_out(hg.maxNumHyperedges),
             thisLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()), nextLayer_thread_specific(new tbb::enumerable_thread_specific<std::vector<Node>>()),
             queue_for_global_update(new tbb::enumerable_thread_specific<std::vector<Node>>()), work_added_thread_specific(0)
@@ -86,7 +85,6 @@ namespace whfc_pr {
 
         void reset() {
             queue.clear();
-            //nodes.clear();
             numPushes = 0;
             numRelabel = 0;
             numGlobalUpdate = 0;
@@ -357,12 +355,6 @@ namespace whfc_pr {
                     workSinceLastRelabel = 0;
                 }
 
-                size_t num_nodes = 0;
-                for (std::vector<Node>& vector : *thisLayer_thread_specific) {
-                    num_nodes += vector.size();
-                }
-                std::cout << num_nodes << std::endl;
-
                 timer.start("discharge", "phase1");
                 tbb::parallel_for_each(*thisLayer_thread_specific, [&](const std::vector<Node>& vector) {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
@@ -533,7 +525,7 @@ namespace whfc_pr {
             timer.stop("growReachable");
             timer.stop("exhaustFlow");
 
-            std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numGlobalUpdate: " << numGlobalUpdate << ", numLawlerNodes: " << hg.numLawlerNodes() << ", workSinceLastUpdate: " << workSinceLastRelabel << std::endl;
+            //std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numGlobalUpdate: " << numGlobalUpdate << ", numLawlerNodes: " << hg.numLawlerNodes() << ", workSinceLastUpdate: " << workSinceLastRelabel << std::endl;
 
             return f;
         }
