@@ -9,12 +9,13 @@
 #include "partition_threadsafe.h"
 
 namespace whfc_rb {
-    class FlowHypergraphBuilderExtractor {
+    template<class Hypergraph, class PartitionImpl>
+    class HypergraphBuilderExtractor {
     public:
         static constexpr NodeID invalid_node = std::numeric_limits<NodeID>::max();
-        whfc::FlowHypergraphBuilder fhgb;
+        Hypergraph fhgb;
 
-        FlowHypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, int seed, const PartitionConfig& config) :
+        HypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, int seed, const PartitionConfig& config) :
                 fhgb(2 * config.percentage_bfs_from_cut * maxNumNodes + 2, maxNumEdges),
                 queue(maxNumNodes + 2),
                 visitedNode(maxNumNodes), visitedHyperedge(maxNumEdges),
@@ -28,7 +29,6 @@ namespace whfc_rb {
             whfc::Flow cutAtStake;
         };
 
-        template<class PartitionImpl>
         ExtractorInfo
         run(PartitionImpl &partition, const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1,
             NodeWeight maxW0, NodeWeight maxW1, whfc::DistanceFromCut& distanceFromCut, whfc::TimeReporter& timer) {
@@ -111,7 +111,7 @@ namespace whfc_rb {
             w += hg.nodeWeight(node);
         }
 
-        template<class PartitionImpl, typename CutEdgeRange>
+        template<typename CutEdgeRange>
         whfc::NodeWeight BreadthFirstSearch(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
                                             PartitionBase::PartitionID partID, PartitionBase::PartitionID otherPartID,
                                             NodeWeight maxWeight, whfc::Node terminal, whfc::HopDistance delta,
@@ -181,7 +181,7 @@ namespace whfc_rb {
             return w;
         }
 
-        template<class PartitionImpl, class CutEdgeRange>
+        template<class CutEdgeRange>
         void processCutHyperedges(CSRHypergraph &hg, CutEdgeRange &cut_hes, const PartitionImpl &partition,
                                   const PartitionBase::PartitionID part0, const PartitionBase::PartitionID part1) {
             for (const HyperedgeID e : cut_hes) {
