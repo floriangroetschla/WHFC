@@ -121,7 +121,6 @@ namespace whfc_pr {
             for (Hyperedge e : hyperedgeIDs()) {
                 Flow flow_on_edge = 0;
                 for (Pin& p : pinsInOf(e)) {
-                    const InHeIndex inc = p.he_inc_iter;
                     InHe& inc_he = getInHe(p);
                     flow_on_edge += absoluteFlowSent(inc_he);
 
@@ -136,7 +135,6 @@ namespace whfc_pr {
             for (Hyperedge e : hyperedgeIDs()) {
                 Flow previous_flow_on_edge = 0;
                 for (Pin& p : pinsInOf(e)) {
-                    const InHeIndex inc = p.he_inc_iter;
                     InHe& inc_he = getInHe(p);
                     previous_flow_on_edge += absoluteFlowSent(inc_he);
 

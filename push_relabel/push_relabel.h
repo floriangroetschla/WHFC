@@ -604,9 +604,8 @@ namespace whfc_pr {
 
             hg.equalizeLabels(n);
 
-            // Source and target of the bfs
+            // Source of the bfs
             const Node source = *cs.targetPiercingNodes.begin()->node;
-            const Node target = *cs.sourcePiercingNodes.begin()->node;
 
             queue.push(source);
             hg.label(source) = 0;
