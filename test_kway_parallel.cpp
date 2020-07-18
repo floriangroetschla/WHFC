@@ -11,6 +11,8 @@
 #include "recursive_bisection/config.h"
 #include "algorithm/dinic.h"
 #include "push_relabel/push_relabel.h"
+#include "push_relabel/lawler_fhgb_extraction_parallel.h"
+#include "recursive_bisection/fhgb_extraction_parallel.h"
 #include <filesystem>
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
@@ -60,7 +62,7 @@ int main(int argc, const char *argv[]) {
     //printStatistics(partition, timer);
 
     timer.start("Refinement", "Total");
-    whfc_rb::KWayRefinerParallel<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraph, whfc_pr::PushRelabel> refiner(partition, timer, mt, config);
+    whfc_rb::KWayRefinerParallel<whfc_rb::PartitionThreadsafe, whfc::FlowHypergraphBuilder, whfc::Dinic, whfc_rb::FlowHypergraphBuilderExtractorParallel<whfc::FlowHypergraphBuilder, whfc_rb::PartitionThreadsafe>> refiner(partition, timer, mt, config);
     uint iterations = refiner.refine(epsilon, maxNumIterations);
     timer.stop("Refinement");
     timer.stop("Total");
