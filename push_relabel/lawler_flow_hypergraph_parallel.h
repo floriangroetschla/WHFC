@@ -118,31 +118,37 @@ namespace whfc_pr {
         }
 
         void writeBackFlow() {
-            for (Hyperedge e : hyperedgeIDs()) {
-                Flow flow_on_edge = 0;
-                for (Pin& p : pinsInOf(e)) {
-                    InHe& inc_he = getInHe(p);
-                    flow_on_edge += absoluteFlowSent(inc_he);
+            tbb::parallel_for(tbb::blocked_range<uint32_t>(0, numHyperedges()), [&](const tbb::blocked_range<uint32_t>& edges) {
+                for (uint32_t edge_id = edges.begin(); edge_id < edges.end(); ++edge_id) {
+                    const Hyperedge e(edge_id);
+                    Flow flow_on_edge = 0;
+                    for (Pin& p : pinsInOf(e)) {
+                        InHe& inc_he = getInHe(p);
+                        flow_on_edge += absoluteFlowSent(inc_he);
 
-                    getPinIn(inc_he).flow = absoluteFlowSent(inc_he);
-                    getPinOut(inc_he).flow = absoluteFlowReceived(inc_he);
+                        getPinIn(inc_he).flow = absoluteFlowSent(inc_he);
+                        getPinOut(inc_he).flow = absoluteFlowReceived(inc_he);
+                    }
+                    flow(e) = flow_on_edge;
                 }
-                flow(e) = flow_on_edge;
-            }
+            });
         }
 
         void buildResidualNetwork() {
-            for (Hyperedge e : hyperedgeIDs()) {
-                Flow previous_flow_on_edge = 0;
-                for (Pin& p : pinsInOf(e)) {
-                    InHe& inc_he = getInHe(p);
-                    previous_flow_on_edge += absoluteFlowSent(inc_he);
+            tbb::parallel_for(tbb::blocked_range<uint32_t>(0, numHyperedges()), [&](const tbb::blocked_range<uint32_t>& edges) {
+                for (uint32_t edge_id = edges.begin(); edge_id < edges.end(); ++edge_id) {
+                    const Hyperedge e(edge_id);
+                    Flow previous_flow_on_edge = 0;
+                    for (Pin& p : pinsInOf(e)) {
+                        InHe& inc_he = getInHe(p);
+                        previous_flow_on_edge += absoluteFlowSent(inc_he);
 
-                    getPinIn(inc_he).flow -= absoluteFlowSent(inc_he);
-                    getPinOut(inc_he).flow -= absoluteFlowReceived(inc_he);
+                        getPinIn(inc_he).flow -= absoluteFlowSent(inc_he);
+                        getPinOut(inc_he).flow -= absoluteFlowReceived(inc_he);
+                    }
+                    flow(e) -= previous_flow_on_edge;
                 }
-                flow(e) -= previous_flow_on_edge;
-            }
+            });
         }
 
         bool excess_sums_to_zero() {
