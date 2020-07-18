@@ -10,9 +10,11 @@
 #include "recursive_bisection/tbb_thread_pinning.h"
 #include "recursive_bisection/config.h"
 #include "algorithm/dinic.h"
+#include "algorithm/dinic_parallel.h"
 #include "push_relabel/push_relabel.h"
 #include "push_relabel/lawler_fhgb_extraction_parallel.h"
 #include "recursive_bisection/fhgb_extraction_parallel.h"
+#include "recursive_bisection/fhgb_extraction.h"
 #include <filesystem>
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
@@ -47,7 +49,7 @@ int main(int argc, const char *argv[]) {
 
     bool precomputeCuts = true;
 
-    whfc_rb::PartitionConfig config = {true, patoh_preset, precomputeCuts, distancePiercing, numThreads, std::filesystem::path(argv[1]).filename(), numParts};
+    whfc_rb::PartitionerConfig config = {true, patoh_preset, precomputeCuts, distancePiercing, numThreads, std::filesystem::path(argv[1]).filename(), numParts};
     std::cout << "useThreadPinning: " << useThreadPinning << std::endl;
     std::cout << "precomputeCuts: " << precomputeCuts << std::endl;
     std::cout << "distancePiercing: " << distancePiercing << std::endl;
@@ -62,8 +64,10 @@ int main(int argc, const char *argv[]) {
     //printStatistics(partition, timer);
 
     timer.start("Refinement", "Total");
-    whfc_rb::KWayRefinerParallel<whfc_rb::PartitionThreadsafe, whfc::FlowHypergraphBuilder, whfc::Dinic, whfc_rb::FlowHypergraphBuilderExtractorParallel<whfc::FlowHypergraphBuilder, whfc_rb::PartitionThreadsafe>> refiner(partition, timer, mt, config);
-    uint iterations = refiner.refine(epsilon, maxNumIterations);
+    whfc_rb::KWayRefinerParallel<whfc_rb::PartitionThreadsafe, whfc::FlowHypergraphBuilder, whfc::Dinic, whfc_rb::HypergraphBuilderExtractor<whfc::FlowHypergraphBuilder, whfc_rb::PartitionThreadsafe>> refiner1(partition, timer, mt, config);
+    //whfc_rb::KWayRefinerParallel<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraphParallel, whfc_pr::PushRelabelParallel, whfc_pr::LawlerFlowHypergraphBuilderExtractorParallel<whfc_pr::LawlerFlowHypergraphParallel, whfc_rb::PartitionThreadsafe>> refiner2(partition, timer, mt, config);
+    //whfc_rb::KWayRefinerParallel<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraph, whfc_pr::PushRelabel, whfc_rb::HypergraphBuilderExtractor<whfc_pr::LawlerFlowHypergraph, whfc_rb::PartitionThreadsafe>> refiner3(partition, timer, mt, config);
+    uint iterations = refiner1.refine(epsilon, maxNumIterations);
     timer.stop("Refinement");
     timer.stop("Total");
 

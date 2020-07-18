@@ -13,7 +13,7 @@ namespace whfc_rb {
     public:
         using PartitionID = PartitionBase::PartitionID;
 
-        explicit KWayRefinerParallel(PartitionImpl &partition, whfc::TimeReporter &timer, std::mt19937 &mt, const PartitionConfig& config) :
+        explicit KWayRefinerParallel(PartitionImpl &partition, whfc::TimeReporter &timer, std::mt19937 &mt, const PartitionerConfig& config) :
                 partition(partition), partActive(partition.numParts()), partActiveNextRound(partition.numParts()),
                 improvement_history(partition.numParts() * (partition.numParts() -1) / 2, 0),
                 block_pair_status(partition.numParts() * (partition.numParts() - 1) / 2),
@@ -177,7 +177,7 @@ namespace whfc_rb {
         whfc::TimeReporter &timer;
         std::mt19937 &mt;
         std::atomic<uint> iterationCounter = 0;
-        const PartitionConfig& config;
+        const PartitionerConfig& config;
         tbb::enumerable_thread_specific<WHFCRefinerTwoWay<PartitionImpl, HypergraphImpl, FlowAlgo, Extractor>> refiners_thread_specific;
         tbb::enumerable_thread_specific<whfc::TimeReporter> timers_thread_specific;
         BucketPriorityQueue<WorkElement> bucketPQ;

@@ -24,7 +24,7 @@ int main(int argc, const char *argv[]) {
     hg.maxNumHyperedges = hg.numHyperedges();
     hg.maxNumNodes = hg.numNodes();
 
-    const whfc_rb::PartitionConfig config = {true, "D", true, true, 1, argv[1], 2};
+    const whfc_rb::PartitionerConfig config = {true, "D", true, true, 1, argv[1], 2};
     whfc::HyperFlowCutter<whfc_pr::PushRelabel, whfc_pr::LawlerFlowHypergraph> hfc(hg, 0, config);
     whfc::TimeReporter timer("Total");
 

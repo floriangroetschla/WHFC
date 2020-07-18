@@ -8,12 +8,12 @@
 #include "config.h"
 
 namespace whfc_rb {
-    template<class PartitionImpl, class HypergraphImpl, class FlowAlgo>
+    template<class PartitionImpl, class HypergraphImpl, class FlowAlgo, class Extractor>
     class RecursiveBisector {
     public:
 
         RecursiveBisector(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, std::mt19937 &mt,
-                          whfc::TimeReporter& timer, const PartitionConfig &config) :
+                          whfc::TimeReporter& timer, const PartitionerConfig &config) :
                 refiner(maxNumNodes, maxNumEdges, maxNumPins, mt(), config), mt(mt), timer(timer), config(config) {
 
         }
@@ -27,10 +27,10 @@ namespace whfc_rb {
 
 
     private:
-        WHFCRefinerTwoWay<PartitionImpl, HypergraphImpl, FlowAlgo> refiner;
+        WHFCRefinerTwoWay<PartitionImpl, HypergraphImpl, FlowAlgo, Extractor> refiner;
         std::mt19937 &mt;
         whfc::TimeReporter &timer;
-        const PartitionConfig &config;
+        const PartitionerConfig &config;
 
         void partition_recursively(PartitionImpl &partition, double epsilon, uint k, bool alloc) {
             if (k == 1) {

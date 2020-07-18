@@ -15,7 +15,7 @@ namespace whfc_rb {
         static constexpr NodeID invalid_node = std::numeric_limits<NodeID>::max();
         Hypergraph fhgb;
 
-        HypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, int seed, const PartitionConfig& config) :
+        HypergraphBuilderExtractor(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, int seed, const PartitionerConfig& config) :
                 fhgb(2 * config.percentage_bfs_from_cut * maxNumNodes + 2, maxNumEdges),
                 queue(maxNumNodes + 2),
                 visitedNode(maxNumNodes), visitedHyperedge(maxNumEdges),
@@ -101,7 +101,7 @@ namespace whfc_rb {
         std::vector<whfc::Node> globalToLocalID;
         ExtractorInfo result;
         std::mt19937 mt;
-        const PartitionConfig& config;
+        const PartitionerConfig& config;
 
         void visitNode(const NodeID node, CSRHypergraph &hg, whfc::NodeWeight &w) {
             globalToLocalID[node] = whfc::Node(fhgb.numNodes());

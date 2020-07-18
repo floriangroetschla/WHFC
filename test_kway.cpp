@@ -9,6 +9,7 @@
 #include "recursive_bisection/partition_ca.h"
 #include "recursive_bisection/null_refiner.h"
 #include "recursive_bisection/k_way_refiner.h"
+#include "push_relabel/lawler_fhgb_extraction_parallel.h"
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
     timer.report(std::cout);
@@ -31,17 +32,17 @@ int main(int argc, const char *argv[]) {
     uint maxIterations = std::stoi(argv[6]);
     std::mt19937 mt(seed);
 
-    whfc_rb::PartitionConfig config = {true, patoh_preset, true, false};
+    whfc_rb::PartitionerConfig config = {true, patoh_preset, true, false};
     whfc::TimeReporter timer("Total");
 
     timer.start("Total");
     timer.start("PaToH", "Total");
-    whfc_rb::PartitionCA partition(numParts, hg);
+    whfc_rb::PartitionThreadsafe partition(numParts, hg);
     PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset);
     timer.stop("PaToH");
 
     timer.start("Refinement", "Total");
-    whfc_rb::KWayRefiner refiner(partition, timer, mt, config);
+    whfc_rb::KWayRefiner<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraphParallel, whfc_pr::PushRelabelParallel, whfc_pr::LawlerFlowHypergraphBuilderExtractorParallel<whfc_pr::LawlerFlowHypergraphParallel, whfc_rb::PartitionThreadsafe>> refiner(partition, timer, mt, config);
     refiner.refine(epsilon, maxIterations);
     timer.stop("Refinement");
     timer.stop("Total");

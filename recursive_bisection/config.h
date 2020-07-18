@@ -2,7 +2,7 @@
 
 namespace whfc_rb {
 
-    struct PartitionConfig {
+    struct PartitionerConfig {
         bool refine;
         std::string patoh_preset;
         bool precomputeCuts;

@@ -4,12 +4,13 @@
 
 
 namespace whfc_rb {
+    template<class PartitionImpl, class HypergraphImpl, class FlowAlgo, class Extractor>
     class KWayRefiner {
     public:
-        explicit KWayRefiner(PartitionCA &partition, whfc::TimeReporter& timer, std::mt19937 &mt, const PartitionConfig& config) : partition(
+        explicit KWayRefiner(PartitionImpl &partition, whfc::TimeReporter& timer, std::mt19937 &mt, const PartitionerConfig& config) : partition(
                 partition), partActive(partition.numParts()), partActiveNextRound(partition.numParts()), timer(timer), mt(mt), twoWayRefiner(
                 partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(),
-                mt, &timer), config(config) {}
+                mt(), config), config(config) {}
 
         void refine(double epsilon, uint maxIterations) {
             NodeWeight maxWeight = (1.0 + epsilon) * partition.totalWeight() / static_cast<double>(partition.numParts());
@@ -26,7 +27,9 @@ namespace whfc_rb {
                     if (iterations >= maxIterations) break;
                     PartitionBase::PartitionID part0 = partitionPair.first;
                     PartitionBase::PartitionID part1 = partitionPair.second;
-                    bool refinementResult = twoWayRefiner.refine(partition, part0, part1, maxWeight, maxWeight, config);
+                    timer.start("WHFCRefinerTwoWay");
+                    bool refinementResult = twoWayRefiner.refine(partition, part0, part1, maxWeight, maxWeight, timer);
+                    timer.stop("WHFCRefinerTwoWay");
                     if (refinementResult) {
                         // Schedule for next round
                         partActiveNextRound.set(part0);
@@ -40,13 +43,13 @@ namespace whfc_rb {
         }
 
     private:
-        PartitionCA &partition;
+        PartitionImpl &partition;
         boost::dynamic_bitset<> partActive;
         boost::dynamic_bitset<> partActiveNextRound;
         whfc::TimeReporter &timer;
         std::mt19937 &mt;
-        WHFCRefinerTwoWay twoWayRefiner;
-        const PartitionConfig& config;
+        WHFCRefinerTwoWay<PartitionImpl, HypergraphImpl, FlowAlgo, Extractor> twoWayRefiner;
+        const PartitionerConfig& config;
 
         void fillPartitionPairs(std::vector<std::pair<PartitionBase::PartitionID, PartitionBase::PartitionID>>& partitionPairs) {
             partitionPairs.clear();

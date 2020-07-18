@@ -17,11 +17,11 @@ namespace whfc {
 		Flow upperFlowBound;
 		Piercer<FlowAlgorithm> piercer;
 		bool find_most_balanced = true;
-		whfc_rb::PartitionConfig config;
+		whfc_rb::PartitionerConfig config;
 
 		static constexpr bool log = false;
 		
-		HyperFlowCutter(Hypergraph& hg, int seed, whfc_rb::PartitionConfig config) :
+		HyperFlowCutter(Hypergraph& hg, int seed, whfc_rb::PartitionerConfig config) :
 				timer("HyperFlowCutter"),
 				hg(hg),
 				cs(hg, timer),

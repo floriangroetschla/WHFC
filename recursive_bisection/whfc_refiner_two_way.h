@@ -15,7 +15,7 @@ namespace whfc_rb {
     public:
         using PartitionID = PartitionBase::PartitionID;
 
-        WHFCRefinerTwoWay(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, int seed, const PartitionConfig& config) :
+        WHFCRefinerTwoWay(uint maxNumNodes, uint maxNumEdges, uint maxNumPins, int seed, const PartitionerConfig& config) :
                 extractor(maxNumNodes, maxNumEdges, maxNumPins, seed, config),
                 hfc(extractor.fhgb, seed, config), timer("WHFCRefinerTwoWay"), config(config)
         {
@@ -83,7 +83,7 @@ namespace whfc_rb {
         Extractor extractor;
         whfc::HyperFlowCutter<FlowAlgo, HypergraphImpl> hfc;
         whfc::TimeReporter timer;
-        const PartitionConfig& config;
+        const PartitionerConfig& config;
 
         size_t instance_counter = 0;
 

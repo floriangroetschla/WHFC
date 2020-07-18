@@ -25,7 +25,7 @@ namespace whfc_rb {
 
         static constexpr bool doBothBFSInParallel = false;
 
-        ExtractorParallelBase(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, int seed, const PartitionConfig& config) :
+        ExtractorParallelBase(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, int seed, const PartitionerConfig& config) :
                 fhgb(2 * config.percentage_bfs_from_cut * maxNumNodes + 2, maxNumEdges),
                 visitedNode(maxNumNodes), visitedHyperedge(maxNumEdges),
                 globalToLocalID(maxNumNodes),
@@ -167,7 +167,7 @@ namespace whfc_rb {
         std::vector<NodeID, tbb::cache_aligned_allocator<NodeID>> localToGlobalID;
         ExtractorInfo result;
         std::mt19937 mt;
-        const PartitionConfig& config;
+        const PartitionerConfig& config;
 
         tbb::enumerable_thread_specific<whfc::Flow> baseCut_thread_specific;
         tbb::enumerable_thread_specific<whfc::Flow> cutAtStake_thread_specific;

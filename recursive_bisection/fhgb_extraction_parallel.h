@@ -18,7 +18,7 @@ namespace whfc_rb {
     public:
         using Base = whfc_rb::ExtractorParallelBase<Hypergraph, PartitionImpl>;
 
-        FlowHypergraphBuilderExtractorParallel(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, int seed, const whfc_rb::PartitionConfig& config) :
+        FlowHypergraphBuilderExtractorParallel(const size_t maxNumNodes, const size_t maxNumEdges, const size_t maxNumPins, int seed, const whfc_rb::PartitionerConfig& config) :
                 Base(maxNumNodes, maxNumEdges, maxNumPins, seed, config)
         {}
 
