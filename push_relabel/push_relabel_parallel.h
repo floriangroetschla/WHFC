@@ -498,6 +498,7 @@ namespace whfc_pr {
             timer.stop("buildResidualNetwork");
 
             Flow augmented_flow = flowDecomposition(cs);
+            whfc::unused(augmented_flow);
 
             timer.stop("phase2");
             timer.stop("mainLoop");
@@ -521,11 +522,10 @@ namespace whfc_pr {
 
             timer.start("growReachable", "exhaustFlow");
             bool found_target = growReachable(cs);
+            whfc::unused(found_target);
             assert(!found_target);
             timer.stop("growReachable");
             timer.stop("exhaustFlow");
-
-            //std::cout << "numPushes: " << numPushes << ", numRelabel: " << numRelabel << ", numGlobalUpdate: " << numGlobalUpdate << ", numLawlerNodes: " << hg.numLawlerNodes() << ", workSinceLastUpdate: " << workSinceLastRelabel << std::endl;
 
             return f;
         }
