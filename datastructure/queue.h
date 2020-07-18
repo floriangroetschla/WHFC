@@ -18,9 +18,9 @@ public:
 	explicit LayeredQueue(const size_type num_elements) : qfront(0) { queue.reserve(num_elements); layer_bounds.push_back(0); }
 	explicit LayeredQueue(const size_t num_elements) : LayeredQueue(static_cast<size_type>(num_elements)) { }
 	//Note. Use reinitialize() if you want to keep entries in the underlying vector intact, and ensure these won't be pushed again
-	inline void reinitialize(size_type x) { qfront = x; queue.clear(); layer_bounds.clear(); layer_bounds.push_back(x); }
+	inline void reinitialize(size_type x) { qfront = x; layer_bounds.clear(); layer_bounds.push_back(x); }
 	inline void reinitialize() { reinitialize(queueEnd()); }
-	inline void clear() { reinitialize(0); }
+	inline void clear() { qfront = 0; queue.clear(); layer_bounds.clear(); layer_bounds.push_back(0); }
 	inline bool empty() const { return qfront == queue.size(); }
 	inline bool currentLayerEmpty() const { return qfront == layer_bounds.back(); }
 	inline T pop() { return queue[qfront++]; }
