@@ -53,8 +53,8 @@ namespace whfc_rb {
                 PaToHInterface::bisectImbalancedWithPatoh(partition, mt(), float(numParts[1]) / float(numParts[0]),
                                                           epsilon_for_patoh, config.patoh_preset, alloc, false);
             }
-
             timer.stop("PaToH");
+            partition.initialize();
 
 
             if (config.refine) {

@@ -60,6 +60,7 @@ int main(int argc, const char *argv[]) {
     whfc_rb::PartitionThreadsafe partition(numParts, hg);
     PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset);
     timer.stop("PaToH");
+    partition.initialize();
 
     //printStatistics(partition, timer);
 

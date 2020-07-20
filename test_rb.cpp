@@ -40,8 +40,7 @@ int main(int argc, const char *argv[]) {
     if (!mode.compare("RBONLY")) {
         std::cout << "Using mode RBONLY" << std::endl;
         config.refine = false;
-        whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::PartitionBase, whfc_rb::NullRefiner<whfc_rb::PartitionBase>>(hg.numNodes(), hg.numHyperedges(),
-                                                                                                                                                                                                                                                                        hg.numPins(), mt, timer, config);
+        whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::PartitionBase, whfc_rb::NullRefiner<whfc_rb::PartitionBase>>(hg.numNodes(), hg.numHyperedges(), hg.numPins(), mt, timer, config);
         timer.start("Total");
         whfc_rb::PartitionBase partition = recursive_bisector.run(hg, epsilon, numParts);
         timer.stop("Total");

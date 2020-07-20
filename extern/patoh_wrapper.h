@@ -113,7 +113,6 @@ public:
         if (params.free) {
             PaToH_Free();
         }
-        partition.initialize();     // TODO this should be measured separately from PaToH time
     }
 
     static int freePatoh() {
