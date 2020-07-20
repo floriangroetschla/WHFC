@@ -8,7 +8,7 @@
 #include "config.h"
 
 namespace whfc_rb {
-    template<class PartitionImpl, class HypergraphImpl, class FlowAlgo, class Extractor>
+    template<class PartitionImpl, class Refiner>
     class RecursiveBisector {
     public:
 
@@ -27,7 +27,7 @@ namespace whfc_rb {
 
 
     private:
-        WHFCRefinerTwoWay<PartitionImpl, HypergraphImpl, FlowAlgo, Extractor> refiner;
+        Refiner refiner;
         std::mt19937 &mt;
         whfc::TimeReporter &timer;
         const PartitionerConfig &config;

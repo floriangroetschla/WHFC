@@ -7,6 +7,8 @@
 #include "util/timer.h"
 #include "recursive_bisection/partition_base.h"
 #include "recursive_bisection/fhgb_extraction.h"
+#include "recursive_bisection/null_refiner.h"
+#include "push_relabel/lawler_fhgb_extraction_parallel.h"
 
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
@@ -38,18 +40,23 @@ int main(int argc, const char *argv[]) {
     if (!mode.compare("RBONLY")) {
         std::cout << "Using mode RBONLY" << std::endl;
         config.refine = false;
+        whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::PartitionBase, whfc_rb::NullRefiner<whfc_rb::PartitionBase>>(hg.numNodes(), hg.numHyperedges(),
+                                                                                                                                                                                                                                                                        hg.numPins(), mt, timer, config);
+        timer.start("Total");
+        whfc_rb::PartitionBase partition = recursive_bisector.run(hg, epsilon, numParts);
+        timer.stop("Total");
+        printStatistics(partition, timer);
     } else if (!mode.compare("RBWHFC")) {
         std::cout << "Using mode RBWHFC" << std::endl;
         config.refine = true;
+        whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::PartitionThreadsafe, whfc_rb::WHFCRefinerTwoWay<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraphParallel, whfc_pr::PushRelabelParallel, whfc_pr::LawlerFlowHypergraphBuilderExtractorParallel<whfc_pr::LawlerFlowHypergraphParallel, whfc_rb::PartitionThreadsafe>>>(hg.numNodes(), hg.numHyperedges(),
+                                                                                                                                                                                                                                                                        hg.numPins(), mt, timer, config);
+        timer.start("Total");
+        whfc_rb::PartitionBase partition = recursive_bisector.run(hg, epsilon, numParts);
+        timer.stop("Total");
+        printStatistics(partition, timer);
     } else {
         throw std::runtime_error("Mode must be one of: RBONlY, RBWHFC");
     }
-
-    whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraph, whfc_pr::PushRelabel, whfc_rb::HypergraphBuilderExtractor<whfc_pr::LawlerFlowHypergraph, whfc_rb::PartitionThreadsafe>>(hg.numNodes(), hg.numHyperedges(),
-                                                                               hg.numPins(), mt, timer, config);
-    timer.start("Total");
-    whfc_rb::PartitionBase partition = recursive_bisector.run(hg, epsilon, numParts);
-    timer.stop("Total");
-    printStatistics(partition, timer);
 }
 
