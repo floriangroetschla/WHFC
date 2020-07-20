@@ -54,7 +54,9 @@ namespace whfc_rb {
                                                           epsilon_for_patoh, config.patoh_preset, alloc, false);
             }
             timer.stop("PaToH");
+            timer.start("PartitionInitialization", "Total");
             partition.initialize();
+            timer.stop("PartitionInitialization");
 
 
             if (config.refine) {
