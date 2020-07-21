@@ -74,8 +74,9 @@ namespace whfc_rb {
 
                 std::vector<NodeWeight> vec_partitionWeights = partition.partitionWeights();
                 NodeWeight totalWeight = vec_partitionWeights[0] + vec_partitionWeights[1];
-                NodeWeight maxPartWeight = std::max(vec_partitionWeights[0], vec_partitionWeights[1]);
-                double achievedEpsilon = (static_cast<double>(maxPartWeight) * 2.0 / static_cast<double>(totalWeight)) - 1.0;
+                double imbalancePart0 = ((static_cast<double>(vec_partitionWeights[0]) * static_cast<double>(k)) / (static_cast<double>(totalWeight) * static_cast<double>(numParts[0]))) - 1.0;
+                double imbalancePart1 = ((static_cast<double>(vec_partitionWeights[1]) * static_cast<double>(k)) / (static_cast<double>(totalWeight) * static_cast<double>(numParts[1]))) - 1.0;
+                double achievedEpsilon = std::max(imbalancePart0, imbalancePart1);
                 double newEpsilon = (1.0 + epsilon) / (1.0 + achievedEpsilon) - 1.0;
 
                 std::vector<int> new_ids(partition.size());
