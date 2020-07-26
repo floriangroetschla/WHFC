@@ -4,7 +4,7 @@
 #include "../datastructure/flow_hypergraph.h"
 #include "../datastructure/flow_hypergraph_builder.h"
 
-#include "../recursive_bisection/hypergraph.h"
+#include "../datastructure/hypergraph.h"
 #include "../push_relabel/lawler_flow_hypergraph_parallel.h"
 
 namespace whfc {

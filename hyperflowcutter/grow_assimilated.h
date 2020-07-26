@@ -4,8 +4,8 @@
 #include "../datastructure/flow_hypergraph.h"
 #include "cutter_state.h"
 #include "../datastructure/stack.h"
-#include "../push_relabel/push_relabel_parallel.h"
-#include "../push_relabel/push_relabel.h"
+#include "../flow_algorithms/push_relabel_parallel.h"
+#include "../flow_algorithms/push_relabel.h"
 
 
 namespace whfc {

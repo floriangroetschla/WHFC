@@ -1,20 +1,20 @@
-#include "recursive_bisection/hypergraph.h"
+#include "datastructure/hypergraph.h"
 #include "io/hmetis_io.h"
 #include <iostream>
 #include "extern/patoh_wrapper.h"
 #include <random>
 #include "util/timer.h"
 #include <tbb/tbb.h>
-#include "recursive_bisection/k_way_refiner_parallel.h"
-#include "recursive_bisection/partition_threadsafe.h"
-#include "recursive_bisection/tbb_thread_pinning.h"
-#include "recursive_bisection/config.h"
-#include "algorithm/dinic.h"
-#include "algorithm/dinic_parallel.h"
-#include "push_relabel/push_relabel.h"
+#include "partitioner/k_way_refiner_parallel.h"
+#include "datastructure/partition_threadsafe.h"
+#include "partitioner/tbb_thread_pinning.h"
+#include "partitioner/config.h"
+#include "flow_algorithms/dinic.h"
+#include "flow_algorithms/dinic_parallel.h"
+#include "flow_algorithms/push_relabel.h"
 #include "push_relabel/lawler_fhgb_extraction_parallel.h"
-#include "recursive_bisection/fhgb_extraction_parallel.h"
-#include "recursive_bisection/fhgb_extraction.h"
+#include "partitioner/fhgb_extraction.h"
+#include "flow_algorithms/dinic_thread_local_vectors.h"
 #include <filesystem>
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
@@ -66,9 +66,12 @@ int main(int argc, const char *argv[]) {
 
     timer.start("Refinement", "Total");
     whfc_rb::KWayRefinerParallel<whfc_rb::PartitionThreadsafe, whfc::FlowHypergraphBuilder, whfc::Dinic, whfc_rb::HypergraphBuilderExtractor<whfc::FlowHypergraphBuilder, whfc_rb::PartitionThreadsafe>> refiner1(partition, timer, mt, config);
-    //whfc_rb::KWayRefinerParallel<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraphParallel, whfc_pr::PushRelabelParallel, whfc_pr::LawlerFlowHypergraphBuilderExtractorParallel<whfc_pr::LawlerFlowHypergraphParallel, whfc_rb::PartitionThreadsafe>> refiner2(partition, timer, mt, config);
-    //whfc_rb::KWayRefinerParallel<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraph, whfc_pr::PushRelabel, whfc_rb::HypergraphBuilderExtractor<whfc_pr::LawlerFlowHypergraph, whfc_rb::PartitionThreadsafe>> refiner3(partition, timer, mt, config);
-    uint iterations = refiner1.refine(epsilon, maxNumIterations);
+    whfc_rb::KWayRefinerParallel<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraphParallel, whfc_pr::PushRelabelParallel, whfc_pr::LawlerFlowHypergraphBuilderExtractorParallel<whfc_pr::LawlerFlowHypergraphParallel, whfc_rb::PartitionThreadsafe>> refiner2(partition, timer, mt, config);
+    whfc_rb::KWayRefinerParallel<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraph, whfc_pr::PushRelabel, whfc_rb::HypergraphBuilderExtractor<whfc_pr::LawlerFlowHypergraph, whfc_rb::PartitionThreadsafe>> refiner3(partition, timer, mt, config);
+
+    whfc_rb::KWayRefinerParallel<whfc_rb::PartitionThreadsafe, whfc::FlowHypergraphBuilder, whfc::DinicThreadLocalVectors, whfc_rb::HypergraphBuilderExtractor<whfc::FlowHypergraphBuilder, whfc_rb::PartitionThreadsafe>> refiner4(partition, timer, mt, config);
+
+    uint iterations = refiner4.refine(epsilon, maxNumIterations);
     timer.stop("Refinement");
     timer.stop("Total");
 

@@ -2,7 +2,7 @@
 #include <cmath>
 #include "../extern/patoh_wrapper.h"
 #include "../io/hmetis_io.h"
-#include "hypergraph.h"
+#include "../datastructure/hypergraph.h"
 #include "whfc_refiner_two_way.h"
 #include <random>
 #include "config.h"

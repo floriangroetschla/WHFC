@@ -1,4 +1,4 @@
-#include "recursive_bisection/hypergraph.h"
+#include "datastructure/hypergraph.h"
 #include "io/hmetis_io.h"
 #include <iostream>
 #include "extern/patoh_wrapper.h"

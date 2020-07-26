@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cutter_state.h"
+#include "../hyperflowcutter/cutter_state.h"
 #include "../datastructure/stack.h"
 #include "../datastructure/queue.h"
 #include "../datastructure/bitset_reachable_sets.h"
@@ -98,6 +98,10 @@ namespace whfc {
 
 		explicit FordFulkerson(FlowHypergraph& hg) : hg(hg), nodes_to_scan(hg.numNodes()), parent(hg.numNodes()) {
 			reset();
+		}
+
+		FordFulkerson(FlowHypergraph& hg, TimeReporter& timer, size_t numThreads) : hg(hg), nodes_to_scan(hg.numNodes()), parent(hg.numNodes()) {
+		    reset();
 		}
 
 		FlowCommons::Scaling scaling;

@@ -1,13 +1,13 @@
 #pragma once
 
 #include "fhgb_extraction_parallel_base.h"
-#include "../algorithm/hyperflowcutter.h"
+#include "../hyperflowcutter/hyperflowcutter.h"
 //#include "../algorithm/dinic.h"
 #include "../io/whfc_io.h"
 #include <random>
 #include "two_way_refiner_interface.h"
 #include "config.h"
-#include "../push_relabel/push_relabel_parallel.h"
+#include "../flow_algorithms/push_relabel_parallel.h"
 
 namespace whfc_rb {
     template<class PartitionImpl, class HypergraphImpl, class FlowAlgo, class Extractor>

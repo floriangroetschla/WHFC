@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../recursive_bisection/hypergraph.h"
+#include "../datastructure/hypergraph.h"
 #include "patoh.h"
-#include "../recursive_bisection/partition_ca.h"
+#include "../datastructure/partition_ca.h"
 
 
 class PaToHInterface {

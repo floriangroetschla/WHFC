@@ -5,7 +5,7 @@
 #include <tbb/parallel_do.h>
 #include <mutex>
 #include "whfc_refiner_two_way.h"
-#include "partition_threadsafe.h"
+#include "../datastructure/partition_threadsafe.h"
 
 namespace whfc_rb {
     template<class PartitionImpl, class HypergraphImpl, class FlowAlgo, class Extractor>

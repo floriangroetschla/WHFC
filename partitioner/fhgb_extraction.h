@@ -1,12 +1,12 @@
 #pragma once
 
 #include "../datastructure/flow_hypergraph_builder.h"
-#include "hypergraph.h"
+#include "../datastructure/hypergraph.h"
 #include "../datastructure/queue.h"
-#include "partition_ca.h"
+#include "../datastructure/partition_ca.h"
 #include "../datastructure/node_border.h"
 #include "config.h"
-#include "partition_threadsafe.h"
+#include "../datastructure/partition_threadsafe.h"
 
 namespace whfc_rb {
     template<class Hypergraph, class PartitionImpl>

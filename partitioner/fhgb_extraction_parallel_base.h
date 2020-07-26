@@ -1,12 +1,12 @@
 #pragma once
 
 #include "../push_relabel/flow_hypergraph_builder.h"
-#include "hypergraph.h"
+#include "../datastructure/hypergraph.h"
 #include "../datastructure/queue.h"
-#include "partition_ca.h"
+#include "../datastructure/partition_ca.h"
 #include "../datastructure/node_border.h"
 #include "config.h"
-#include "partition_threadsafe.h"
+#include "../datastructure/partition_threadsafe.h"
 #include <tbb/scalable_allocator.h>
 #include <mutex>
 #include <tbb/parallel_invoke.h>

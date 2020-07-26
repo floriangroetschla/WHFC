@@ -1,14 +1,14 @@
-#include "recursive_bisection/hypergraph.h"
+#include "datastructure/hypergraph.h"
 #include "io/hmetis_io.h"
 #include <iostream>
 #include "extern/patoh_wrapper.h"
-#include "recursive_bisection/recursive_bisection.h"
+#include "partitioner/recursive_bisection.h"
 #include <random>
 #include "util/timer.h"
-#include "recursive_bisection/partition_base.h"
-#include "recursive_bisection/partition_ca.h"
-#include "recursive_bisection/null_refiner.h"
-#include "recursive_bisection/k_way_refiner.h"
+#include "datastructure/partition_base.h"
+#include "datastructure/partition_ca.h"
+#include "partitioner/null_refiner.h"
+#include "partitioner/k_way_refiner.h"
 #include "push_relabel/lawler_fhgb_extraction_parallel.h"
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {

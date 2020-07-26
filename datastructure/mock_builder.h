@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../definitions.h"
-#include "../datastructure/flow_hypergraph.h"
+#include "flow_hypergraph.h"
 
 class MockBuilder {
 public:

@@ -5,8 +5,8 @@
 #include <tbb/enumerable_thread_specific.h>
 #include <tbb/parallel_for_each.h>
 #include "flow_hypergraph_builder.h"
-#include "../recursive_bisection/mock_builder.h"
-#include "../recursive_bisection/timestamp_set.hpp"
+#include "../datastructure/mock_builder.h"
+#include "../datastructure/timestamp_set.hpp"
 #include "lawler_flow_hypergraph.h"
 
 namespace whfc_pr {

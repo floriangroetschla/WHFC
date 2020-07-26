@@ -1,13 +1,13 @@
 #pragma once
 
-#include "../algorithm/cutter_state.h"
+#include "../hyperflowcutter/cutter_state.h"
 #include "../datastructure/queue.h"
 #include "../datastructure/stack.h"
 #include "../datastructure/distance_reachable_sets.h"
-#include "../recursive_bisection/timestamp_set.hpp"
+#include "../datastructure/timestamp_set.hpp"
 #include "../datastructure/copyable_atomic.h"
-#include "flow_hypergraph.h"
-#include "lawler_flow_hypergraph_parallel.h"
+#include "../push_relabel/flow_hypergraph.h"
+#include "../push_relabel/lawler_flow_hypergraph_parallel.h"
 #include <boost/circular_buffer.hpp>
 
 

@@ -5,7 +5,7 @@
 #include <tbb/enumerable_thread_specific.h>
 #include <tbb/parallel_for_each.h>
 #include "flow_hypergraph.h"
-#include "../recursive_bisection/mock_builder.h"
+#include "../datastructure/mock_builder.h"
 
 /*
  * hyperedges with zero/one pins are removed automatically during build process

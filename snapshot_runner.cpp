@@ -1,14 +1,14 @@
-#include "recursive_bisection/hypergraph.h"
+#include "datastructure/hypergraph.h"
 #include "io/hmetis_io.h"
 #include <iostream>
 #include "extern/patoh_wrapper.h"
 #include <random>
 #include "util/timer.h"
 #include <tbb/tbb.h>
-#include "recursive_bisection/k_way_refiner_parallel.h"
-#include "recursive_bisection/partition_threadsafe.h"
-#include "recursive_bisection/tbb_thread_pinning.h"
-#include "recursive_bisection/config.h"
+#include "partitioner/k_way_refiner_parallel.h"
+#include "datastructure/partition_threadsafe.h"
+#include "partitioner/tbb_thread_pinning.h"
+#include "partitioner/config.h"
 #include <filesystem>
 
 int main(int argc, const char *argv[]) {

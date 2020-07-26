@@ -1,12 +1,12 @@
 #pragma once
 
 #include "../push_relabel/flow_hypergraph_builder.h"
-#include "../recursive_bisection/hypergraph.h"
+#include "../datastructure/hypergraph.h"
 #include "../datastructure/queue.h"
 #include "../datastructure/node_border.h"
-#include "../recursive_bisection/config.h"
+#include "../partitioner/config.h"
 #include <tbb/scalable_allocator.h>
-#include "../recursive_bisection/fhgb_extraction_parallel_base.h"
+#include "../partitioner/fhgb_extraction_parallel_base.h"
 #include <mutex>
 #include <tbb/parallel_invoke.h>
 #include <tbb/parallel_sort.h>

@@ -1,11 +1,11 @@
 
 #include <tbb/parallel_sort.h>
-#include "cutter_state.h"
+#include "../hyperflowcutter/cutter_state.h"
 #include "../datastructure/queue.h"
 #include "../datastructure/stack.h"
 #include "../datastructure/distance_reachable_sets.h"
 #include "ford_fulkerson.h"
-#include "../recursive_bisection/timestamp_set.hpp"
+#include "../datastructure/timestamp_set.hpp"
 #include "../datastructure/copyable_atomic.h"
 
 

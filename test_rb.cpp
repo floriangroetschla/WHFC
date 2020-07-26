@@ -1,13 +1,13 @@
-#include "recursive_bisection/hypergraph.h"
+#include "datastructure/hypergraph.h"
 #include "io/hmetis_io.h"
 #include <iostream>
 #include "extern/patoh_wrapper.h"
-#include "recursive_bisection/recursive_bisection.h"
+#include "partitioner/recursive_bisection.h"
 #include <random>
 #include "util/timer.h"
-#include "recursive_bisection/partition_base.h"
-#include "recursive_bisection/fhgb_extraction.h"
-#include "recursive_bisection/null_refiner.h"
+#include "datastructure/partition_base.h"
+#include "partitioner/fhgb_extraction.h"
+#include "partitioner/null_refiner.h"
 #include "push_relabel/lawler_fhgb_extraction_parallel.h"
 
 
