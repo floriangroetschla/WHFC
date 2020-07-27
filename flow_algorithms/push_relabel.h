@@ -308,7 +308,7 @@ namespace whfc_pr {
 
                 if (workSinceLastRelabel * globalUpdateFreq > nm) {
                     timer.start("globalUpdate", "phase1");
-                    globalUpdate(cs, n);
+                    globalUpdate(cs);
                     numGlobalUpdate++;
                     timer.stop("globalUpdate");
                     workSinceLastRelabel = 0;
@@ -335,13 +335,11 @@ namespace whfc_pr {
                 InHe& inc_u = hg.getInHe(inc_iter);
                 const Hyperedge e = inc_u.e;
                 if (!cs.h.areAllPinsSourceReachable__unsafe__(e)) {
-                    const Node e_out = hg.edge_node_out(e);
                     Flow residual = hg.getPinOut(hg.getInHe(inc_iter)).flow;
                     if (residual > 0) {
                         hg.push_node_to_edgeOut(piercingNode, inc_iter, residual);
                     }
 
-                    const Node e_in = hg.edge_node_in(e);
                     residual = hg.capacity(e);
                     if (residual > 0) {
                         hg.push_node_to_edgeIn(piercingNode, inc_iter, residual);
@@ -351,11 +349,10 @@ namespace whfc_pr {
 
             timer.start("setLabels", "exhaustFlow");
             n = hg.numNodes() + 2 * hg.numHyperedges();
-            std::array<size_t, 2> numScans = globalUpdate(cs, n);
+            globalUpdate(cs);
             timer.stop("setLabels");
 
-            size_t nm = ALPHA * numScans[0] + numScans[1];
-            n = numScans[0];
+            size_t nm = ALPHA * n + hg.numPins() * 2 + hg.numHyperedges();
 
             timer.start("mainLoop", "exhaustFlow");
 
@@ -590,9 +587,7 @@ namespace whfc_pr {
             return hg.label(u) > currentLabel && __atomic_exchange_n(&hg.label(u), currentLabel, __ATOMIC_ACQ_REL) == n;
         }
 
-        std::array<size_t, 2> globalUpdate(whfc::CutterState<Type>& cs, size_t n) {
-            size_t scannedNodes = 0;
-            size_t scannedEdges = 0;
+        void globalUpdate(whfc::CutterState<Type>& cs) {
             queue.clear();
             nodes.clear();
             inQueue.reset();
@@ -611,12 +606,10 @@ namespace whfc_pr {
 
             while (!queue.empty()) {
                 while (!queue.currentLayerEmpty()) {
-                    scannedNodes++;
                     const Node u = queue.pop();
                     if (u != source && hg.excess(u) > 0 && inQueue.set(u)) nodes.push_back(u);
                     if (hg.isNode(u)) {
                         for (InHe& inc_u : hg.hyperedgesOf(u)) {
-                            scannedEdges += 2;
                             const Hyperedge e = inc_u.e;
                             const Node e_in = hg.edge_node_in(e);
                             const Node e_out = hg.edge_node_out(e);
@@ -637,14 +630,12 @@ namespace whfc_pr {
                         const Hyperedge e = hg.edgeFromLawlerNode(u);
                         const Node e_in = hg.edge_node_in(e);
 
-                        scannedEdges++;
                         if (hg.capacity(e) - hg.flow(e) > 0 && hg.label(e_in) == n) {
                             hg.label(e_in) = currentLabel;
                             current_pin_e_in[e] = hg.beginPinsIn(e);
                             queue.push(e_in);
                         }
                         for (Pin& pin : hg.pinsOutOf(e)) {
-                            scannedEdges++;
                             if (hg.label(pin.pin) == n && (pin.flow > 0) && (!cs.n.isSourceReachable__unsafe__(pin.pin))) {
                                 hg.label(pin.pin) = currentLabel;
                                 current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
@@ -655,14 +646,12 @@ namespace whfc_pr {
                         const Hyperedge e = hg.edgeFromLawlerNode(u);
                         const Node e_out = hg.edge_node_out(e);
 
-                        scannedEdges++;
                         if (hg.flow(e) > 0 && hg.label(e_out) == n) {
                             hg.label(e_out) = currentLabel;
                             current_pin_e_out[e] = hg.beginPinsIn(e);
                             queue.push(e_out);
                         }
                         for (Pin& pin : hg.pinsOf(e)) {
-                            scannedEdges++;
                             if (hg.label(pin.pin) == n && (!cs.n.isSourceReachable__unsafe__(pin.pin))) {
                                 hg.label(pin.pin) = currentLabel;
                                 current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
@@ -674,8 +663,6 @@ namespace whfc_pr {
                 currentLabel++;
                 queue.finishNextLayer();
             }
-
-            return {scannedNodes, scannedEdges};
         }
 
         bool growReachable(whfc::CutterState<Type>& cs) {
