@@ -16,6 +16,7 @@
 #include "partitioner/fhgb_extraction.h"
 #include "flow_algorithms/dinic_thread_local_vectors.h"
 #include <filesystem>
+#include <version.h>
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
     timer.report(std::cout);
@@ -50,6 +51,7 @@ int main(int argc, const char *argv[]) {
     bool precomputeCuts = true;
 
     whfc_rb::PartitionerConfig config = {true, patoh_preset, precomputeCuts, distancePiercing, numThreads, std::filesystem::path(argv[1]).filename(), numParts};
+    std::cout << "commit: " << GIT_COMMIT_HASH << std::endl;
     std::cout << "useThreadPinning: " << useThreadPinning << std::endl;
     std::cout << "precomputeCuts: " << precomputeCuts << std::endl;
     std::cout << "distancePiercing: " << distancePiercing << std::endl;

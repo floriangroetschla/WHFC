@@ -3,6 +3,7 @@
 #include <iostream>
 #include "extern/patoh_wrapper.h"
 #include "util/timer.h"
+#include <version.h>
 
 int main(int argc, const char *argv[]) {
 
@@ -22,6 +23,7 @@ int main(int argc, const char *argv[]) {
     timer.start("Total");
     PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset);
     timer.stop("Total");
+    std::cout << "commit: " << GIT_COMMIT_HASH << std::endl;
     timer.report(std::cout);
     //partition.print(std::cout);
     std::cout << "Imbalance: " << partition.imbalance() << std::endl;

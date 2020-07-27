@@ -10,8 +10,10 @@
 #include "partitioner/null_refiner.h"
 #include "partitioner/k_way_refiner.h"
 #include "push_relabel/lawler_fhgb_extraction_parallel.h"
+#include <version.h>
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
+    std::cout << "commit: " << GIT_COMMIT_HASH << std::endl;
     timer.report(std::cout);
     std::cout << "Imbalance: " << partition.imbalance() << std::endl;
     std::cout << "Num_parts: " << partition.numParts() << std::endl;

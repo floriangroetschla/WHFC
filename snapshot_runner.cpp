@@ -10,6 +10,7 @@
 #include "partitioner/tbb_thread_pinning.h"
 #include "partitioner/config.h"
 #include <filesystem>
+#include <version.h>
 
 int main(int argc, const char *argv[]) {
 
@@ -34,6 +35,8 @@ int main(int argc, const char *argv[]) {
     hfc.cs.setMaxBlockWeight(1, i.maxBlockWeight[1]);
     hfc.upperFlowBound = i.upperFlowBound;
     hfc.timer.active = false;
+
+    std::cout << "commit: " << GIT_COMMIT_HASH << std::endl;
 
     timer.start("Total");
     bool hfc_result = hfc.enumerateCutsUntilBalancedOrFlowBoundExceeded(i.s, i.t);
