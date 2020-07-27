@@ -10,7 +10,11 @@
 #include "partitioner/null_refiner.h"
 #include "partitioner/k_way_refiner.h"
 #include "push_relabel/lawler_fhgb_extraction_parallel.h"
+#include "partitioner/tbb_thread_pinning.h"
+#include "flow_algorithms/dinic_thread_local_vectors.h"
+#include "partitioner/fhgb_extraction.h"
 #include <version.h>
+#include <tbb/task_scheduler_init.h>
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
     std::cout << "commit: " << GIT_COMMIT_HASH << std::endl;
@@ -23,18 +27,27 @@ void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &time
 
 int main(int argc, const char *argv[]) {
 
-    if (argc != 7) {
-        throw std::runtime_error("Usage ./KWayRefinement HypergraphFile epsilon k seed preset maxIterations");
+    if (argc != 10) {
+        throw std::runtime_error("Usage ./KWayRefinement HypergraphFile epsilon k seed preset numThreads useThreadPinning(0 or 1) distancePiercing(0 or 1) maxNumIterations");
     }
     whfc_rb::CSRHypergraph hg = whfc::HMetisIO::readCSRHypergraph(argv[1]);
     double epsilon = std::stod(argv[2]);
     uint numParts = std::stoul(argv[3]);
     int seed = std::stoi(argv[4]);
     std::string patoh_preset = argv[5];
-    uint maxIterations = std::stoi(argv[6]);
+    uint numThreads = std::stoi(argv[6]);
+    bool useThreadPinning = std::stoi(argv[7]);
+    bool distancePiercing = std::stoi(argv[8]);
+    int maxNumIterations = std::stoi(argv[9]);
     std::mt19937 mt(seed);
 
-    whfc_rb::PartitionerConfig config = {true, patoh_preset, true, false};
+    tbb::task_scheduler_init init(numThreads);
+    whfc_rb::pinning_observer pinner;
+    pinner.observe(useThreadPinning);
+
+    bool precomputeCuts = true;
+
+    whfc_rb::PartitionerConfig config = {true, patoh_preset, precomputeCuts, distancePiercing, numThreads, "unset", numParts};
     whfc::TimeReporter timer("Total");
 
     timer.start("Total");
@@ -45,8 +58,8 @@ int main(int argc, const char *argv[]) {
     partition.initialize();
 
     timer.start("Refinement", "Total");
-    whfc_rb::KWayRefiner<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraphParallel, whfc_pr::PushRelabelParallel, whfc_pr::LawlerFlowHypergraphBuilderExtractorParallel<whfc_pr::LawlerFlowHypergraphParallel, whfc_rb::PartitionThreadsafe>> refiner(partition, timer, mt, config);
-    refiner.refine(epsilon, maxIterations);
+    whfc_rb::KWayRefiner<whfc_rb::PartitionThreadsafe, whfc::FlowHypergraphBuilder, whfc::DinicThreadLocalVectors, whfc_rb::HypergraphBuilderExtractor<whfc::FlowHypergraphBuilder, whfc_rb::PartitionThreadsafe>> refiner(partition, timer, mt, config);
+    refiner.refine(epsilon, maxNumIterations);
     timer.stop("Refinement");
     timer.stop("Total");
 
