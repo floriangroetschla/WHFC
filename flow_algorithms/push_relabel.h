@@ -331,9 +331,6 @@ namespace whfc_pr {
             piercingNode = cs.sourcePiercingNodes.begin()->node;
             target = cs.targetPiercingNodes.begin()->node;
 
-            inQueue.reset();
-
-
             for (InHeIndex inc_iter : hg.incidentHyperedgeIndices(piercingNode)) {
                 InHe& inc_u = hg.getInHe(inc_iter);
                 const Hyperedge e = inc_u.e;
@@ -342,19 +339,15 @@ namespace whfc_pr {
                     Flow residual = hg.getPinOut(hg.getInHe(inc_iter)).flow;
                     if (residual > 0) {
                         hg.push_node_to_edgeOut(piercingNode, inc_iter, residual);
-                        if (inQueue.set(e_out)) { nodes.push_back(e_out); }
                     }
 
                     const Node e_in = hg.edge_node_in(e);
                     residual = hg.capacity(e);
                     if (residual > 0) {
                         hg.push_node_to_edgeIn(piercingNode, inc_iter, residual);
-                        if (inQueue.set(e_in)) { nodes.push_back(e_in); }
                     }
                 }
             }
-
-
 
             timer.start("setLabels", "exhaustFlow");
             n = hg.numNodes() + 2 * hg.numHyperedges();
@@ -601,6 +594,8 @@ namespace whfc_pr {
             size_t scannedNodes = 0;
             size_t scannedEdges = 0;
             queue.clear();
+            nodes.clear();
+            inQueue.reset();
 
             hg.equalizeLabels(n);
 
@@ -618,6 +613,7 @@ namespace whfc_pr {
                 while (!queue.currentLayerEmpty()) {
                     scannedNodes++;
                     const Node u = queue.pop();
+                    if (u != source && hg.excess(u) > 0 && inQueue.set(u)) nodes.push_back(u);
                     if (hg.isNode(u)) {
                         for (InHe& inc_u : hg.hyperedgesOf(u)) {
                             scannedEdges += 2;
@@ -625,7 +621,7 @@ namespace whfc_pr {
                             const Node e_in = hg.edge_node_in(e);
                             const Node e_out = hg.edge_node_out(e);
                             if (!cs.h.areAllPinsSourceReachable__unsafe__(e)) {
-                                if (hg.getPinIn(inc_u).flow  > 0 && hg.label(e_in) == n) {
+                                if (hg.getPinIn(inc_u).flow > 0 && hg.label(e_in) == n) {
                                     hg.label(e_in) = currentLabel;
                                     current_pin_e_in[e] = hg.beginPinsIn(e);
                                     queue.push(e_in);
