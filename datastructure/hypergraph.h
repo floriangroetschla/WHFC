@@ -120,6 +120,10 @@ namespace whfc_rb {
             return node_weights[u];
         }
 
+        NodeWeight accumulateNodeWeights() const {
+            return std::accumulate(node_weights.begin(), node_weights.end(), 0);
+        }
+
         HyperedgeWeight &hyperedgeWeight(const HyperedgeID e) {
             return hyperedge_weights[e];
         }

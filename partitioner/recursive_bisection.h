@@ -19,9 +19,9 @@ namespace whfc_rb {
         }
 
         PartitionImpl run(CSRHypergraph &hg, double epsilon, uint k) {
+            NodeWeight totalNodeWeight = hg.accumulateNodeWeights();
             PartitionImpl partition(k, hg);
-            partition_recursively(partition, epsilon, k, true);
-            partition.initialize();
+            partition_recursively(partition, epsilon, k, k, totalNodeWeight, totalNodeWeight, true);
             return partition;
         }
 
@@ -32,52 +32,46 @@ namespace whfc_rb {
         whfc::TimeReporter &timer;
         const PartitionerConfig &config;
 
-        void partition_recursively(PartitionImpl &partition, double epsilon, uint k, bool alloc) {
-            if (k == 1) {
+        void partition_recursively(PartitionImpl &partition, double epsilon, uint k_total, uint k_local, NodeWeight weight_total, NodeWeight weight_local, bool alloc) {
+            if (k_local == 1) {
                 return;
             }
 
-            double epsilon_for_patoh = std::pow(1.0 + epsilon, 1.0 / std::ceil(std::log2(k))) - 1.0;
+            double epsilon_for_patoh = std::pow((1.0 + epsilon) * static_cast<double>(k_local * weight_total) /
+                                                        static_cast<double>((k_total * weight_local)), 1.0 / std::ceil(std::log2(k_local))) - 1.0;
 
             std::array<int, 2> numParts;
             CSRHypergraph &hg = partition.getGraph();
 
             timer.start("PaToH", "Total");
-            if (k % 2 == 0) {
-                numParts[0] = k / 2;
-                numParts[1] = k / 2;
+            if (k_local % 2 == 0) {
+                numParts[0] = k_local / 2;
+                numParts[1] = k_local / 2;
                 PaToHInterface::bisectWithPatoh(partition, mt(), epsilon_for_patoh, config.patoh_preset, alloc, false);
             } else {
-                numParts[0] = k / 2;
+                numParts[0] = k_local / 2;
                 numParts[1] = numParts[0] + 1;
                 PaToHInterface::bisectImbalancedWithPatoh(partition, mt(), float(numParts[1]) / float(numParts[0]),
                                                           epsilon_for_patoh, config.patoh_preset, alloc, false);
             }
             timer.stop("PaToH");
-            timer.start("PartitionInitialization", "Total");
-            partition.initialize();
-            timer.stop("PartitionInitialization");
-
 
             if (config.refine) {
+                timer.start("PartitionInitialization", "Total");
+                partition.initialize();
+                timer.stop("PartitionInitialization");
+
                 NodeWeight maxWeight0 = (1.0 + epsilon_for_patoh) * static_cast<double>(numParts[0]) /
-                                        static_cast<double>(k) * partition.totalWeight();
+                                        static_cast<double>(k_local) * weight_local;
                 NodeWeight maxWeight1 = (1.0 + epsilon_for_patoh) * static_cast<double>(numParts[1]) /
-                                        static_cast<double>(k) * partition.totalWeight();
+                                        static_cast<double>(k_local) * weight_local;
                 timer.start("Refinement", "Total");
                 refiner.refine(partition, 0, 1, maxWeight0, maxWeight1, timer);
                 timer.stop("Refinement");
             }
 
-            if (k > 2) {
+            if (k_local > 2) {
                 timer.start("GraphAndPartitionBuilding", "Total");
-
-                std::vector<NodeWeight> vec_partitionWeights = partition.partitionWeights();
-                NodeWeight totalWeight = vec_partitionWeights[0] + vec_partitionWeights[1];
-                double imbalancePart0 = ((static_cast<double>(vec_partitionWeights[0]) * static_cast<double>(k)) / (static_cast<double>(totalWeight) * static_cast<double>(numParts[0]))) - 1.0;
-                double imbalancePart1 = ((static_cast<double>(vec_partitionWeights[1]) * static_cast<double>(k)) / (static_cast<double>(totalWeight) * static_cast<double>(numParts[1]))) - 1.0;
-                double achievedEpsilon = std::max(imbalancePart0, imbalancePart1);
-                double newEpsilon = (1.0 + epsilon) / (1.0 + achievedEpsilon) - 1.0;
 
                 std::vector<int> new_ids(partition.size());
                 std::vector<int> carries(2, 0);
@@ -88,6 +82,7 @@ namespace whfc_rb {
 
                 for (uint partID = 0; partID < 2; ++partID) {
                     CSRHypergraph partHg;
+                    NodeWeight partHg_weight = 0;
 
                     for (HyperedgeID e : hg.hyperedges()) {
                         int hyperedgeSize = 0;
@@ -109,6 +104,7 @@ namespace whfc_rb {
 
                     for (uint i = 0; i < partition.size(); ++i) {
                         if (partition[i] == partID) {
+                            partHg_weight += hg.nodeWeight(i);
                             partHg.nodeWeights().push_back(hg.nodeWeight(i));
                         }
                     }
@@ -121,7 +117,7 @@ namespace whfc_rb {
 
                     PartitionImpl subPartition(numParts[partID], partHg);
                     timer.stop("GraphAndPartitionBuilding");
-                    partition_recursively(subPartition, newEpsilon, numParts[partID], false);
+                    partition_recursively(subPartition, epsilon, k_total, numParts[partID], weight_total, partHg_weight, false);
                     timer.start("GraphAndPartitionBuilding", "Total");
 
                     for (uint i = 0; i < partition.size(); ++i) {
