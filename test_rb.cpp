@@ -15,7 +15,6 @@
 
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
-    std::cout << "commit: " << GIT_COMMIT_HASH << std::endl;
     timer.report(std::cout);
     std::cout << "Imbalance: " << partition.imbalance() << std::endl;
     std::cout << "Num_parts: " << partition.numParts() << std::endl;
@@ -46,6 +45,12 @@ int main(int argc, const char *argv[]) {
     bool precomputeCuts = true;
 
     whfc_rb::PartitionerConfig config = {true, patoh_preset, precomputeCuts, distancePiercing, numThreads, "unset", numParts};
+
+    std::cout << "commit: " << GIT_COMMIT_HASH << std::endl;
+    std::cout << "useThreadPinning: " << useThreadPinning << std::endl;
+    std::cout << "precomputeCuts: " << precomputeCuts << std::endl;
+    std::cout << "distancePiercing: " << distancePiercing << std::endl;
+    std::cout << "numThreads: " << numThreads << std::endl;
 
     whfc::TimeReporter timer("Total");
 
