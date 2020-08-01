@@ -47,12 +47,12 @@ namespace whfc_rb {
             if (k_local % 2 == 0) {
                 numParts[0] = k_local / 2;
                 numParts[1] = k_local / 2;
-                PaToHInterface::bisectWithPatoh(partition, mt(), epsilon_for_patoh, config.patoh_preset, alloc, false);
+                PaToHInterface::bisectWithPatoh(partition, mt(), epsilon_for_patoh, config.patoh_preset, alloc, true);
             } else {
                 numParts[0] = k_local / 2;
                 numParts[1] = numParts[0] + 1;
                 PaToHInterface::bisectImbalancedWithPatoh(partition, mt(), float(numParts[1]) / float(numParts[0]),
-                                                          epsilon_for_patoh, config.patoh_preset, alloc, false);
+                                                          epsilon_for_patoh, config.patoh_preset, alloc, true);
             }
             timer.stop("PaToH");
 
@@ -117,7 +117,7 @@ namespace whfc_rb {
 
                     PartitionImpl subPartition(numParts[partID], partHg);
                     timer.stop("GraphAndPartitionBuilding");
-                    partition_recursively(subPartition, epsilon, k_total, numParts[partID], weight_total, partHg_weight, false);
+                    partition_recursively(subPartition, epsilon, k_total, numParts[partID], weight_total, partHg_weight, true);
                     timer.start("GraphAndPartitionBuilding", "Total");
 
                     for (uint i = 0; i < partition.size(); ++i) {
@@ -131,9 +131,10 @@ namespace whfc_rb {
                 timer.stop("GraphAndPartitionBuilding");
             }
 
+            /*
             if (alloc) {
                 PaToHInterface::freePatoh();
-            }
+            }*/
             return;
         }
     };
