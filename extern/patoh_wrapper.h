@@ -85,6 +85,10 @@ public:
             args.MemMul_Pins = 100;
             args.MemMul_CellNet = 100;
             args.MemMul_General = 100;
+        } else if (str_preset == "D") {
+            args.MemMul_Pins = 20;
+            args.MemMul_CellNet = 20;
+            args.MemMul_General = 1;
         }
 
         int c, n, nconst, *cwghts, *nwghts, *xpins, *pins, *partvec, cut, *partweights;
