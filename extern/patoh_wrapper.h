@@ -81,15 +81,9 @@ public:
         args.doinitperm = 0;
         args.final_imbal = params.epsilon;
 
-        if (str_preset == "Q") {
-            args.MemMul_Pins = 100;
-            args.MemMul_CellNet = 100;
-            args.MemMul_General = 100;
-        } else if (str_preset == "D") {
-            args.MemMul_Pins = 20;
-            args.MemMul_CellNet = 20;
-            args.MemMul_General = 1;
-        }
+        args.MemMul_Pins = 100;
+        args.MemMul_CellNet = 100;
+        args.MemMul_General = 100;
 
         int c, n, nconst, *cwghts, *nwghts, *xpins, *pins, *partvec, cut, *partweights;
         float *targetweights;
