@@ -35,7 +35,6 @@ namespace whfc_rb {
             // TODO maybe also make a row restriction. or terminate if there aren't enough initial tasks. 
             while (std::any_of(partActive.begin(), partActive.end(), [&](auto& x) { return x > 0; }) && iterationCounter < maxIterations) {
                 std::vector<WorkElement> tasks = initialBlockPairs();
-                //std::cout << "Round " << round << " initial tasks: " << tasks.size() << std::endl;
                 tbb::parallel_do(tasks,[&](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder) {
                     assert(partScheduled[element.part0]);
                     assert(partScheduled[element.part1]);
@@ -59,23 +58,14 @@ namespace whfc_rb {
 
                         blockPairStatus(element.part0, element.part1) = TaskStatus::FINISHED;
 
-                        //partScheduled[element.part0] = false;
-                        //partScheduled[element.part1] = false;
+                        partScheduled[element.part0] = false;
+                        partScheduled[element.part1] = false;
                         timer.start("addNewTasks");
-                        //addNewTasksFromPQ(feeder, maxWeight);
-
-                        if (!addNewTasks(element.part0, feeder, maxWeight)) {
-                            partScheduled[element.part0] = false;
-                        }
-                        if (!addNewTasks(element.part1, feeder, maxWeight)) {
-                            partScheduled[element.part1] = false;
-                        }
-
+                        addNewTasksFromPQ(feeder);
                         timer.stop("addNewTasks");
                         iterations_done++;
                     }
                 });
-                //std::cout << "WHFC refiner calls: " << iterationCounter << std::endl;
 
                 //assert(allPairsProcessed()); only if maxIterations allows it
                 std::swap(partActive, partActiveNextRound);
@@ -206,7 +196,7 @@ namespace whfc_rb {
             for (PartitionID i = 0; i < partition.numParts() - 1; ++i) {
                 for (PartitionID j = i + 1; j < partition.numParts(); ++j) {
                     if (isEligible(i, j)) {
-                        bucketPQ.addElement(std::max(participations[i], participations[j]), {i, j});
+                        bucketPQ.addElement(std::min(participations[i], participations[j]), {i, j});
                     }
                 }
             }
@@ -235,7 +225,7 @@ namespace whfc_rb {
             return tasks;
         }
 
-        bool addNewTasks(PartitionID part, tbb::parallel_do_feeder<WorkElement>& feeder, NodeWeight maxWeight) {
+        bool addNewTasks(PartitionID part, tbb::parallel_do_feeder<WorkElement>& feeder) {
             for (PartitionID pid = 0; pid < partition.numParts(); ++pid) {
                 if (pid != part && isEligible(part, pid)) {
                     if (!partScheduled[pid].exchange(true)) {
@@ -253,7 +243,7 @@ namespace whfc_rb {
         }
 
         std::mutex add_lock;
-        void addNewTasksFromPQ(tbb::parallel_do_feeder<WorkElement>& feeder, NodeWeight maxWeight) {
+        void addNewTasksFromPQ(tbb::parallel_do_feeder<WorkElement>& feeder) {
             std::lock_guard<std::mutex> lock_guard(add_lock);
             if (bucketPQ.size() > 0) {
                 size_t bucket = bucketPQ.firstNonEmptyBucket();
