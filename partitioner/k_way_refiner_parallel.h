@@ -155,17 +155,18 @@ namespace whfc_rb {
         WorkElement addBlockPair(PartitionID partID) {
             std::lock_guard<std::mutex> lock_guard(add_lock);
             if (partScheduled[partID]) return {0, 0};
-            for (PartitionID i = 0; i < partitionsSortedByParticipations.size(); ++i) {
-                if (partID != i && isEligible(partID, i)) {
-                    if (!partScheduled[i] && blockPairStatus(partID, i) == TaskStatus::UNSCHEDULED) {
-                        partScheduled[i] = true;
+            for (size_t i = 0; i < partitionsSortedByParticipations.size(); ++i) {
+                PartitionID otherPartID = partitionsSortedByParticipations[i];
+                if (partID != otherPartID && isEligible(partID, otherPartID)) {
+                    if (!partScheduled[otherPartID] && blockPairStatus(partID, otherPartID) == TaskStatus::UNSCHEDULED) {
+                        partScheduled[otherPartID] = true;
                         partScheduled[partID] = true;
-                        blockPairStatus(partID, i) = TaskStatus::SCHEDULED;
+                        blockPairStatus(partID, otherPartID) = TaskStatus::SCHEDULED;
                         participations[partID]--;
                         fixOrdering(partID);
-                        participations[i]--;
-                        fixOrdering(i);
-                        return {partID, i};
+                        participations[otherPartID]--;
+                        fixOrdering(otherPartID);
+                        return {partID, otherPartID};
                     }
                 }
             }
