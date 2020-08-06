@@ -20,7 +20,7 @@ namespace whfc_rb {
                 partScheduled(partition.numParts()),
                 timer(timer), mt(mt), config(config),
                 refiners_thread_specific(partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(), mt(), std::ref(config)),
-                timers_thread_specific(), bucketPQ(partition.numParts())
+                timers_thread_specific(), participations(partition.numParts(), 0), partitionsSortedByParticipations()
         {
 
         }
@@ -32,7 +32,6 @@ namespace whfc_rb {
             iterationCounter = 0;
             std::atomic<size_t> iterations_done = 0;
 
-            // TODO maybe also make a row restriction. or terminate if there aren't enough initial tasks. 
             while (std::any_of(partActive.begin(), partActive.end(), [&](auto& x) { return x > 0; }) && iterationCounter < maxIterations) {
                 std::vector<WorkElement> tasks = initialBlockPairs();
                 tbb::parallel_do(tasks,[&](WorkElement element, tbb::parallel_do_feeder<WorkElement>& feeder) {
@@ -61,13 +60,17 @@ namespace whfc_rb {
                         partScheduled[element.part0] = false;
                         partScheduled[element.part1] = false;
                         timer.start("addNewTasks");
-                        addNewTasksFromPQ(feeder);
+                        size_t id_with_more_participations = participations[element.part0] > participations[element.part1] ? element.part0 : element.part1;
+                        size_t id_with_less_participations = participations[element.part0] <= participations[element.part1] ? element.part0 : element.part1;
+                        WorkElement newElement = addBlockPair(id_with_more_participations);
+                        if (newElement.part0 != 0 || newElement.part1 != 0) { feeder.add(newElement); }
+                        newElement = addBlockPair(id_with_less_participations);
+                        if (newElement.part0 != 0 || newElement.part1 != 0) { feeder.add(newElement); }
                         timer.stop("addNewTasks");
                         iterations_done++;
                     }
                 });
 
-                //assert(allPairsProcessed()); only if maxIterations allows it
                 std::swap(partActive, partActiveNextRound);
                 partActiveNextRound.assign(partActive.size(), 0);
                 round++;
@@ -79,76 +82,6 @@ namespace whfc_rb {
 
             return iterations_done.load();
         }
-
-        template<typename Element>
-        class BucketPriorityQueue {
-        public:
-            BucketPriorityQueue() = delete;
-
-            BucketPriorityQueue(size_t numBuckets) : buckets(numBuckets),
-                                                     first_non_empty_bucket(std::numeric_limits<size_t>::max()), container_size(0) {
-
-            }
-
-            void clear() {
-                for (std::vector<Element> bucket : buckets) {
-                    bucket.clear();
-                }
-                first_non_empty_bucket = std::numeric_limits<size_t>::max();
-                container_size = 0;
-            }
-
-            size_t size() {
-                return container_size;
-            }
-
-            size_t numBuckets() {
-                return buckets.size();
-            }
-
-            void addElement(size_t key, Element element) {
-                assert(key < buckets.size());
-                buckets[key].push_back(element);
-                if (key < first_non_empty_bucket) first_non_empty_bucket = key;
-                container_size++;
-            }
-
-            std::vector<Element> getBucket(size_t i) {
-                assert(i < buckets.size());
-                return buckets[i];
-            }
-
-            size_t firstNonEmptyBucket() {
-                return first_non_empty_bucket;
-            }
-
-            Element getNextElement() {
-                assert(container_size > 0);
-                assert(first_non_empty_bucket != std::numeric_limits<size_t>::max());
-                container_size--;
-                const Element element = buckets[first_non_empty_bucket].pop_back();
-                if (container_size != 0) {
-                    while (buckets[first_non_empty_bucket].size() == 0) {
-                        first_non_empty_bucket++;
-                    }
-                } else {
-                    first_non_empty_bucket = std::numeric_limits<size_t>::max();
-                }
-                return element;
-            }
-
-            void removeElement(size_t bucket, size_t i) {
-                assert(bucket < buckets.size() && i < buckets[bucket].size());
-                buckets[bucket][i] = buckets[bucket].back();
-                buckets[bucket].pop_back();
-                container_size--;
-            }
-
-        private:
-            std::vector<std::vector<Element>> buckets;
-            size_t first_non_empty_bucket;
-            size_t container_size;
-        };
 
     private:
         enum class TaskStatus {UNSCHEDULED, SCHEDULED, FINISHED};
@@ -170,7 +103,8 @@ namespace whfc_rb {
         const PartitionerConfig& config;
         tbb::enumerable_thread_specific<WHFCRefinerTwoWay<PartitionImpl, HypergraphImpl, FlowAlgo, Extractor>> refiners_thread_specific;
         tbb::enumerable_thread_specific<whfc::TimeReporter> timers_thread_specific;
-        BucketPriorityQueue<WorkElement> bucketPQ;
+        std::vector<size_t> participations;
+        std::vector<size_t> partitionsSortedByParticipations;
 
 
         size_t guessNumCutEdges(PartitionID part0, PartitionID part1) {
@@ -180,9 +114,9 @@ namespace whfc_rb {
         std::vector<WorkElement> initialBlockPairs() {
             timer.start("initialBlockPairs", "Refinement");
             resetBlockPairStatus();
-            bucketPQ.clear();
-
-            std::vector<size_t> participations(partition.numParts(), 0);
+            std::fill(participations.begin(), participations.end(), 0);
+            partitionsSortedByParticipations.clear();
+            std::vector<WorkElement> tasks;
 
             for (PartitionID i = 0; i < partition.numParts() - 1; ++i) {
                 for (PartitionID j = i + 1; j < partition.numParts(); ++j) {
@@ -193,79 +127,65 @@ namespace whfc_rb {
                 }
             }
 
-            for (PartitionID i = 0; i < partition.numParts() - 1; ++i) {
-                for (PartitionID j = i + 1; j < partition.numParts(); ++j) {
-                    if (isEligible(i, j)) {
-                        bucketPQ.addElement(std::min(participations[i], participations[j]), {i, j});
-                    }
+            for (PartitionID i = 0; i < partition.numParts(); ++i) {
+                if (participations[i] > 0) {
+                    partitionsSortedByParticipations.push_back(i);
                 }
             }
 
-            std::vector<WorkElement> tasks;
-            size_t bucket = bucketPQ.firstNonEmptyBucket();
-            while (bucket < bucketPQ.numBuckets()) {
-                std::vector<WorkElement> bucket_elements = bucketPQ.getBucket(bucket);
-                int current_size = bucket_elements.size();
-                for (int i = 0; i < current_size; ++i) {
-                    const WorkElement element = bucket_elements[i];
-                    if (!partScheduled[element.part0] && !partScheduled[element.part1]) {
-                        tasks.push_back(element);
-                        blockPairStatus(element.part0, element.part1) = TaskStatus::SCHEDULED;
-                        partScheduled[element.part0] = true;
-                        partScheduled[element.part1] = true;
-                        bucketPQ.removeElement(bucket, i);
-                        i--;
-                        current_size--;
-                    }
+            auto compareParticipations = [&](size_t i, size_t j) { return participations[i] > participations[j]; };
+
+            std::sort(partitionsSortedByParticipations.begin(), partitionsSortedByParticipations.end(), compareParticipations);
+
+            for (size_t i = 0; i < partitionsSortedByParticipations.size(); ++i) {
+                if (partScheduled[partitionsSortedByParticipations[i]]) continue;
+                WorkElement element = addBlockPair(partitionsSortedByParticipations[i]);
+                if (element.part0 != 0 || element.part1 != 0) {
+                    tasks.push_back(element);
+                    i--;
                 }
-                bucket++;
+                if (tasks.size() == partition.numParts() / 2) { break; }
             }
 
             timer.stop("initialBlockPairs");
             return tasks;
         }
 
-        bool addNewTasks(PartitionID part, tbb::parallel_do_feeder<WorkElement>& feeder) {
-            for (PartitionID pid = 0; pid < partition.numParts(); ++pid) {
-                if (pid != part && isEligible(part, pid)) {
-                    if (!partScheduled[pid].exchange(true)) {
-                        if (blockPairStatus(part, pid) == TaskStatus::UNSCHEDULED) {
-                            blockPairStatus(part, pid) = TaskStatus::SCHEDULED;
-                            feeder.add({part, pid});
-                            return true;
-                        } else {
-                            partScheduled[pid] = false;
-                        }
+        std::mutex add_lock;
+        WorkElement addBlockPair(PartitionID partID) {
+            std::lock_guard<std::mutex> lock_guard(add_lock);
+            if (partScheduled[partID]) return {0, 0};
+            for (PartitionID i = 0; i < partitionsSortedByParticipations.size(); ++i) {
+                if (partID != i && isEligible(partID, i)) {
+                    if (!partScheduled[i] && blockPairStatus(partID, i) == TaskStatus::UNSCHEDULED) {
+                        partScheduled[i] = true;
+                        partScheduled[partID] = true;
+                        blockPairStatus(partID, i) = TaskStatus::SCHEDULED;
+                        participations[partID]--;
+                        fixOrdering(partID);
+                        participations[i]--;
+                        fixOrdering(i);
+                        return {partID, i};
                     }
                 }
             }
-            return false;
+            return {0, 0};
         }
 
-        std::mutex add_lock;
-        void addNewTasksFromPQ(tbb::parallel_do_feeder<WorkElement>& feeder) {
-            std::lock_guard<std::mutex> lock_guard(add_lock);
-            if (bucketPQ.size() > 0) {
-                size_t bucket = bucketPQ.firstNonEmptyBucket();
-                while (bucket < bucketPQ.numBuckets()) {
-                    std::vector<WorkElement> bucket_elements = bucketPQ.getBucket(bucket);
-                    int current_size = bucket_elements.size();
-                    for (int i = 0; i < current_size; ++i) {
-                        const WorkElement element = bucket_elements[i];
-                        if (!partScheduled[element.part0] && !partScheduled[element.part1] && isEligible(element.part0, element.part1)) {
-                            feeder.add({element});
-                            blockPairStatus(element.part0, element.part1) = TaskStatus::SCHEDULED;
-                            partScheduled[element.part0] = true;
-                            partScheduled[element.part1] = true;
-                            bucketPQ.removeElement(bucket, i);
-                            i--;
-                            current_size--;
-                        }
-                    }
-                    bucket++;
+        void fixOrdering(size_t id) {
+            for (size_t i = 0; i < partitionsSortedByParticipations.size(); ++i) {
+                if (partitionsSortedByParticipations[i] == id) {
+                    size_t swapPosition = i + 1;
+                    while (swapPosition < partitionsSortedByParticipations.size() && participations[partitionsSortedByParticipations[swapPosition]] > participations[partitionsSortedByParticipations[i]]) { swapPosition++; }
+                    swapPosition--;
+                    assert(swapPosition < partitionsSortedByParticipations.size());
+                    std::swap(partitionsSortedByParticipations[i], partitionsSortedByParticipations[swapPosition]);
+                    break;
                 }
             }
+            if (participations[partitionsSortedByParticipations[partitionsSortedByParticipations.size() - 1]] == 0) { partitionsSortedByParticipations.pop_back(); }
         }
+
 
         bool allPairsProcessed() {
             for (uint i = 0; i < block_pair_status.size(); ++i) {
@@ -286,6 +206,7 @@ namespace whfc_rb {
         }
 
         bool isEligible(PartitionID part0, PartitionID part1) {
+            assert(part0 < partition.numParts() && part1 < partition.numParts());
             if (part0 < part1) std::swap(part0, part1);
             return guessNumCutEdges(part0, part1) > 0
                    && (partActive[part0] || partActive[part1])
