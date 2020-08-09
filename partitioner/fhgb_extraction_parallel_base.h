@@ -252,6 +252,9 @@ namespace whfc_rb {
             if (w + hg.nodeWeight(u) > maxWeight) {
                 return visitedNode.isSet(u);
             }
+            if (visitedNode.isSet(u)) {
+                return true;
+            }
             std::lock_guard<std::mutex> guard(tryVisitNodeLock[u]);
             lastSeenValue = w.load(std::memory_order_relaxed);
             if (lastSeenValue + hg.nodeWeight(u) <= maxWeight) {
