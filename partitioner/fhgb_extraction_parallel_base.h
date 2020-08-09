@@ -249,6 +249,9 @@ namespace whfc_rb {
 
         inline bool visitNode(const CSRHypergraph& hg, const NodeID u,
                 std::atomic<whfc::NodeWeight>& w, NodeWeight& lastSeenValue, const NodeWeight maxWeight, LayeredQueue<whfc::Node>& queue) {
+            if (w + hg.nodeWeight(u) > maxWeight) {
+                return visitedNode.isSet(u);
+            }
             std::lock_guard<std::mutex> guard(tryVisitNodeLock[u]);
             lastSeenValue = w.load(std::memory_order_relaxed);
             if (lastSeenValue + hg.nodeWeight(u) <= maxWeight) {
@@ -302,7 +305,6 @@ namespace whfc_rb {
                     } else {
                         baseCut += hg.hyperedgeWeight(e);
                     }
-                    //if (lastSeenValue1 >= maxWeight1 && lastSeenValue2 >= maxWeight2) break;
                 }
             });
 
@@ -343,7 +345,6 @@ namespace whfc_rb {
                         for (size_t i = indices.begin(); i < indices.end(); ++i) {
                             const NodeID u = queue.elementAt(i);
 
-                            //if (lastSeenValue >= maxWeight) break;
                             for (HyperedgeID e : hg.hyperedgesOf(u)) {
                                 if (partition.pinsInPart(otherPartID, e) == 0 && partition.pinsInPart(partID, e) > 1 && visitedHyperedge.set(e)) {
                                     size_t num_pins = 0;
