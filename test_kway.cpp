@@ -37,7 +37,7 @@ int main(int argc, const char *argv[]) {
     std::string patoh_preset = argv[5];
     uint numThreads = std::stoi(argv[6]);
     bool useThreadPinning = std::stoi(argv[7]);
-    bool distancePiercing = std::stoi(argv[8]);
+    bool distancePiercing =     std::stoi(argv[8]);
     int maxNumIterations = std::stoi(argv[9]);
     std::mt19937 mt(seed);
 
@@ -49,6 +49,11 @@ int main(int argc, const char *argv[]) {
 
     whfc_rb::PartitionerConfig config = {true, patoh_preset, precomputeCuts, distancePiercing, numThreads, "unset", numParts};
     whfc::TimeReporter timer("Total");
+
+    std::cout << "useThreadPinning: " << useThreadPinning << std::endl;
+    std::cout << "precomputeCuts: " << precomputeCuts << std::endl;
+    std::cout << "distancePiercing: " << distancePiercing << std::endl;
+    std::cout << "numThreads: " << numThreads << std::endl;
 
     timer.start("Total");
     timer.start("PaToH", "Total");
