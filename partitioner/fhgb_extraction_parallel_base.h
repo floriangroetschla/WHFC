@@ -7,7 +7,6 @@
 #include "../datastructure/node_border.h"
 #include "config.h"
 #include "../datastructure/partition_threadsafe.h"
-#include <tbb/scalable_allocator.h>
 #include <mutex>
 #include <tbb/parallel_invoke.h>
 #include <tbb/parallel_sort.h>
@@ -18,7 +17,7 @@ namespace whfc_rb {
     class ExtractorParallelBase {
     public:
         template<typename T>
-        using vec = std::vector<T, tbb::scalable_allocator<T>>;
+        using vec = std::vector<T>;
 
         static constexpr NodeID invalid_node = std::numeric_limits<NodeID>::max();
         Hypergraph fhgb;

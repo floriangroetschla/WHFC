@@ -3,12 +3,11 @@
 #include <vector>
 #include "../util/range.h"
 #include <boost/range/irange.hpp>
-#include <tbb/scalable_allocator.h>
 
 template<typename T, typename queue_size_type=uint32_t>
 class LayeredQueue {
 private:
-    using vec = std::vector<T, tbb::scalable_allocator<T>>;
+    using vec = std::vector<T>;
 	vec queue;
 	std::vector<queue_size_type> layer_bounds;
 public:
