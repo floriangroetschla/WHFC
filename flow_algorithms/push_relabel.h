@@ -106,21 +106,8 @@ namespace whfc_pr {
                 const Hyperedge e = inc_u.e;
 
                 if (!cs.h.areAllPinsSourceReachable__unsafe__(e)) {
-                    const Node e_out = hg.edge_node_out(e);
-                    Flow residual = std::min(hg.excess(u), hg.getPinOut(inc_u).flow);
-                    if (residual > 0) {
-                        if (hg.label(u) == hg.label(e_out) + 1) {
-                            numPushes++;
-                            hg.push_node_to_edgeOut(u, he, residual);
-                            if (inQueue.set(e_out)) { nodes.push_back(e_out); }
-                        } else {
-                            assert(hg.label(u) <= hg.label(e_out));
-                            if (hg.label(e_out) != 0) minLevel = std::min(minLevel, hg.label(e_out));
-                        }
-                    }
-
                     const Node e_in = hg.edge_node_in(e);
-                    residual = hg.excess(u);
+                    Flow residual = hg.excess(u);
                     if (residual > 0) {
                         if (hg.label(u) == hg.label(e_in) + 1) {
                             numPushes++;
@@ -129,6 +116,19 @@ namespace whfc_pr {
                         } else {
                             assert(hg.label(u) <= hg.label(e_in));
                             if (hg.label(e_in) != 0) minLevel = std::min(minLevel, hg.label(e_in));
+                        }
+                    }
+
+                    const Node e_out = hg.edge_node_out(e);
+                    residual = std::min(hg.excess(u), hg.getPinOut(inc_u).flow);
+                    if (residual > 0) {
+                        if (hg.label(u) == hg.label(e_out) + 1) {
+                            numPushes++;
+                            hg.push_node_to_edgeOut(u, he, residual);
+                            if (inQueue.set(e_out)) { nodes.push_back(e_out); }
+                        } else {
+                            assert(hg.label(u) <= hg.label(e_out));
+                            if (hg.label(e_out) != 0) minLevel = std::min(minLevel, hg.label(e_out));
                         }
                     }
                     assert(hg.excess(u) >= 0);
