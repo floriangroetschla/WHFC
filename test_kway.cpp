@@ -63,7 +63,9 @@ int main(int argc, const char *argv[]) {
     whfc_rb::PartitionThreadsafe partition(numParts, hg);
     PaToHInterface::partitionWithPatoh(partition, seed, numParts, epsilon, patoh_preset);
     timer.stop("PaToH");
+    timer.start("Initialize_partition", "Total");
     partition.initialize();
+    timer.stop("Initialize_partition");
 
     uint numIterations = 0;
 

@@ -139,8 +139,6 @@ namespace whfc_rb {
         }
 
         void initialize() override {
-            // TODO parallelize!
-
             std::vector<PartitionID> partsOfHyperedge;
             for (HyperedgeID e : hg.hyperedges()) {
                 for (NodeID u : hg.pinsOf(e)) {
