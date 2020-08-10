@@ -135,8 +135,6 @@ namespace whfc {
                         auto visit = [&](const Pin &pv) {
                             const Node& v = pv.pin;
                             if (n.isTarget(v)) found_target = true;
-                            //assert(augment_flow || !n.isTargetReachable(v));
-                            //assert(augment_flow || !cs.isIsolated(v) || n.distance[v] == n.s.base);
 
                             if (!n.isTarget(v) && !n.isSourceReachable__unsafe__(v) && n.distance[v].exchange(n.runningDistance, std::memory_order_relaxed) < n.s.base) {
                                 assert(v < hg.numNodes());

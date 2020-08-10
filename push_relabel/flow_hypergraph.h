@@ -268,9 +268,8 @@ namespace whfc_pr {
 		std::vector<Pin> pins_out;
 		std::vector<InHe> incident_hyperedges;
 
-		//TODO get rid of the range and just store one index, if this turns out to be cache inefficient later on
-		std::vector<PinIndex> pins_in_sending_flow_end;	//indexed by hyperedge id. gives range of pin ids/iterators sending flow to that hyperedge. grows right if forwardView = true
-		std::vector<PinIndex> pins_out_receiving_flow_end;	//indexed by hyperedge id. gives range of pin ids/iterators receiving flow from that hyperedge. grows left if forwardView = true
+		std::vector<PinIndex> pins_in_sending_flow_end;	//indexed by hyperedge id. gives range of pin ids/iterators sending flow to that hyperedge.
+		std::vector<PinIndex> pins_out_receiving_flow_end;	//indexed by hyperedge id. gives range of pin ids/iterators receiving flow from that hyperedge.
 		
 		NodeWeight total_node_weight = NodeWeight(0);
 		int sends_multiplier = 1;						//if forwardView = true, flow entering hyperedge e should be positive and flow exiting e should be negative. reverse, if forwardView = false.
