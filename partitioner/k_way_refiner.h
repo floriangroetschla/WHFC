@@ -8,19 +8,19 @@ namespace whfc_rb {
     class KWayRefiner {
     public:
         explicit KWayRefiner(PartitionImpl &partition, whfc::TimeReporter& timer, std::mt19937 &mt, const PartitionerConfig& config) : partition(
-                partition), partActive(partition.numParts()), partActiveNextRound(partition.numParts()), timer(timer), mt(mt), twoWayRefiner(
+                partition), partActive(partition.numParts()), timer(timer), mt(mt), twoWayRefiner(
                 partition.getGraph().numNodes(), partition.getGraph().numHyperedges(), partition.getGraph().numPins(),
                 mt(), config), config(config) {}
 
-        void refine(double epsilon, uint maxIterations) {
+        uint refine(double epsilon, uint maxIterations) {
             NodeWeight maxWeight = (1.0 + epsilon) * partition.totalWeight() / static_cast<double>(partition.numParts());
             partActive.set();
-            partActiveNextRound.reset();
             uint iterations = 0;
             std::vector<std::pair<PartitionBase::PartitionID, PartitionBase::PartitionID>> partitionPairs;
 
             while (partActive.count() > 0 && iterations < maxIterations) {
                 fillPartitionPairs(partitionPairs);
+                partActive.reset();
                 std::shuffle(partitionPairs.begin(), partitionPairs.end(), mt);
 
                 for (auto partitionPair : partitionPairs) {
@@ -32,20 +32,18 @@ namespace whfc_rb {
                     timer.stop("WHFCRefinerTwoWay");
                     if (refinementResult) {
                         // Schedule for next round
-                        partActiveNextRound.set(part0);
-                        partActiveNextRound.set(part1);
+                        partActive.set(part0);
+                        partActive.set(part1);
                     }
                     iterations++;
                 }
-                std::swap(partActive, partActiveNextRound);
-                partActiveNextRound.reset();
             }
+            return iterations;
         }
 
     private:
         PartitionImpl &partition;
         boost::dynamic_bitset<> partActive;
-        boost::dynamic_bitset<> partActiveNextRound;
         whfc::TimeReporter &timer;
         std::mt19937 &mt;
         WHFCRefinerTwoWay<PartitionImpl, HypergraphImpl, FlowAlgo, Extractor> twoWayRefiner;

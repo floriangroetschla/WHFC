@@ -19,7 +19,6 @@
 #include <tbb/task_scheduler_init.h>
 
 void printStatistics(whfc_rb::PartitionBase &partition, whfc::TimeReporter &timer) {
-    std::cout << "commit: " << GIT_COMMIT_HASH << std::endl;
     timer.report(std::cout);
     std::cout << "Imbalance: " << partition.imbalance() << std::endl;
     std::cout << "Num_parts: " << partition.numParts() << std::endl;
@@ -57,6 +56,7 @@ int main(int argc, const char *argv[]) {
     std::cout << "precomputeCuts: " << precomputeCuts << std::endl;
     std::cout << "distancePiercing: " << distancePiercing << std::endl;
     std::cout << "numThreads: " << numThreads << std::endl;
+    std::cout << "commit: " << GIT_COMMIT_HASH << std::endl;
 
     timer.start("Total");
     timer.start("PaToH", "Total");
@@ -65,40 +65,42 @@ int main(int argc, const char *argv[]) {
     timer.stop("PaToH");
     partition.initialize();
 
+    uint numIterations = 0;
+
     timer.start("Refinement", "Total");
 
     if (!mode.compare("seqExtraction_seqDinic")) {
         std::cout << "mode seqExtraction_seqDinic" << std::endl;
         whfc_rb::KWayRefiner<whfc_rb::PartitionThreadsafe, whfc::FlowHypergraphBuilder, whfc::Dinic, whfc_rb::HypergraphBuilderExtractor<whfc::FlowHypergraphBuilder, whfc_rb::PartitionThreadsafe>> refiner(partition, timer, mt, config);
-        refiner.refine(epsilon, maxNumIterations);
+        numIterations = refiner.refine(epsilon, maxNumIterations);
     } else if (!mode.compare("parExtraction_seqDinic")) {
         std::cout << "mode parExtraction_seqDinic" << std::endl;
         whfc_rb::KWayRefiner<whfc_rb::PartitionThreadsafe, whfc::FlowHypergraphBuilder, whfc::Dinic, whfc_rb::FlowHypergraphBuilderExtractorParallel<whfc::FlowHypergraphBuilder, whfc_rb::PartitionThreadsafe>> refiner(partition, timer, mt, config);
-        refiner.refine(epsilon, maxNumIterations);
+        numIterations = refiner.refine(epsilon, maxNumIterations);
     } else if (!mode.compare("seqExtraction_parDinic")) {
         std::cout << "mode seqExtraction_parDinic" << std::endl;
         whfc_rb::KWayRefiner<whfc_rb::PartitionThreadsafe, whfc::FlowHypergraphBuilder, whfc::DinicThreadLocalVectors, whfc_rb::HypergraphBuilderExtractor<whfc::FlowHypergraphBuilder, whfc_rb::PartitionThreadsafe>> refiner(partition, timer, mt, config);
-        refiner.refine(epsilon, maxNumIterations);
+        numIterations = refiner.refine(epsilon, maxNumIterations);
     } else if (!mode.compare("parExtraction_parDinic")) {
         std::cout << "mode parExtraction_parDinic" << std::endl;
         whfc_rb::KWayRefiner<whfc_rb::PartitionThreadsafe, whfc::FlowHypergraphBuilder, whfc::DinicThreadLocalVectors, whfc_rb::FlowHypergraphBuilderExtractorParallel<whfc::FlowHypergraphBuilder, whfc_rb::PartitionThreadsafe>> refiner(partition, timer, mt, config);
-        refiner.refine(epsilon, maxNumIterations);
+        numIterations = refiner.refine(epsilon, maxNumIterations);
     } else if (!mode.compare("seqExtraction_seqPR")) {
         std::cout << "mode seqExtraction_seqPR" << std::endl;
         whfc_rb::KWayRefiner<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraph, whfc_pr::PushRelabel, whfc_rb::HypergraphBuilderExtractor<whfc_pr::LawlerFlowHypergraph, whfc_rb::PartitionThreadsafe>> refiner(partition, timer, mt, config);
-        refiner.refine(epsilon, maxNumIterations);
+        numIterations = refiner.refine(epsilon, maxNumIterations);
     } else if (!mode.compare("parExtraction_seqPR")) {
         std::cout << "mode parExtraction_seqPR" << std::endl;
         whfc_rb::KWayRefiner<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraph, whfc_pr::PushRelabel, whfc_pr::LawlerFlowHypergraphBuilderExtractorParallel<whfc_pr::LawlerFlowHypergraph, whfc_rb::PartitionThreadsafe>> refiner(partition, timer, mt, config);
-        refiner.refine(epsilon, maxNumIterations);
+        numIterations = refiner.refine(epsilon, maxNumIterations);
     } else if (!mode.compare("seqExtraction_parPR")) {
         std::cout << "mode seqExtraction_parPR" << std::endl;
         whfc_rb::KWayRefiner<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraphParallel, whfc_pr::PushRelabelParallel, whfc_rb::HypergraphBuilderExtractor<whfc_pr::LawlerFlowHypergraphParallel, whfc_rb::PartitionThreadsafe>> refiner(partition, timer, mt, config);
-        refiner.refine(epsilon, maxNumIterations);
+        numIterations = refiner.refine(epsilon, maxNumIterations);
     } else if (!mode.compare("parExtraction_parPR")) {
         std::cout << "mode parExtraction_parPR" << std::endl;
         whfc_rb::KWayRefiner<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraphParallel, whfc_pr::PushRelabelParallel, whfc_pr::LawlerFlowHypergraphBuilderExtractorParallel<whfc_pr::LawlerFlowHypergraphParallel, whfc_rb::PartitionThreadsafe>> refiner(partition, timer, mt, config);
-        refiner.refine(epsilon, maxNumIterations);
+        numIterations = refiner.refine(epsilon, maxNumIterations);
     } else {
         throw std::runtime_error("Mode must be one of: "
                                  "seqExtraction_seqDinic, "
@@ -114,6 +116,7 @@ int main(int argc, const char *argv[]) {
     timer.stop("Refinement");
     timer.stop("Total");
 
+    std::cout << "iterations_done: " << numIterations << std::endl;
     printStatistics(partition, timer);
 }
 
