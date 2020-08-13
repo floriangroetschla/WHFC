@@ -34,7 +34,7 @@ namespace whfc_pr {
 
         static constexpr size_t ALPHA = 6;
         static constexpr size_t BETA = 12;
-        static constexpr float globalUpdateFreq = 1.0;
+        static constexpr float globalUpdateFreq = 5.0;
 
         LawlerFlowHypergraph& hg;
         LayeredQueue<Node> queue;

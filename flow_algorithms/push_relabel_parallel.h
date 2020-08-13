@@ -34,7 +34,7 @@ namespace whfc_pr {
 
         static constexpr size_t ALPHA = 6;
         static constexpr size_t BETA = 12;
-        static constexpr float globalUpdateFreq = 10.0;
+        static constexpr float globalUpdateFreq = 5.0;
 
         Hypergraph& hg;
         LayeredQueue<Node> queue;
@@ -477,11 +477,11 @@ namespace whfc_pr {
 
             timer.start("setLabels", "exhaustFlow");
             n = hg.numNodes() + 2 * hg.numHyperedges();
-            std::array<size_t, 2> numScans = globalUpdate(cs, n);
+            globalUpdate(cs, n);
             timer.stop("setLabels");
 
-            size_t nm = ALPHA * numScans[0] + numScans[1];
-            n = numScans[0];
+            size_t nm = ALPHA * n + hg.numPins() * 2 + hg.numHyperedges();
+            n = hg.numNodes() + 2 * hg.numHyperedges();
 
             timer.start("mainLoop", "exhaustFlow");
 
@@ -677,11 +677,9 @@ namespace whfc_pr {
                 if (stack.at(stack_pointer - 1).u == first_node) break;
             }
             assert(bottleneckCapacity > 0);
-            //std::cout << "Push back " << bottleneckCapacity << std::endl;
 
             for (int64_t stack_pointer = stack.size() - 1; stack_pointer > 0; --stack_pointer) {
                 const StackFrame& t = stack.at(stack_pointer);
-                //std::cout << t.u << " ";
                 if (hg.isNode(t.u)) {
                     if (hg.is_edge_out(stack.at(stack_pointer-1).u)) {
                         assert(hg.getPinOut(hg.getInHe(t.he_it)).flow >= bottleneckCapacity);
@@ -714,7 +712,6 @@ namespace whfc_pr {
                 if (stack_pointer >= lowest_bottleneck) inQueue.reset(t.u);
                 if (stack.at(stack_pointer - 1).u == first_node) break;
             }
-            //std::cout << std::endl;
             stack.popDownTo(lowest_bottleneck-1);
             return bottleneckCapacity;
         }
@@ -723,11 +720,7 @@ namespace whfc_pr {
             return hg.label(u) > currentLabel && __atomic_exchange_n(&hg.label(u), currentLabel, __ATOMIC_ACQ_REL) == n;
         }
 
-        std::array<size_t, 2> globalUpdate(whfc::CutterState<Type>& cs, size_t n) {
-            size_t scannedNodes = 0;
-            size_t scannedEdges = 0;
-            tbb::enumerable_thread_specific<std::array<size_t, 2>> scanned_nodes_and_edges(std::array<size_t, 2> {0, 0});
-
+        void globalUpdate(whfc::CutterState<Type>& cs, size_t n) {
             for (std::vector<Node>& vector : *nextLayer_thread_specific) {
                 vector.clear();
             }
@@ -749,9 +742,8 @@ namespace whfc_pr {
 
             size_t currentLabel = 1;
 
-            auto visitNode = [&](const Node u, std::vector<Node>& queue, std::vector<Node>& push_relabel_vector, size_t& scannedEdges) {
+            auto visitNode = [&](const Node u, std::vector<Node>& queue, std::vector<Node>& push_relabel_vector) {
                 for (InHe& inc_u : hg.hyperedgesOf(u)) {
-                    scannedEdges += 2;
                     const Hyperedge e = inc_u.e;
                     const Node e_in = hg.edge_node_in(e);
                     const Node e_out = hg.edge_node_out(e);
@@ -773,11 +765,10 @@ namespace whfc_pr {
             };
 
 
-            auto visitEdgeIn = [&](const Node e_in, std::vector<Node>& queue, std::vector<Node>& push_relabel_vector, size_t& scannedEdges) {
+            auto visitEdgeIn = [&](const Node e_in, std::vector<Node>& queue, std::vector<Node>& push_relabel_vector) {
                 const Hyperedge e = hg.edgeFromLawlerNode(e_in);
                 const Node e_out = hg.edge_node_out(e);
 
-                scannedEdges++;
                 if (hg.flow(e) > 0 && tryToGetNode(e_out, currentLabel, n)) {
                     hg.label(e_out) = currentLabel;
                     current_pin_e_out[e] = hg.beginPinsIn(e);
@@ -785,7 +776,6 @@ namespace whfc_pr {
                     if (hg.excess(e_out) > 0) push_relabel_vector.push_back(e_out);
                 }
                 for (Pin& pin : hg.pinsInOf(e)) {
-                    scannedEdges++;
                     if ((!cs.n.isSourceReachable__unsafe__(pin.pin)) && tryToGetNode(pin.pin, currentLabel, n)) {
                         hg.label(pin.pin) = currentLabel;
                         current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
@@ -795,11 +785,10 @@ namespace whfc_pr {
                 }
             };
 
-            auto visitEdgeOut = [&](const Node e_out, std::vector<Node>& queue, std::vector<Node>& push_relabel_vector, size_t& scannedEdges) {
+            auto visitEdgeOut = [&](const Node e_out, std::vector<Node>& queue, std::vector<Node>& push_relabel_vector) {
                 const Hyperedge e = hg.edgeFromLawlerNode(e_out);
                 const Node e_in = hg.edge_node_in(e);
 
-                scannedEdges++;
                 if (hg.capacity(e) - hg.flow(e) > 0 && tryToGetNode(e_in, currentLabel, n)) {
                     hg.label(e_in) = currentLabel;
                     current_pin_e_in[e] = hg.beginPinsIn(e);
@@ -807,7 +796,6 @@ namespace whfc_pr {
                     if (hg.excess(e_in) > 0) push_relabel_vector.push_back(e_in);
                 }
                 for (Pin& pin : hg.pinsInOf(e)) {
-                    scannedEdges++;
                     if ((hg.getPinOut(hg.getInHe(pin.he_inc_iter)).flow > 0) && (!cs.n.isSourceReachable__unsafe__(pin.pin)) && tryToGetNode(pin.pin, currentLabel, n)) {
                         hg.label(pin.pin) = currentLabel;
                         current_hyperedge[pin.pin] = hg.beginIndexHyperedges(pin.pin);
@@ -824,17 +812,15 @@ namespace whfc_pr {
                     tbb::parallel_for(tbb::blocked_range<size_t>(0, vector.size()), [&](const tbb::blocked_range<size_t>& nodes) {
                         std::vector<Node>& localQueue = nextLayer_thread_specific->local();
                         std::vector<Node>& queue_for_push_relabel = thisLayer_thread_specific->local();
-                        std::array<size_t, 2>& scanned_sizes = scanned_nodes_and_edges.local();
-                        scanned_sizes[0] += nodes.size();
                         for (size_t i = nodes.begin(); i < nodes.end(); ++i) {
                             const Node u = vector[i];
                             if (hg.isNode(u)) {
-                                visitNode(u, localQueue, queue_for_push_relabel, scanned_sizes[1]);
+                                visitNode(u, localQueue, queue_for_push_relabel);
                             } else if (hg.is_edge_in(u)) {
-                                visitEdgeIn(u, localQueue, queue_for_push_relabel, scanned_sizes[1]);
+                                visitEdgeIn(u, localQueue, queue_for_push_relabel);
                             } else {
                                 assert(hg.is_edge_out(u));
-                                visitEdgeOut(u, localQueue, queue_for_push_relabel, scanned_sizes[1]);
+                                visitEdgeOut(u, localQueue, queue_for_push_relabel);
                             }
                         }
                     });
@@ -859,13 +845,6 @@ namespace whfc_pr {
             for (std::vector<Node>& vector : *nextLayer_thread_specific) {
                 vector.clear();
             }
-
-            for (std::array<size_t, 2>& sizes : scanned_nodes_and_edges) {
-                scannedNodes += sizes[0];
-                scannedEdges += sizes[1];
-            }
-
-            return {scannedNodes, scannedEdges};
         }
 
         bool growReachable(whfc::CutterState<Type>& cs) {
