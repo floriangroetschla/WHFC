@@ -10,6 +10,7 @@
 #include "partitioner/null_refiner.h"
 #include "push_relabel/lawler_fhgb_extraction_parallel.h"
 #include "partitioner/tbb_thread_pinning.h"
+#include "flow_algorithms/dinic.h"
 #include <version.h>
 #include <tbb/task_scheduler_init.h>
 
@@ -65,7 +66,7 @@ int main(int argc, const char *argv[]) {
     } else if (!mode.compare("RBWHFC")) {
         std::cout << "Using mode RBWHFC" << std::endl;
         config.refine = true;
-        whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::PartitionThreadsafe, whfc_rb::WHFCRefinerTwoWay<whfc_rb::PartitionThreadsafe, whfc_pr::LawlerFlowHypergraphParallel, whfc_pr::PushRelabelParallel, whfc_pr::LawlerFlowHypergraphBuilderExtractorParallel<whfc_pr::LawlerFlowHypergraphParallel, whfc_rb::PartitionThreadsafe>>>(hg.numNodes(), hg.numHyperedges(),
+        whfc_rb::RecursiveBisector recursive_bisector = whfc_rb::RecursiveBisector<whfc_rb::PartitionThreadsafe, whfc_rb::WHFCRefinerTwoWay<whfc_rb::PartitionThreadsafe, whfc::FlowHypergraphBuilder, whfc::Dinic,  whfc_rb::HypergraphBuilderExtractor<whfc::FlowHypergraphBuilder, whfc_rb::PartitionThreadsafe>>>(hg.numNodes(), hg.numHyperedges(),
                                                                                                                                                                                                                                                                         hg.numPins(), mt, timer, config);
         timer.start("Total");
         whfc_rb::PartitionBase partition = recursive_bisector.run(hg, epsilon, numParts);
