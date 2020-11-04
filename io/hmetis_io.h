@@ -226,7 +226,8 @@ namespace whfc {
 			return FlowHypergraph(nodeWeights, hyperedgeWeights, hyperedgeSizes, pins);
 		}
 
-		static void writeFlowHypergraph(FlowHypergraph& hg, std::string& filename) {
+		template<typename FlowHypergraphT>
+		static void writeFlowHypergraph(FlowHypergraphT& hg, std::string& filename) {
 			if (filename.empty())
 				throw std::runtime_error("No filename for Flow Hypergraph specified");
 			std::ofstream f(filename);
@@ -257,7 +258,7 @@ namespace whfc {
 					f << hg.capacity(e) << " ";
 				
 				f << (pinsOfE.begin()->pin + 1); pinsOfE.advance_begin();	//special case first pin since we have |e|-1 white spaces
-				for (const FlowHypergraph::Pin& p : pinsOfE)
+				for (const auto& p : pinsOfE)
 					f << " " << (p.pin + 1);		//yes... hMetis insists on 1-based IDs -.-
 				f << "\n";
 			}

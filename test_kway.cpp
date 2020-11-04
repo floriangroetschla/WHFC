@@ -49,7 +49,10 @@ int main(int argc, const char *argv[]) {
 
     bool precomputeCuts = true;
 
-    whfc_rb::PartitionerConfig config = {true, patoh_preset, precomputeCuts, distancePiercing, numThreads, "unset", numParts};
+    std::string hg_path = argv[1];
+    std::string hg_name = hg_path.substr(hg_path.find_last_of("/") + 1);
+
+    whfc_rb::PartitionerConfig config = {true, patoh_preset, precomputeCuts, distancePiercing, numThreads, hg_name, numParts};
     whfc::TimeReporter timer("Total");
 
     std::cout << "useThreadPinning: " << useThreadPinning << std::endl;

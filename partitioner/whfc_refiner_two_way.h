@@ -42,9 +42,10 @@ namespace whfc_rb {
 
             if (extractor_info.cutAtStake == extractor_info.baseCut) return false;
 
-            static constexpr bool write_snapshot = false;
+            static constexpr bool write_snapshot = true;
             if constexpr (write_snapshot) {
                 writeSnapshot(extractor_info);
+                std::exit(0);
             }
 
             timer.start("WHFC", "WHFCRefinerTwoWay");
